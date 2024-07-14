@@ -7,14 +7,16 @@ pub struct MemTable {
     data: SkipMap<bytes::Bytes, bytes::Bytes>,
     current_size_bytes: AtomicUsize,
     max_size_bytes: usize,
+    id: usize,
 }
 
 impl MemTable {
-    pub fn new(options: &LsmOptions) -> MemTable {
+    pub fn new(options: &LsmOptions, id: usize) -> MemTable {
         MemTable {
             max_size_bytes: options.memtable_max_size_bytes,
             current_size_bytes: AtomicUsize::new(0),
             data: SkipMap::new(),
+            id
         }
     }
     
