@@ -1,0 +1,8 @@
+[package]
+name = "mini-lsm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crossbeam-skiplist = "0.1"
+bytes = "1.6.1"
