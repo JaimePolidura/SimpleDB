@@ -23,7 +23,7 @@ impl Memtables {
         }
     }
 
-    pub fn get(&self, key: &Key) -> Option<&bytes::Bytes> {
+    pub fn get(&self, key: &Key) -> Option<bytes::Bytes> {
         let memtable_ref = self.current_memtable.load_ref();
         let value = memtable_ref.shared_ref.get(key);
         self.current_memtable.unload_ref(memtable_ref);
@@ -34,7 +34,7 @@ impl Memtables {
         }
     }
 
-    pub fn set(&mut self, key: Key, value: &[u8]) {
+    pub fn set(&mut self, key: &Key, value: &[u8]) {
         let memtable_ref = self.current_memtable.load_ref();
         let set_result = memtable_ref.shared_ref.set(key, value);
         self.current_memtable.unload_ref(memtable_ref);
@@ -45,7 +45,7 @@ impl Memtables {
         };
     }
 
-    pub fn delete(&mut self, key: Key) {
+    pub fn delete(&mut self, key: &Key) {
         let memtable_ref = self.current_memtable.load_ref();
         let delete_result = memtable_ref.shared_ref.delete(key);
         self.current_memtable.unload_ref(memtable_ref);
@@ -56,7 +56,7 @@ impl Memtables {
         }
     }
 
-    fn find_value_in_inactive_memtables(&self, key: &Key) -> Option<&bytes::Bytes> {
+    fn find_value_in_inactive_memtables(&self, key: &Key) -> Option<bytes::Bytes> {
         for inactive_memtable in self.inactive_memtables.iter().rev() {
             if let Some(value) = inactive_memtable.get(key) {
                 return Some(value);

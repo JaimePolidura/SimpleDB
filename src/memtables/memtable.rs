@@ -8,6 +8,8 @@ use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::utils::storage_iterator::{StorageIterator};
 
+const TOMBSTONE: Bytes = Bytes::new();
+
 pub struct MemTable {
     data: Arc<SkipMap<Key, Bytes>>,
     current_size_bytes: AtomicUsize,
@@ -25,28 +27,38 @@ impl MemTable {
         }
     }
 
-    pub fn get(&self, key: &Key) -> Option<&Bytes> {
-        // TODO
-        // self.data.get(key)
-        //     .map(|r| { r.value()})
-        None
+    pub fn get(&self, key: &Key) -> Option<Bytes> {
+        match self.data.get(key) {
+            Some(entry) => {
+                if entry.value() == &TOMBSTONE {
+                    return None;
+                }
+
+                Some(entry.value().clone())
+            }
+            None => None,
+        }
     }
 
-    pub fn set(&self, key: Key, value: &[u8]) -> Result<(), ()> {
+    pub fn set(&self, key: &Key, value: &[u8]) -> Result<(), ()> {
         self.write_into_skip_list(
             key,
             Bytes::copy_from_slice(value)
         )
     }
 
-    pub fn delete(&self, key: Key) -> Result<(), ()> {
+    pub fn delete(&self, key: &Key) -> Result<(), ()> {
         self.write_into_skip_list(
             key,
-            Bytes::new()
+            TOMBSTONE
         )
     }
 
-    fn write_into_skip_list(&self, key: Key, value: Bytes) -> Result<(), ()> {
+    pub fn scan(&self) -> MemtableIterator {
+        MemtableIterator::new(&self)
+    }
+
+    fn write_into_skip_list(&self, key: &Key, value: Bytes) -> Result<(), ()> {
         if self.current_size_bytes.load(Relaxed) >= self.max_size_bytes {
             return Err(());
         }
@@ -54,7 +66,7 @@ impl MemTable {
         self.current_size_bytes.fetch_add(key.len() + value.len(), Relaxed);
 
         self.data.insert(
-            key, value
+            key.clone(), value
         );
 
         Ok(())
@@ -67,7 +79,10 @@ impl MemTable {
 
 pub struct MemtableIterator<'a> {
     iterator: Iter<'a, Key, Bytes>,
-    current_data: Option<Entry<'a, Key, Bytes>>
+    memtable: &'a MemTable,
+
+    current_data: Option<Entry<'a, Key, Bytes>>,
+    n_elements_iterated: usize,
 }
 
 impl<'a> MemtableIterator<'a> {
@@ -75,7 +90,9 @@ impl<'a> MemtableIterator<'a> {
         let mut iterator= memtable.data.iter();
 
         MemtableIterator {
-            current_data: iterator.next(),
+            n_elements_iterated: 0,
+            current_data: None,
+            memtable,
             iterator,
         }
     }
@@ -84,11 +101,12 @@ impl<'a> MemtableIterator<'a> {
 impl<'a> StorageIterator for MemtableIterator<'a> {
     fn next(&mut self) -> bool {
         self.current_data = self.iterator.next();
+        self.n_elements_iterated = self.n_elements_iterated + 1;
         self.has_next()
     }
 
     fn has_next(&self) -> bool {
-        self.current_data.is_some()
+        self.n_elements_iterated < self.memtable.data.len()
     }
 
     fn key(&self) -> &Key {
@@ -105,5 +123,62 @@ impl<'a> StorageIterator for MemtableIterator<'a> {
             .expect("Illegal iterator state");
 
         entry.value()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::key::Key;
+    use crate::lsm_options::LsmOptions;
+    use crate::memtables::memtable::MemTable;
+    use crate::utils::storage_iterator::StorageIterator;
+
+    #[test]
+    fn get_set_delete() {
+        let memtable: MemTable = MemTable::new(&LsmOptions{memtable_max_size_bytes: 1000}, 0);
+        let value: Vec<u8> = vec![10, 12];
+
+        assert!(memtable.get(&Key::new("nombre")).is_none());
+
+        memtable.set(&Key::new("nombre"), &value);
+        memtable.set(&Key::new("edad"), &value);
+
+        assert!(memtable.get(&Key::new("nombre")).is_some());
+        assert!(memtable.get(&Key::new("edad")).is_some());
+
+        memtable.delete(&Key::new("nombre"));
+
+        assert!(memtable.get(&Key::new("nombre")).is_none());
+    }
+
+    #[test]
+    fn iterators() {
+        let memtable: MemTable = MemTable::new(&LsmOptions{memtable_max_size_bytes: 1000}, 0);
+        let value: Vec<u8> = vec![10, 12];
+        memtable.set(&Key::new("alberto"), &value);
+        memtable.set(&Key::new("jaime"), &value);
+        memtable.set(&Key::new("gonchi"), &value);
+        memtable.set(&Key::new("wili"), &value);
+
+        let mut iterator = memtable.scan();
+        
+        assert!(iterator.has_next());
+        iterator.next();
+
+        assert!(iterator.key().eq(&Key::new("alberto")));
+
+        assert!(iterator.has_next());
+        iterator.next();
+        assert!(iterator.key().eq(&Key::new("gonchi")));
+
+        assert!(iterator.has_next());
+        iterator.next();
+        assert!(iterator.key().eq(&Key::new("jaime")));
+
+        assert!(iterator.has_next());
+        iterator.next();
+        assert!(iterator.key().eq(&Key::new("wili")));
+
+        assert!(!iterator.has_next());
     }
 }

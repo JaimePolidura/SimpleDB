@@ -1,3 +1,7 @@
+use std::fmt;
+use std::fmt::Formatter;
+
+#[derive(Debug)]
 pub struct Key {
     string: String,
 }
@@ -9,6 +13,18 @@ impl Key {
 
     pub fn is_empty(&self) -> bool {
         self.string.is_empty()
+    }
+
+    pub fn new(string: &str) -> Key {
+        Key {
+            string: string.to_string()
+        }
+    }
+}
+
+impl fmt::Display for Key {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.string)
     }
 }
 
