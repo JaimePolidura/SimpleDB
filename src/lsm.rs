@@ -1,5 +1,6 @@
+use crate::key::Key;
 use crate::lsm_options::LsmOptions;
-use crate::memtables::Memtables;
+use crate::memtables::memtables::Memtables;
 
 pub struct Lsm {
     options: LsmOptions,
@@ -14,15 +15,15 @@ impl Lsm {
         }
     }
 
-    pub fn get(&self, key: &[u8]) -> Option<&bytes::Bytes> {
+    pub fn get(&self, key: &Key) -> Option<&bytes::Bytes> {
         self.memtables.get(key)
     }
 
-    pub fn set(&mut self, key: &[u8], value: &[u8]) {
+    pub fn set(&mut self, key: Key, value: &[u8]) {
         self.memtables.set(key, value);
     }
 
-    pub fn delete(&mut self, key: &[u8]) {
+    pub fn delete(&mut self, key: Key) {
         self.memtables.delete(key);
     }
 }

@@ -1,15 +1,15 @@
-use std::collections::hash_map::IterMut;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use bytes::Bytes;
 use crossbeam_skiplist::map::{Entry, Iter};
 use crossbeam_skiplist::SkipMap;
+use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::utils::storage_iterator::{StorageIterator};
 
 pub struct MemTable {
-    data: Arc<SkipMap<Bytes, Bytes>>,
+    data: Arc<SkipMap<Key, Bytes>>,
     current_size_bytes: AtomicUsize,
     max_size_bytes: usize,
     id: usize,
@@ -25,28 +25,28 @@ impl MemTable {
         }
     }
 
-    pub fn get(&self, key: &[u8]) -> Option<&Bytes> {
+    pub fn get(&self, key: &Key) -> Option<&Bytes> {
         // TODO
         // self.data.get(key)
         //     .map(|r| { r.value()})
         None
     }
 
-    pub fn set(&self, key: &[u8], value: &[u8]) -> Result<(), ()> {
+    pub fn set(&self, key: Key, value: &[u8]) -> Result<(), ()> {
         self.write_into_skip_list(
-            Bytes::copy_from_slice(key),
+            key,
             Bytes::copy_from_slice(value)
         )
     }
 
-    pub fn delete(&self, key: &[u8]) -> Result<(), ()> {
+    pub fn delete(&self, key: Key) -> Result<(), ()> {
         self.write_into_skip_list(
-            Bytes::copy_from_slice(key),
+            key,
             Bytes::new()
         )
     }
 
-    fn write_into_skip_list(&self, key: Bytes, value: Bytes) -> Result<(), ()> {
+    fn write_into_skip_list(&self, key: Key, value: Bytes) -> Result<(), ()> {
         if self.current_size_bytes.load(Relaxed) >= self.max_size_bytes {
             return Err(());
         }
@@ -66,8 +66,8 @@ impl MemTable {
 }
 
 pub struct MemtableIterator<'a> {
-    iterator: Iter<'a, Bytes, Bytes>,
-    current_data: Option<Entry<'a, Bytes, Bytes>>
+    iterator: Iter<'a, Key, Bytes>,
+    current_data: Option<Entry<'a, Key, Bytes>>
 }
 
 impl<'a> MemtableIterator<'a> {
@@ -91,7 +91,7 @@ impl<'a> StorageIterator for MemtableIterator<'a> {
         self.current_data.is_some()
     }
 
-    fn key(&self) -> &[u8] {
+    fn key(&self) -> &Key {
         let entry = self.current_data
             .as_ref()
             .expect("Illegal iterator state");
