@@ -39,7 +39,7 @@ impl<T> AtomicSharedRef<T> {
         reference.users.fetch_sub(1, Relaxed);
     }
 
-    pub fn try_cas(&mut self, new_ptr: T) -> Result<T, ()> {
+    pub fn try_cas(&self, new_ptr: T) -> Result<T, ()> {
         if self.state.compare_exchange(ACTIVE, TO_CHANGE, Acquire, Relaxed).is_err() {
             return Err(());
         }
@@ -67,5 +67,33 @@ impl<T> SharedRef<T> {
             users: AtomicUsize::new(0),
             shared_ref: value
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+    use std::time::Duration;
+    use crate::utils::atomic_shared_ref::AtomicSharedRef;
+
+    //TODO Improve test
+    #[test]
+    fn load_unload() {
+        let mut vector_ref: Arc<AtomicSharedRef<Vec<u8>>> = Arc::new(AtomicSharedRef::new(Vec::new()));
+
+        let t1 =  {
+            let vector_ref = vector_ref.clone();
+
+            std::thread::spawn(move || {
+                for i in 0..10000 {
+                    let vector_ref_1 = vector_ref.load_ref();
+                    std::thread::sleep(Duration::from_secs(20));
+                    vector_ref.unload_ref(vector_ref_1);
+                }
+            });
+        };
+
+        let vector_cas_result = vector_ref.try_cas(Vec::new());
+        assert!(vector_cas_result.is_ok());
     }
 }

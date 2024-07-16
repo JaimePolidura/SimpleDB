@@ -100,9 +100,15 @@ impl<'a> MemtableIterator<'a> {
 
 impl<'a> StorageIterator for MemtableIterator<'a> {
     fn next(&mut self) -> bool {
-        self.current_data = self.iterator.next();
-        self.n_elements_iterated = self.n_elements_iterated + 1;
-        self.has_next()
+        let next_data = self.iterator.next();
+        let has_advanced = next_data.is_some();
+
+        if has_advanced {
+            self.n_elements_iterated = self.n_elements_iterated + 1;
+            self.current_data = next_data;
+        }
+
+        has_advanced
     }
 
     fn has_next(&self) -> bool {
@@ -161,7 +167,7 @@ mod test {
         memtable.set(&Key::new("wili"), &value);
 
         let mut iterator = memtable.scan();
-        
+
         assert!(iterator.has_next());
         iterator.next();
 
