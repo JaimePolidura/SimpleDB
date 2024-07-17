@@ -24,29 +24,57 @@ impl Block {
         encoded.extend(&self.entries);
     }
 
-    fn encode_offsets(&self, encoded: &mut Vec<u8>) -> u16 {
-        let offsetts_offset_xd = encoded.len() as u16;
+    fn encode_offsets(&self, encoded: &mut Vec<u8>) -> usize {
+        let offsetts_offset_xd = encoded.len();
         encoded.extend(utils::u16_vec_to_u8_vec(&self.offsets));
         offsetts_offset_xd
     }
 
     fn encode_footer(
         &self,
-        start_offsets_offset: u16,
+        start_offsets_offset: usize,
         encoded: &mut Vec<u8>,
         options: LsmOptions
     ) {
-        //Nº Entries
         let n_entries: u16 = self.entries.len() as u16;
-        encoded[options.memtable_max_size_bytes - 4] = (n_entries & 0xff) as u8;
-        encoded[options.memtable_max_size_bytes - 3] = (n_entries >> 8 & 0xff) as u8;
+        utils::u16_to_u8_le(n_entries, options.memtable_max_size_bytes - 4, encoded);
 
-        //Entrie's offsets start offset XD
-        encoded[options.memtable_max_size_bytes - 2] = (n_entries & 0xff) as u8;
-        encoded[options.memtable_max_size_bytes - 1] = (start_offsets_offset >> 8 & 0xff) as u8;
+        utils::u16_to_u8_le(start_offsets_offset as u16, options.memtable_max_size_bytes - 2, encoded);
     }
 
-    pub fn decode(blocks: Vec<u8>) -> Result<Block, ()> {
+    pub fn decode(encoded: &Vec<u8>, options: LsmOptions) -> Result<Block, ()> {
+        if encoded.len() != options.block_size_bytes {
+            return Err(());
+        }
 
+        let offsets_offset: u16 = utils::u8_to_u16_le(&encoded, options.memtable_max_size_bytes - 2);
+        let n_entries: u16 = utils::u8_to_u16_le(&encoded, options.memtable_max_size_bytes - 4);
+
+        let offsets = Self::decode_offsets(encoded, offsets_offset, n_entries);
+        let entries = Self::decode_entries(encoded, offsets_offset, n_entries);
+
+        Ok(Block{ offsets, entries })
+    }
+
+    fn decode_offsets(
+        encoded: &Vec<u8>,
+        offsets_offset: u16,
+        n_entries: u16,
+    ) -> Vec<u16> {
+        let start_index = offsets_offset as usize;
+        let end_inedx = start_index + (n_entries * std::mem::size_of::<u16>() as u16) as usize;
+
+        utils::u8_vec_to_u16_vec(&encoded[start_index..end_inedx].to_vec())
+    }
+
+    fn decode_entries(
+        encoded: &Vec<u8>,
+        offsets_offset: u16,
+        n_entries: u16,
+    ) -> Vec<u8> {
+        let start_index = 0;
+        let end_index = offsets_offset as usize;
+
+        encoded[start_index..=end_index].to_vec()
     }
 }

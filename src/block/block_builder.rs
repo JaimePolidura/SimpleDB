@@ -28,14 +28,14 @@ impl BlockBuilder {
         let mut entries: Vec<u8> = Vec::new();
 
         for entry in &self.entries {
-            let offset: u16 = entries.len() as u16;
+            let offset = entries.len();
 
-            self.add_u16_length_to_bytes(&mut entries, entry.key.len() as u16);
+            self.add_length_to_bytes(&mut entries, entry.key.len());
             entries.put_slice(entry.key.as_bytes());
-            self.add_u16_length_to_bytes(&mut entries, entry.value.len() as u16);
+            self.add_length_to_bytes(&mut entries, entry.value.len());
             entries.put_slice(entry.value.as_ref());
 
-            offsets.push(offset);
+            offsets.push(offset as u16);
         }
 
         Block{ entries, offsets }
@@ -56,8 +56,8 @@ impl BlockBuilder {
         Ok(())
     }
 
-    fn add_u16_length_to_bytes(&self, bytes: &mut Vec<u8>, length: u16) {
-        bytes.push(length.to_le_bytes()[0]);
+    fn add_length_to_bytes(&self, bytes: &mut Vec<u8>, length: usize) {
+        bytes.push((length as u16).to_le_bytes()[0]);
     }
 
     fn calculate_entry_size(&self, key: &Key, value: &Bytes) -> usize {
