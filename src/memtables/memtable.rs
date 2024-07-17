@@ -141,7 +141,7 @@ mod test {
 
     #[test]
     fn get_set_delete() {
-        let memtable: MemTable = MemTable::new(&LsmOptions{memtable_max_size_bytes: 1000}, 0);
+        let memtable: MemTable = MemTable::new(&LsmOptions::default(), 0);
         let value: Vec<u8> = vec![10, 12];
 
         assert!(memtable.get(&Key::new("nombre")).is_none());
@@ -159,7 +159,7 @@ mod test {
 
     #[test]
     fn iterators() {
-        let memtable: MemTable = MemTable::new(&LsmOptions{memtable_max_size_bytes: 1000}, 0);
+        let memtable: MemTable = MemTable::new(&LsmOptions::default(), 0);
         let value: Vec<u8> = vec![10, 12];
         memtable.set(&Key::new("alberto"), &value);
         memtable.set(&Key::new("jaime"), &value);

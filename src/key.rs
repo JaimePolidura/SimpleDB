@@ -20,6 +20,10 @@ impl Key {
             string: string.to_string()
         }
     }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        self.string.as_bytes()
+    }
 }
 
 impl fmt::Display for Key {

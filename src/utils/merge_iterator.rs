@@ -153,16 +153,16 @@ mod test {
 
     #[test]
     fn iterator() {
-        let memtable1: MemTable = MemTable::new(&LsmOptions{memtable_max_size_bytes: 1000}, 0);
+        let memtable1: MemTable = MemTable::new(&LsmOptions::default(), 0);
         memtable1.set(&Key::new("a"), &vec![1]);
         memtable1.set(&Key::new("b"), &vec![1]);
         memtable1.set(&Key::new("d"), &vec![1]);
 
-        let memtable2: MemTable = MemTable::new(&LsmOptions{memtable_max_size_bytes: 1000}, 0);
+        let memtable2: MemTable = MemTable::new(&LsmOptions::default(), 0);
         memtable2.set(&Key::new("b"), &vec![2]);
         memtable2.set(&Key::new("e"), &vec![2]);
 
-        let memtable3: MemTable = MemTable::new(&LsmOptions{memtable_max_size_bytes: 1000}, 0);
+        let memtable3: MemTable = MemTable::new(&LsmOptions::default(), 0);
         memtable3.set(&Key::new("c"), &vec![3]);
         memtable3.set(&Key::new("d"), &vec![3]);
         memtable3.set(&Key::new("e"), &vec![3]);
