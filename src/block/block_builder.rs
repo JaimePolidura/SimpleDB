@@ -2,6 +2,7 @@ use bytes::{BufMut, Bytes};
 use crate::block::block::{Block, BLOCK_FOOTER_LENGTH};
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
+use crate::utils::utils;
 
 pub struct BlockBuilder {
     entries: Vec<Entry>,
@@ -57,7 +58,7 @@ impl BlockBuilder {
     }
 
     fn add_length_to_bytes(&self, bytes: &mut Vec<u8>, length: usize) {
-        bytes.push((length as u16).to_le_bytes()[0]);
+        utils::u16_to_u8_le(length as u16, bytes.len(), bytes);
     }
 
     fn calculate_entry_size(&self, key: &Key, value: &Bytes) -> usize {

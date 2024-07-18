@@ -33,12 +33,12 @@ impl Block {
     }
 
     pub fn get_value(&self, n_entry_index: usize) -> Bytes {
-        let entry_index: u16 = self.offsets[n_entry_index];
-        let key_length: u16 = utils::u8_to_u16_le(&self.entries, entry_index as usize);
+        let entry_index = self.offsets[n_entry_index];
+        let key_length = utils::u8_to_u16_le(&self.entries, entry_index as usize);
         let value_index = (entry_index as usize) + 2 + key_length as usize;
         let value_length = utils::u8_to_u16_le(&self.entries, value_index) as usize;
 
-        Bytes::copy_from_slice(&self.entries[(value_index + 2)..value_length])
+        Bytes::copy_from_slice(&self.entries[(value_index + 2)..((value_index + 2) + value_length)])
     }
 
     fn encode_entries(&self, encoded: &mut Vec<u8>) {
@@ -58,9 +58,9 @@ impl Block {
         options: LsmOptions
     ) {
         let n_entries: u16 = self.entries.len() as u16;
-        utils::u16_to_u8_le(n_entries, options.memtable_max_size_bytes - 4, encoded);
+        utils::u16_to_u8_le(n_entries, options.block_size_bytes - 4, encoded);
 
-        utils::u16_to_u8_le(start_offsets_offset as u16, options.memtable_max_size_bytes - 2, encoded);
+        utils::u16_to_u8_le(start_offsets_offset as u16, options.block_size_bytes - 2, encoded);
     }
 
     pub fn decode(encoded: &Vec<u8>, options: LsmOptions) -> Result<Block, ()> {
@@ -68,8 +68,8 @@ impl Block {
             return Err(());
         }
 
-        let offsets_offset: u16 = utils::u8_to_u16_le(&encoded, options.memtable_max_size_bytes - 2);
-        let n_entries: u16 = utils::u8_to_u16_le(&encoded, options.memtable_max_size_bytes - 4);
+        let offsets_offset: u16 = utils::u8_to_u16_le(&encoded, options.block_size_bytes - 2);
+        let n_entries: u16 = utils::u8_to_u16_le(&encoded, options.block_size_bytes - 4);
 
         let offsets = Self::decode_offsets(encoded, offsets_offset, n_entries);
         let entries = Self::decode_entries(encoded, offsets_offset);
@@ -115,7 +115,8 @@ mod test {
         let block = block_builder.build();
 
         let encoded = block.encode(LsmOptions::default());
-        let decoded_block_to_test = Block::decode(&encoded, LsmOptions::default());
+        let decoded_block_to_test = Block::decode(&encoded, LsmOptions::default())
+            .unwrap();
 
         assert_eq!(decoded_block_to_test.get_value(0), vec![1, 2, 3]);
         assert_eq!(decoded_block_to_test.get_key(0).to_string(), String::from("Jaime"));

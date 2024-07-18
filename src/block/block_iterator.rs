@@ -37,9 +37,9 @@ impl StorageIterator for BlockIterator {
 
         has_next
     }
-
+    
     fn has_next(&self) -> bool {
-        self.block.entries.len() > self.current_items_iterated
+        self.block.offsets.len() > self.current_items_iterated
     }
 
     fn key(&self) -> &Key {
@@ -74,7 +74,18 @@ mod test {
         let mut block_iterator = BlockIterator::new(block);
 
         assert!(block_iterator.has_next());
+        block_iterator.next();
 
+        assert!(block_iterator.key().eq(&Key::new("Jaime")));
+        assert!(block_iterator.value().eq(&vec![1, 2, 3]));
 
+        assert!(block_iterator.has_next());
+        block_iterator.next();
+
+        assert!(block_iterator.key().eq(&Key::new("Pedro")));
+        assert!(block_iterator.value().eq(&vec![4, 5, 6]));
+
+        assert!(!block_iterator.has_next());
+        assert!(!block_iterator.next());
     }
 }

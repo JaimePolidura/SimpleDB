@@ -9,6 +9,8 @@ pub fn u16_vec_to_u8_vec(u16_vec: &Vec<u16>) -> Vec<u8> {
 }
 
 pub fn u16_to_u8_le(value: u16, start_index: usize, vector: &mut Vec<u8>) {
+    fill_u8_vec_if_emtpy(vector, start_index + 1, 0);
+
     vector[start_index] = (value & 0xff) as u8;
     vector[start_index + 1] = (value >> 8 & 0xff) as u8;
 }
@@ -29,4 +31,15 @@ pub fn u8_vec_to_u16_vec(u8_vec: &Vec<u8>) -> Vec<u16> {
     }
 
     values
+}
+
+pub fn fill_u8_vec_if_emtpy<T>(vec: &mut Vec<T>, index: usize, value: T)
+where
+    T: Copy
+{
+    if index >= vec.len() {
+        for i in 0..index - vec.len() + 1 {
+            vec.push(value);
+        }
+    }
 }
