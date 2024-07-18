@@ -69,3 +69,25 @@ impl BlockBuilder {
         ;
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::block::block_builder::BlockBuilder;
+    use crate::key::Key;
+    use crate::lsm_options::LsmOptions;
+    use bytes::Bytes;
+
+    #[test]
+    fn build() {
+        let mut block_builder = BlockBuilder::new(LsmOptions::default());
+        block_builder.add_entry(Key::new("Jaime"), Bytes::from(vec![1, 2, 3]));
+        block_builder.add_entry(Key::new("Pedro"), Bytes::from(vec![4, 5, 6]));
+        let block = block_builder.build();
+
+        assert_eq!(block.get_value(0), vec![1, 2, 3]);
+        assert_eq!(block.get_key(0).to_string(), String::from("Jaime"));
+
+        assert_eq!(block.get_value(1), vec![4, 5, 6]);
+        assert_eq!(block.get_key(1).to_string(), String::from("Pedro"));
+    }
+}
