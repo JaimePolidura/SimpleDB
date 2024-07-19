@@ -1,3 +1,3 @@
-mod block_builder;
-mod block;
-mod block_iterator;
+pub mod block_builder;
+pub mod block;
+pub mod block_iterator;
