@@ -37,7 +37,7 @@ impl StorageIterator for BlockIterator {
 
         has_next
     }
-    
+
     fn has_next(&self) -> bool {
         self.block.offsets.len() > self.current_items_iterated
     }
