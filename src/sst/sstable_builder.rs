@@ -60,7 +60,7 @@ impl SSTableBuilder {
     }
 
     pub fn estimated_size_bytes(&self) -> usize {
-        self.encoded_blocks.len() + self.lsm_options.block_size_bytes;
+        self.encoded_blocks.len() + self.lsm_options.block_size_bytes
     }
 
     fn build_current_block(&mut self) {

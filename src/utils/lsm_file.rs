@@ -14,8 +14,8 @@ impl LSMFile {
         std::fs::write(path, data);
 
         match File::open(path) {
-            Some(file) => Ok(LSMFile { size: data.len(), file }),
-            Err(_) => Err(())
+            Ok(file) => Ok(LSMFile { size: data.len(), file: Some(file) }),
+            Err(error) => Err(())
         }
     }
 }

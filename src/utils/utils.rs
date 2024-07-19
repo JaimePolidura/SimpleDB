@@ -33,6 +33,10 @@ pub fn u8_vec_to_u16_vec(u8_vec: &Vec<u8>) -> Vec<u16> {
     values
 }
 
+pub fn hash(key: &[u8]) -> u32 {
+    unimplemented!();
+}
+
 pub fn fill_u8_vec_if_emtpy<T>(vec: &mut Vec<T>, index: usize, value: T)
 where
     T: Copy
