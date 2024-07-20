@@ -1,10 +1,11 @@
+use std::sync::Arc;
 use bytes::Bytes;
 use crate::block::block::Block;
 use crate::key::Key;
 use crate::utils::storage_iterator::StorageIterator;
 
 pub struct BlockIterator {
-    block: Block,
+    block: Arc<Block>,
 
     current_value: Option<Bytes>,
     current_key: Option<Key>,
@@ -13,7 +14,7 @@ pub struct BlockIterator {
 }
 
 impl BlockIterator {
-    pub fn new(block: Block) -> BlockIterator {
+    pub fn new(block: Arc<Block>) -> BlockIterator {
         BlockIterator {
             block,
             current_value: None,
@@ -57,6 +58,7 @@ impl StorageIterator for BlockIterator {
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
     use bytes::Bytes;
     use crate::block::block_builder::BlockBuilder;
     use crate::block::block_iterator::BlockIterator;
@@ -69,7 +71,7 @@ mod test {
         let mut block_builder = BlockBuilder::new(LsmOptions::default());
         block_builder.add_entry(Key::new("Jaime"), Bytes::from(vec![1, 2, 3]));
         block_builder.add_entry(Key::new("Pedro"), Bytes::from(vec![4, 5, 6]));
-        let block = block_builder.build();
+        let block = Arc::new(block_builder.build());
 
         let mut block_iterator = BlockIterator::new(block);
 

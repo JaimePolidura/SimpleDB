@@ -1,6 +1,10 @@
+use std::sync::{Arc, Mutex};
 use bytes::BufMut;
 use crate::block::block::Block;
+use crate::block::block_iterator::BlockIterator;
 use crate::key::Key;
+use crate::lsm_options::LsmOptions;
+use crate::sst::block_cache::BlockCache;
 use crate::utils::bloom_filter::BloomFilter;
 use crate::utils::lsm_file::LSMFile;
 
@@ -8,22 +12,55 @@ pub struct SSTable {
     bloom_filter: BloomFilter,
     file: LSMFile,
     id: usize,
-
-    pub(crate) block_metadata: Vec<BlockMetadata>
+    block_cache: Mutex<BlockCache>,
+    pub(crate) block_metadata: Vec<BlockMetadata>,
+    lsm_options: LsmOptions,
 }
 
 impl SSTable {
     pub fn new(
         block_metadata: Vec<BlockMetadata>,
         bloom_filter: BloomFilter,
+        lsm_options: LsmOptions,
         file: LSMFile,
         id: usize
     ) -> SSTable {
-        SSTable{ block_metadata, bloom_filter, file, id }
+        SSTable {
+            block_cache: Mutex::new(BlockCache::new(lsm_options)),
+            block_metadata,
+            bloom_filter,
+            file,
+            id,
+            lsm_options
+        }
     }
-    
-    pub fn load_block(&self, block_metadata: &BlockMetadata) -> Result<Block, ()> {
-        unimplemented!();
+
+    pub fn load_block(&mut self, block_id: usize) -> Result<Arc<Block>, ()> {
+        {
+            //Try read from cache
+            let mut block_cache = self.block_cache.lock()
+                .unwrap();
+            let block_entry_from_cache = block_cache.get(block_id);
+
+            if block_entry_from_cache.is_some() {
+                Ok::<Arc<Block>, ()>(block_entry_from_cache.unwrap());
+            }
+        }
+
+        //Read from disk
+        let metadata = &self.block_metadata[block_id];
+        let encoded_block = self.file.read(metadata.offset, self.lsm_options.block_size_bytes)?;
+        let block = Block::decode(&encoded_block, self.lsm_options)?;
+        let block = Arc::new(block);
+
+        {
+            //Write to cache
+            let mut block_cache = self.block_cache.lock()
+                .unwrap();
+            block_cache.put(block_id, block.clone());
+        }
+
+        Ok(block)
     }
 }
 
@@ -48,5 +85,15 @@ impl BlockMetadata {
         encoded.put_u32_le(crc32fast::hash(encoded.as_ref()));
 
         encoded
+    }
+}
+
+impl Clone for BlockMetadata {
+    fn clone(&self) -> Self {
+        BlockMetadata{
+            offset: self.offset,
+            first_key: self.first_key.clone(),
+            last_key: self.last_key.clone(),
+        }
     }
 }

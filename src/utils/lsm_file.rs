@@ -15,7 +15,11 @@ impl LSMFile {
 
         match File::open(path) {
             Ok(file) => Ok(LSMFile { size: data.len(), file: Some(file) }),
-            Err(error) => Err(())
+            Err(_) => Err(())
         }
+    }
+
+    pub fn read(&mut self, offset: usize, length: usize) -> Result<Vec<u8>, ()> {
+        unimplemented!();
     }
 }

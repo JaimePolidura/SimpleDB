@@ -75,7 +75,7 @@ impl SSTableBuilder {
 
         match LSMFile::create(path, &encoded) {
             Ok(lsm_file) => Ok(SSTable::new(
-                self.block_metadata, bloom_filter, lsm_file, id
+                self.block_metadata, bloom_filter, self.lsm_options, lsm_file, id
             )),
             Err(_) => Err(())
         }

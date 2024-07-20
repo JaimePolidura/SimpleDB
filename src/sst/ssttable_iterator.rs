@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::block::block::Block;
 use crate::block::block_iterator::BlockIterator;
 use crate::key::Key;
@@ -5,17 +6,19 @@ use crate::sst::sstable::{BlockMetadata, SSTable};
 use crate::utils::storage_iterator::StorageIterator;
 
 pub struct SSTableIterator {
-    sstable: SSTable,
+    sstable: Arc<SSTable>,
 
     pending_blocks: Vec<BlockMetadata>,
     current_block_metadata: Option<BlockMetadata>,
-    current_block_iterator: Option<BlockIterator>
+    current_block_iterator: Option<BlockIterator>,
+    current_block_id: i32 //Index to SSTable block_metadata
 }
 
 impl SSTableIterator {
-    pub fn new(sstable: SSTable) -> SSTableIterator {
+    pub fn new(sstable: Arc<SSTable>) -> SSTableIterator {
         SSTableIterator {
-            pending_blocks: sstable.block_metadata.iter().collect(),
+            pending_blocks: sstable.block_metadata.clone(),
+            current_block_id: -1,
             current_block_iterator: None,
             current_block_metadata: None,
             sstable,
@@ -24,8 +27,9 @@ impl SSTableIterator {
 
     fn next_block(&mut self) {
         if self.pending_blocks.len() > 0 {
+            self.current_block_id = self.current_block_id + 1;
             let block_metadata = self.pending_blocks.remove(0);
-            let block = self.load_block(&block_metadata);
+            let block = self.load_block(self.current_block_id as usize);
             self.current_block_metadata = Some(block_metadata);
             self.current_block_iterator = Some(BlockIterator::new(block));
         } else {
@@ -34,8 +38,9 @@ impl SSTableIterator {
         }
     }
 
-    fn load_block(&self, block_metadata: &BlockMetadata) -> Block {
-        self.sstable.load_block(block_metadata).expect("Cannot load block");
+    fn load_block(&mut self, block_id: usize) -> Arc<Block> {
+        self.sstable.load_block(block_id)
+            .expect("Cannot load block")
     }
 }
 
@@ -54,7 +59,7 @@ impl StorageIterator for SSTableIterator {
                 self.next_block();
                 self.next();
             }
-        } else if self.current_block_iterator.is_some() && self.pending_blocks.is_empty(){
+        } else if self.current_block_iterator.is_some() && self.pending_blocks.is_empty() {
             return self.current_block_iterator
                 .as_mut()
                 .unwrap()
