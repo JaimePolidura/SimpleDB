@@ -1,4 +1,5 @@
 use bytes::BufMut;
+use crate::block::block::Block;
 use crate::key::Key;
 use crate::utils::bloom_filter::BloomFilter;
 use crate::utils::lsm_file::LSMFile;
@@ -8,7 +9,7 @@ pub struct SSTable {
     file: LSMFile,
     id: usize,
 
-    block_metadata: Vec<BlockMetadata>
+    pub(crate) block_metadata: Vec<BlockMetadata>
 }
 
 impl SSTable {
@@ -19,6 +20,10 @@ impl SSTable {
         id: usize
     ) -> SSTable {
         SSTable{ block_metadata, bloom_filter, file, id }
+    }
+    
+    pub fn load_block(&self, block_metadata: &BlockMetadata) -> Result<Block, ()> {
+        unimplemented!();
     }
 }
 
