@@ -4,13 +4,17 @@ use crate::block::block_builder::BlockBuilder;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::sst::sstable::{BlockMetadata, SSTable};
+use crate::utils::bloom_filter::BloomFilter;
 use crate::utils::lsm_file::LSMFile;
+use crate::utils::utils;
 
 pub struct SSTableBuilder {
     current_block_builder: BlockBuilder,
 
     block_metadata: Vec<BlockMetadata>,
     encoded_blocks: Vec<u8>,
+
+    key_hashes: Vec<u32>,
 
     first_key: Option<Key>,
     last_key: Option<Key>,
@@ -22,6 +26,7 @@ impl SSTableBuilder {
     pub fn new(lsm_options: LsmOptions) -> SSTableBuilder {
         SSTableBuilder {
             current_block_builder: BlockBuilder::new(lsm_options),
+            key_hashes: Vec::new(),
             block_metadata: Vec::new(),
             encoded_blocks: Vec::new(),
             first_key: None,
@@ -36,6 +41,8 @@ impl SSTableBuilder {
             self.first_key = Some(key.clone());
         }
 
+        self.key_hashes.push(utils::hash(key.as_bytes()));
+
         match self.current_block_builder.add_entry(key, value) {
             Err(_) => self.build_current_block(),
             Ok(_) => {}
@@ -49,14 +56,29 @@ impl SSTableBuilder {
     ) -> Result<SSTable, ()> {
         self.build_current_block();
 
+        let bloom_filter: BloomFilter = BloomFilter::new(
+            &self.key_hashes,
+            self.lsm_options.bloom_filter_n_entries
+        );
+
         let mut encoded = self.encoded_blocks;
+
+        //Blocks metadata
         let meta_offset = encoded.len();
         encoded.extend(BlockMetadata::encode(&self.block_metadata));
+        //Block
+        let bloom_offset = encoded.len();
+        encoded.extend(bloom_filter.encode());
+        //Bloom & blocks metadata offsets
+        encoded.put_u32_le(bloom_offset as u32);
         encoded.put_u32_le(meta_offset as u32);
 
-        let lsm_file = LSMFile::create(path, &encoded)?;
-
-        Ok(SSTable::new(lsm_file, id))
+        match LSMFile::create(path, &encoded) {
+            Ok(lsm_file) => Ok(SSTable::new(
+                self.block_metadata, bloom_filter, lsm_file, id
+            )),
+            Err(_) => Err(())
+        }
     }
 
     pub fn estimated_size_bytes(&self) -> usize {
