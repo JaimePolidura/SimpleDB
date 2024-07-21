@@ -1,7 +1,6 @@
 use std::sync::{Arc, Mutex};
 use bytes::BufMut;
 use crate::block::block::Block;
-use crate::block::block_iterator::BlockIterator;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::sst::block_cache::BlockCache;
@@ -9,9 +8,10 @@ use crate::utils::bloom_filter::BloomFilter;
 use crate::utils::lsm_file::LSMFile;
 
 pub struct SSTable {
+    id: usize,
+
     bloom_filter: BloomFilter,
     file: LSMFile,
-    id: usize,
     block_cache: Mutex<BlockCache>,
     pub(crate) block_metadata: Vec<BlockMetadata>,
     lsm_options: LsmOptions,
@@ -35,7 +35,7 @@ impl SSTable {
         }
     }
 
-    pub fn load_block(&mut self, block_id: usize) -> Result<Arc<Block>, ()> {
+    pub fn load_block(&self, block_id: usize) -> Result<Arc<Block>, ()> {
         {
             //Try read from cache
             let mut block_cache = self.block_cache.lock()
@@ -85,6 +85,10 @@ impl BlockMetadata {
         encoded.put_u32_le(crc32fast::hash(encoded.as_ref()));
 
         encoded
+    }
+
+    pub fn contains(&self, key: &Key) -> bool {
+        self.first_key.le(key) && self.last_key.ge(key)
     }
 }
 
