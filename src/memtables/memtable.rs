@@ -80,7 +80,7 @@ impl MemTable {
 pub struct MemtableIterator<'a> {
     iterator: Iter<'a, Key, Bytes>,
     memtable: &'a MemTable,
-
+    
     current_data: Option<Entry<'a, Key, Bytes>>,
     n_elements_iterated: usize,
 }
