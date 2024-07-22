@@ -8,13 +8,12 @@ use crate::utils::bloom_filter::BloomFilter;
 use crate::utils::lsm_file::LSMFile;
 
 pub struct SSTable {
-    id: usize,
-
-    bloom_filter: BloomFilter,
-    file: LSMFile,
-    block_cache: Mutex<BlockCache>,
+    pub(crate) id: usize,
+    pub(crate) bloom_filter: BloomFilter,
+    pub(crate) file: LSMFile,
+    pub(crate) block_cache: Mutex<BlockCache>,
     pub(crate) block_metadata: Vec<BlockMetadata>,
-    lsm_options: LsmOptions,
+    pub(crate) lsm_options: LsmOptions,
 }
 
 impl SSTable {
@@ -43,7 +42,7 @@ impl SSTable {
             let block_entry_from_cache = block_cache.get(block_id);
 
             if block_entry_from_cache.is_some() {
-                Ok::<Arc<Block>, ()>(block_entry_from_cache.unwrap());
+                return Ok::<Arc<Block>, ()>(block_entry_from_cache.unwrap());
             }
         }
 

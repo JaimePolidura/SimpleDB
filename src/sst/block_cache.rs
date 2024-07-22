@@ -43,7 +43,7 @@ impl BlockCache {
                 let cache_entry = cache_entry.as_mut().unwrap();
                 if cache_entry.block_id == block_id {
                     cache_entry.increase_touched();
-                    Some(cache_entry.block.clone());
+                    return Some(cache_entry.block.clone());
                 } else {
                     cache_entry.decrease_touched();
                 }
@@ -99,5 +99,33 @@ impl BlockCacheEntry {
 
     pub fn decrease_touched(&mut self) {
         self.touched = max(self.touched - 1, 0);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::block::block_builder::BlockBuilder;
+    use crate::sst::block_cache::BlockCache;
+    use crate::lsm_options::LsmOptions;
+    use std::sync::Arc;
+
+    #[test]
+    fn put_get() {
+        let block1 = Arc::new(BlockBuilder::new(LsmOptions::default()).build());
+        let block2 = Arc::new(BlockBuilder::new(LsmOptions::default()).build());
+        let block3 = Arc::new(BlockBuilder::new(LsmOptions::default()).build());
+        let mut cache = BlockCache::new(LsmOptions::default());
+
+        cache.put(1, block1);
+        cache.put(2, block2);
+        cache.put(3, block3);
+
+        assert!(cache.get(1).is_some());
+        assert!(cache.get(2).is_some());
+        assert!(cache.get(3).is_some());
+        assert!(cache.get(1).is_some());
+        assert!(cache.get(2).is_some());
+        assert!(cache.get(3).is_some());
+        assert!(cache.get(4).is_none());
     }
 }

@@ -37,6 +37,15 @@ pub fn hash(key: &[u8]) -> u32 {
     unimplemented!();
 }
 
+pub fn fill_vec<T>(vec: &mut Vec<T>, size: usize, value: T)
+where
+    T: Copy
+{
+    for _ in 0..size {
+        vec.push(value);
+    }
+}
+
 pub fn fill_u8_vec_if_emtpy<T>(vec: &mut Vec<T>, index: usize, value: T)
 where
     T: Copy

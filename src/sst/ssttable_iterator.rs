@@ -1,4 +1,3 @@
-use std::ptr::read_unaligned;
 use std::sync::Arc;
 use crate::block::block::Block;
 use crate::block::block_iterator::BlockIterator;
@@ -103,7 +102,7 @@ impl StorageIterator for SSTableIterator {
                 .next();
         }
 
-        panic!("Illegal next iterator state");
+        false
     }
 
     fn has_next(&self) -> bool {
@@ -124,5 +123,94 @@ impl StorageIterator for SSTableIterator {
             .as_ref()
             .expect("Illegal iterator state")
             .value()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::{Arc, Mutex};
+    use bytes::Bytes;
+    use crate::block::block_builder::BlockBuilder;
+    use crate::key::Key;
+    use crate::lsm_options::LsmOptions;
+    use crate::sst::block_cache::BlockCache;
+    use crate::sst::sstable::{BlockMetadata, SSTable};
+    use crate::sst::ssttable_iterator::SSTableIterator;
+    use crate::utils::bloom_filter::BloomFilter;
+    use crate::utils::lsm_file::LSMFile;
+    use crate::utils::storage_iterator::StorageIterator;
+
+    #[test]
+    fn next_has_next() {
+        let mut sstable_iteator: SSTableIterator = build_sstable_iterator();
+
+        assert!(sstable_iteator.has_next());
+        sstable_iteator.next();
+        assert!(sstable_iteator.key().eq(&Key::new("Alberto")));
+
+        assert!(sstable_iteator.has_next());
+        sstable_iteator.next();
+        assert!(sstable_iteator.key().eq(&Key::new("Berto")));
+
+        assert!(sstable_iteator.has_next());
+        sstable_iteator.next();
+        assert!(sstable_iteator.key().eq(&Key::new("Cigu")));
+
+        assert!(sstable_iteator.has_next());
+        sstable_iteator.next();
+        assert!(sstable_iteator.key().eq(&Key::new("De")));
+
+        assert!(sstable_iteator.has_next());
+        sstable_iteator.next();
+        assert!(sstable_iteator.key().eq(&Key::new("Estonia")));
+
+        assert!(sstable_iteator.has_next());
+        sstable_iteator.next();
+        assert!(sstable_iteator.key().eq(&Key::new("Gibraltar")));
+
+        assert!(sstable_iteator.has_next());
+        sstable_iteator.next();
+        assert!(sstable_iteator.key().eq(&Key::new("Zi")));
+
+        assert!(!sstable_iteator.next());
+        assert!(!sstable_iteator.has_next());
+    }
+
+    fn build_sstable_iterator() -> SSTableIterator {
+        let mut block1 = BlockBuilder::new(LsmOptions::default());
+        block1.add_entry(Key::new("Alberto"), Bytes::from(vec![1]));
+        block1.add_entry(Key::new("Berto"), Bytes::from(vec![1]));
+        let block1 = Arc::new(block1.build());
+
+        let mut block2 = BlockBuilder::new(LsmOptions::default());
+        block2.add_entry(Key::new("Cigu"), Bytes::from(vec![1]));
+        block2.add_entry(Key::new("De"), Bytes::from(vec![1]));
+        let block2 = Arc::new(block2.build());
+
+        let mut block3 = BlockBuilder::new(LsmOptions::default());
+        block3.add_entry(Key::new("Estonia"), Bytes::from(vec![1]));
+        block3.add_entry(Key::new("Gibraltar"), Bytes::from(vec![1]));
+        block3.add_entry(Key::new("Zi"), Bytes::from(vec![1]));
+        let block3 = Arc::new(block3.build());
+
+        let mut block_cache = BlockCache::new(LsmOptions::default());
+        block_cache.put(0, block1);
+        block_cache.put(1, block2);
+        block_cache.put(2, block3);
+
+        let sstable = Arc::new(SSTable{
+            id: 1,
+            bloom_filter: BloomFilter::new(&Vec::new(), 8),
+            file: LSMFile::empty(),
+            block_cache: Mutex::new(block_cache),
+            block_metadata: vec![
+                BlockMetadata{offset: 0, first_key: Key::new("Alberto"), last_key: Key::new("Berto")},
+                BlockMetadata{offset: 8, first_key: Key::new("Cigu"), last_key: Key::new("De")},
+                BlockMetadata{offset: 16, first_key: Key::new("Estonia"), last_key: Key::new("Zi")},
+            ],
+            lsm_options: LsmOptions::default()
+        });
+
+        SSTableIterator::new(sstable)
     }
 }

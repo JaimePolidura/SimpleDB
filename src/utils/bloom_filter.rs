@@ -1,4 +1,5 @@
 use bytes::BufMut;
+use crate::utils::utils;
 
 pub struct BloomFilter {
     bitmap: Vec<u8>,
@@ -25,7 +26,8 @@ impl BloomFilter {
         n_entries: usize //Expect power of 2
     ) -> BloomFilter {
         let n_vec_slots = (n_entries / 8) as u32;
-        let mut bitmap: Vec<u8> = vec![0, n_vec_slots as u8];
+        let mut bitmap: Vec<u8> = Vec::with_capacity(n_vec_slots as usize);
+        utils::fill_vec(&mut bitmap, n_vec_slots as usize, 0);
 
         for hash in hashes {
             let slot_index = hash & (n_vec_slots - 1);
@@ -36,5 +38,24 @@ impl BloomFilter {
         }
 
         BloomFilter { bitmap }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::utils::bloom_filter::BloomFilter;
+
+    #[test]
+    fn may_contain() {
+        let hashes = vec![101212, 1389172819, 182971, 12, 1729187291];
+        let bloom = BloomFilter::new(&hashes, 64);
+
+        assert!(bloom.may_contain(101212));
+        assert!(bloom.may_contain(1389172819));
+        assert!(bloom.may_contain(182971));
+        assert!(bloom.may_contain(12));
+        assert!(bloom.may_contain(1729187291));
+
+        assert!(!bloom.may_contain(1729187290));
     }
 }
