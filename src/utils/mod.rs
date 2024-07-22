@@ -4,4 +4,4 @@ pub mod merge_iterator;
 pub mod utils;
 pub mod lsm_file;
 pub mod bloom_filter;
-mod two_merge_iterators;
+pub mod two_merge_iterators;

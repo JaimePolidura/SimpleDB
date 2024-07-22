@@ -1,4 +1,4 @@
 pub mod sstable_builder;
-mod sstable;
-mod ssttable_iterator;
+pub mod sstable;
+pub mod ssttable_iterator;
 mod block_cache;

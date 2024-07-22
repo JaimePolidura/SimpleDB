@@ -1,13 +1,15 @@
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::Relaxed;
+use std::sync::{Arc, RwLock, RwLockWriteGuard};
+use std::sync::atomic::{AtomicPtr, AtomicUsize};
+use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
+
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
-use crate::memtables::memtable::MemTable;
-use crate::utils::atomic_shared_ref::AtomicSharedRef;
+use crate::memtables::memtable::{MemTable, MemtableIterator};
+use crate::utils::merge_iterator::MergeIterator;
 
 pub struct Memtables {
-    current_memtable: AtomicSharedRef<MemTable>,
-    inactive_memtables: Vec<MemTable>,
+    current_memtable: AtomicPtr<Arc<MemTable>>,
+    inactive_memtables: AtomicPtr<RwLock<Vec<Arc<MemTable>>>>,
 
     options: LsmOptions,
     next_memtable_id: AtomicUsize
@@ -16,60 +18,116 @@ pub struct Memtables {
 impl Memtables {
     pub fn new(options: LsmOptions) -> Memtables {
         Memtables {
-            current_memtable: AtomicSharedRef::new(MemTable::new(&options, 0)),
+            current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(MemTable::new(&options, 0))))),
             next_memtable_id: AtomicUsize::new(0),
-            inactive_memtables: Vec::new(),
+            inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(Vec::with_capacity(options.max_memtables_inactive))))),
             options
         }
     }
 
-    pub fn get(&self, key: &Key) -> Option<bytes::Bytes> {
-        let memtable_ref = self.current_memtable.load_ref();
-        let value = memtable_ref.shared_ref.get(key);
-        self.current_memtable.unload_ref(memtable_ref);
+    pub fn scan(&self) -> MergeIterator<MemtableIterator> {
+        unsafe {
+            let mut memtable_iterators: Vec<Box<MemtableIterator>> = Vec::new();
 
-        match value {
-            Some(value) => Some(value),
-            None => self.find_value_in_inactive_memtables(key),
+            memtable_iterators.push(Box::from(MemtableIterator::new(&(*self.current_memtable.load(Acquire)))));
+
+            let inactive_memtables_rw_lock = &*self.inactive_memtables.load(Acquire);
+            let inactive_memtables_rw_result = inactive_memtables_rw_lock.read().unwrap();
+
+            for memtable in inactive_memtables_rw_result.iter() {
+                let cloned = Arc::clone(memtable);
+                memtable_iterators.push(Box::new(MemtableIterator::new(&cloned)));
+            }
+
+            MergeIterator::new(memtable_iterators)
+        }
+    }
+
+    pub fn get(&self, key: &Key) -> Option<bytes::Bytes> {
+        unsafe {
+            let memtable_ref =  (*self.current_memtable.load(Acquire)).clone();
+            let value = memtable_ref.get(key);
+
+            match value {
+                Some(value) => Some(value),
+                None => self.find_value_in_inactive_memtables(key),
+            }
         }
     }
 
     pub fn set(&mut self, key: &Key, value: &[u8]) {
-        let memtable_ref = self.current_memtable.load_ref();
-        let set_result = memtable_ref.shared_ref.set(key, value);
-        self.current_memtable.unload_ref(memtable_ref);
+        unsafe {
+            let memtable_ref = (*self.current_memtable.load(Acquire)).clone();
+            let set_result = memtable_ref.set(key, value);
 
-        match set_result {
-            Err(_) => self.try_flush_memtable(),
-            _ => {}
-        };
+            match set_result {
+                Err(_) => self.set_current_memtable_as_inactive(),
+                _ => {}
+            };
+        }
     }
 
     pub fn delete(&mut self, key: &Key) {
-        let memtable_ref = self.current_memtable.load_ref();
-        let delete_result = memtable_ref.shared_ref.delete(key);
-        self.current_memtable.unload_ref(memtable_ref);
+        unsafe {
+            let memtable_ref = (*self.current_memtable.load(Acquire)).clone();
+            let delete_result = memtable_ref.delete(key);
 
-        match delete_result {
-            Err(_) => self.try_flush_memtable(),
-            _ => {},
+            match delete_result {
+                Err(_) => self.set_current_memtable_as_inactive(),
+                _ => {},
+            }
         }
     }
 
     fn find_value_in_inactive_memtables(&self, key: &Key) -> Option<bytes::Bytes> {
-        for inactive_memtable in self.inactive_memtables.iter().rev() {
-            if let Some(value) = inactive_memtable.get(key) {
-                return Some(value);
-            }
-        }
+        unsafe {
+            let inactive_memtables_rw_lock = &*self.inactive_memtables.load(Acquire);
+            let inactive_memtables = inactive_memtables_rw_lock.read()
+                .unwrap();
 
-        None
+            for inactive_memtable in inactive_memtables.iter().rev() {
+                if let Some(value) = inactive_memtable.get(key) {
+                    return Some(value);
+                }
+            }
+
+            None
+        }
     }
 
-    fn try_flush_memtable(&mut self) {
+    fn set_current_memtable_as_inactive(&mut self) {
         let new_memtable_id = self.next_memtable_id.fetch_add(1, Relaxed);
-        let new_memtable = MemTable::new(&self.options, new_memtable_id);
+        let new_memtable = Box::into_raw(Box::new(Arc::new(MemTable::new(&self.options, new_memtable_id))));
+        let current_memtable = self.current_memtable.load(Acquire);
 
-        self.inactive_memtables.push(new_memtable);
+        match self.current_memtable.compare_exchange(current_memtable, new_memtable, Release, Relaxed) {
+            Ok(prev_memtable) => unsafe { self.move_current_memtable_inactive_list(prev_memtable) },
+            // Err(_) => self.next_memtable_id.fetch_sub(1, Relaxed)
+            Err(_) => {}
+        }
+    }
+
+    unsafe fn move_current_memtable_inactive_list(&mut self, prev_memtable: * mut Arc<MemTable>) {
+        let mut memtables_rw_result = self.inactive_memtables.load(Acquire)
+            .as_mut()
+            .unwrap()
+            .write();
+        let memtables = memtables_rw_result
+            .as_mut()
+            .unwrap();
+
+        memtables.push((*prev_memtable).clone());
+
+        if memtables.len() > self.options.max_memtables_inactive {
+            self.flush_inactive_memtables_to_disk(memtables);
+        }
+    }
+
+    unsafe fn flush_inactive_memtables_to_disk(&mut self, to_flush: &mut RwLockWriteGuard<Vec<Arc<MemTable>>>) {
+        self.inactive_memtables.store(Box::into_raw(Box::new(RwLock::new(
+            Vec::with_capacity(self.options.max_memtables_inactive)))), Release
+        );
+
+        //TODO Flush to disk. In this point there will be no writers to to_flush
     }
 }

@@ -5,6 +5,7 @@ pub struct LsmOptions {
     pub bloom_filter_n_entries: usize,
     pub block_size_bytes: usize,
     pub sst_size_bytes: usize,
+    pub max_memtables_inactive: usize,
 }
 
 impl Default for LsmOptions {
@@ -15,6 +16,7 @@ impl Default for LsmOptions {
             block_size_bytes: 4096, //4kb
             sst_size_bytes: 268435456, //256 MB ~ 64 blocks
             n_cached_blocks_per_sstable: 8, //Expect power of two
+            max_memtables_inactive: 8,
         }
     }
 }

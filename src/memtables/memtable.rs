@@ -1,3 +1,4 @@
+use std::ops::Bound::Excluded;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
@@ -54,10 +55,6 @@ impl MemTable {
         )
     }
 
-    pub fn scan(&self) -> MemtableIterator {
-        MemtableIterator::new(&self)
-    }
-
     fn write_into_skip_list(&self, key: &Key, value: Bytes) -> Result<(), ()> {
         if self.current_size_bytes.load(Relaxed) >= self.max_size_bytes {
             return Err(());
@@ -71,41 +68,50 @@ impl MemTable {
 
         Ok(())
     }
-
-    fn iterator(&self) -> MemtableIterator {
-        MemtableIterator::new(self)
-    }
 }
 
-pub struct MemtableIterator<'a> {
-    iterator: Iter<'a, Key, Bytes>,
-    memtable: &'a MemTable,
-    
-    current_data: Option<Entry<'a, Key, Bytes>>,
+pub struct MemtableIterator {
+    memtable: Arc<MemTable>,
+
+    current_value: Option<Bytes>,
+    current_key: Option<Key>,
+
     n_elements_iterated: usize,
 }
 
-impl<'a> MemtableIterator<'a> {
-    pub fn new(memtable: &'a MemTable) -> MemtableIterator<'a> {
-        let mut iterator= memtable.data.iter();
-
+impl MemtableIterator {
+    pub fn new(memtable: &Arc<MemTable>) -> MemtableIterator {
         MemtableIterator {
+            memtable: memtable.clone(),
+            current_value: None,
             n_elements_iterated: 0,
-            current_data: None,
-            memtable,
-            iterator,
+            current_key: None
         }
     }
 }
 
-impl<'a> StorageIterator for MemtableIterator<'a> {
+impl<'a> StorageIterator for MemtableIterator {
     fn next(&mut self) -> bool {
-        let next_data = self.iterator.next();
-        let has_advanced = next_data.is_some();
+        let mut has_advanced = false;
+        if self.memtable.data.is_empty() {
+            return has_advanced;
+        }
 
-        if has_advanced {
-            self.n_elements_iterated = self.n_elements_iterated + 1;
-            self.current_data = next_data;
+        match &self.current_key {
+            Some(prev_key) => {
+                if let Some(next_entry) = self.memtable.data.upper_bound(Excluded(prev_key)) {
+                    self.n_elements_iterated = self.n_elements_iterated + 1;
+                    self.current_value = Some(next_entry.value().clone());
+                    self.current_key = Some(next_entry.key().clone());
+                    has_advanced = true;
+                }
+            },
+            None => {
+                self.current_value = Some(self.memtable.data.iter().next().expect("Illegal iterator state").value().clone());
+                self.current_key = Some(self.memtable.data.iter().next().expect("Illegal iterator state").key().clone());
+                self.n_elements_iterated = self.n_elements_iterated + 1;
+                has_advanced = true;
+            }
         }
 
         has_advanced
@@ -116,27 +122,24 @@ impl<'a> StorageIterator for MemtableIterator<'a> {
     }
 
     fn key(&self) -> &Key {
-        let entry = self.current_data
+        self.current_key
             .as_ref()
-            .expect("Illegal iterator state");
-
-        entry.key()
+            .expect("Illegal iterator state")
     }
 
     fn value(&self) -> &[u8] {
-        let entry = self.current_data
+        self.current_value
             .as_ref()
-            .expect("Illegal iterator state");
-
-        entry.value()
+            .expect("Illegal iterator state")
     }
 }
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
     use crate::key::Key;
     use crate::lsm_options::LsmOptions;
-    use crate::memtables::memtable::MemTable;
+    use crate::memtables::memtable::{MemTable, MemtableIterator};
     use crate::utils::storage_iterator::StorageIterator;
 
     #[test]
@@ -159,14 +162,14 @@ mod test {
 
     #[test]
     fn iterators() {
-        let memtable: MemTable = MemTable::new(&LsmOptions::default(), 0);
+        let memtable = Arc::new(MemTable::new(&LsmOptions::default(), 0));
         let value: Vec<u8> = vec![10, 12];
         memtable.set(&Key::new("alberto"), &value);
         memtable.set(&Key::new("jaime"), &value);
         memtable.set(&Key::new("gonchi"), &value);
         memtable.set(&Key::new("wili"), &value);
 
-        let mut iterator = memtable.scan();
+        let mut iterator = MemtableIterator::new(&memtable);
 
         assert!(iterator.has_next());
         iterator.next();

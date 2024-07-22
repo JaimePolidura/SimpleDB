@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::key::Key;
 use crate::utils::storage_iterator::StorageIterator;
 
@@ -144,6 +145,7 @@ fn is_iterator_up_to_date<I: StorageIterator>(it: &Box<I>, last_key: &Option<Key
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
     use crate::key::Key;
     use crate::lsm_options::LsmOptions;
     use crate::memtables::memtable::{MemTable, MemtableIterator};
@@ -152,24 +154,24 @@ mod test {
 
     #[test]
     fn iterator() {
-        let memtable1: MemTable = MemTable::new(&LsmOptions::default(), 0);
+        let memtable1 = Arc::new(MemTable::new(&LsmOptions::default(), 0));
         memtable1.set(&Key::new("a"), &vec![1]);
         memtable1.set(&Key::new("b"), &vec![1]);
         memtable1.set(&Key::new("d"), &vec![1]);
 
-        let memtable2: MemTable = MemTable::new(&LsmOptions::default(), 0);
+        let memtable2 = Arc::new(MemTable::new(&LsmOptions::default(), 0));
         memtable2.set(&Key::new("b"), &vec![2]);
         memtable2.set(&Key::new("e"), &vec![2]);
 
-        let memtable3: MemTable = MemTable::new(&LsmOptions::default(), 0);
+        let memtable3 = Arc::new(MemTable::new(&LsmOptions::default(), 0));
         memtable3.set(&Key::new("c"), &vec![3]);
         memtable3.set(&Key::new("d"), &vec![3]);
         memtable3.set(&Key::new("e"), &vec![3]);
 
         let mut merge_iterator: MergeIterator<MemtableIterator> = MergeIterator::new(vec![
-            Box::new(memtable1.scan()),
-            Box::new(memtable2.scan()),
-            Box::new(memtable3.scan())
+            Box::new(MemtableIterator::new(&memtable1)),
+            Box::new(MemtableIterator::new(&memtable2)),
+            Box::new(MemtableIterator::new(&memtable3))
         ]);
 
         assert!(merge_iterator.has_next());
