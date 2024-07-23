@@ -1,9 +1,9 @@
-use std::f32::consts::E;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use crate::key::Key;
+use crate::lsm_options::LsmOptions;
 use crate::sst::sstable::SSTable;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::ssttable_iterator::SSTableIterator;
@@ -12,13 +12,15 @@ use crate::utils::merge_iterator::MergeIterator;
 pub struct SSTables {
     sstables: RwLock<Vec<Arc<SSTable>>>,
     next_memtable_id: AtomicUsize,
+    lsm_options: Arc<LsmOptions>
 }
 
 impl SSTables {
-    pub fn new() -> SSTables {
+    pub fn new(lsm_options: Arc<LsmOptions>) -> SSTables {
         SSTables {
             sstables: RwLock::new(Vec::new()),
             next_memtable_id: AtomicUsize::new(0),
+            lsm_options
         }
     }
 
@@ -71,7 +73,7 @@ impl SSTables {
             Err(_) => Err(()),
         }
     }
-    
+
     fn get_path_sstable_flush(&self) -> &Path {
         unimplemented!();
     }

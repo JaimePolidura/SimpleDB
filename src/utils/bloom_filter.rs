@@ -15,10 +15,32 @@ impl BloomFilter {
     }
 
     pub fn encode(&self) -> Vec<u8> {
-        let mut encoded = self.bitmap.clone();
-        let crc = crc32fast::hash(&encoded);
+        let crc = crc32fast::hash(&self.bitmap);
+        let mut encoded: Vec<u8> = Vec::with_capacity(self.bitmap.len() + 8);
         encoded.put_u32_le(crc);
+        encoded.put_u32_le(self.bitmap.len() as u32);
+        encoded.extend(&self.bitmap);
         encoded
+    }
+
+    pub fn decode(bytes: &Vec<u8>, start_offset: usize) -> Result<BloomFilter, ()> {
+        let expected_crc = utils::u8_vec_to_u32_le(bytes, start_offset);
+        let n_bytes = utils::u8_vec_to_u32_le(bytes, start_offset + 4);
+
+        let bitmap_start_index = start_offset + 8;
+        let bitmap_end_index = start_offset + 8 + n_bytes as usize;
+        let bloom_bitmap = bytes[bitmap_start_index..bitmap_end_index].to_vec();
+        let actual_crc = crc32fast::hash(&bloom_bitmap);
+
+        if actual_crc != expected_crc {
+            return Err(());
+        }
+
+        Ok(Self::from_botmap(bloom_bitmap))
+    }
+
+    pub fn from_botmap(bitmap: Vec<u8>) -> BloomFilter {
+        BloomFilter{ bitmap }
     }
 
     pub fn new(

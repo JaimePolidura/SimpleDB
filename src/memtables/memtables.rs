@@ -11,12 +11,12 @@ pub struct Memtables {
     current_memtable: AtomicPtr<Arc<MemTable>>,
     inactive_memtables: AtomicPtr<RwLock<Vec<Arc<MemTable>>>>,
 
-    options: LsmOptions,
+    options: Arc<LsmOptions>,
     next_memtable_id: AtomicUsize
 }
 
 impl Memtables {
-    pub fn new(options: LsmOptions) -> Memtables {
+    pub fn new(options: Arc<LsmOptions>) -> Memtables {
         Memtables {
             current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(MemTable::new(&options, 0))))),
             next_memtable_id: AtomicUsize::new(0),

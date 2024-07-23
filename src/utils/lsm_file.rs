@@ -2,27 +2,35 @@ use std::fs::File;
 use std::os::windows::fs::FileExt;
 use std::path::Path;
 
-pub struct LSMFile {
+pub struct LsmFile {
     file: Option<File>,
     size: usize
 }
 
-impl LSMFile {
-    pub fn empty() -> LSMFile {
-        LSMFile{
+impl LsmFile {
+    pub fn empty() -> LsmFile {
+        LsmFile {
             file: None,
             size: 0
         }
     }
 
+    pub fn read_all(&self) -> Result<Vec<u8>, ()> {
+        unimplemented!();
+    }
+
+    pub fn open(path: &Path) -> Result<LsmFile, ()> {
+        unimplemented!();
+    }
+
     pub fn create(
         path: &Path,
         data: &Vec<u8>
-    ) -> Result<LSMFile, ()> {
+    ) -> Result<LsmFile, ()> {
         std::fs::write(path, data);
 
         match File::open(path) {
-            Ok(file) => Ok(LSMFile { size: data.len(), file: Some(file) }),
+            Ok(file) => Ok(LsmFile { size: data.len(), file: Some(file) }),
             Err(_) => Err(())
         }
     }

@@ -69,7 +69,7 @@ impl MemTable {
         Ok(())
     }
 
-    pub fn to_sst(options: LsmOptions, memtable: Arc<MemTable>) -> SSTableBuilder {
+    pub fn to_sst(options: Arc<LsmOptions>, memtable: Arc<MemTable>) -> SSTableBuilder {
         let mut memtable_iterator = MemtableIterator::new(&memtable);
         let mut sstable_builder = SSTableBuilder::new(options);
 

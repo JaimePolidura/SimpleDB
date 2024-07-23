@@ -14,7 +14,7 @@ struct BlockCacheEntry {
 }
 
 impl BlockCache {
-    pub fn new(lsm_options: LsmOptions) -> BlockCache {
+    pub fn new(lsm_options: Arc<LsmOptions>) -> BlockCache {
         let mut entries: Vec<Option<BlockCacheEntry>> = Vec::with_capacity(lsm_options.n_cached_blocks_per_sstable);
         for _ in 0..lsm_options.n_cached_blocks_per_sstable {
             entries.push(None);
@@ -111,10 +111,10 @@ mod test {
 
     #[test]
     fn put_get() {
-        let block1 = Arc::new(BlockBuilder::new(LsmOptions::default()).build());
-        let block2 = Arc::new(BlockBuilder::new(LsmOptions::default()).build());
-        let block3 = Arc::new(BlockBuilder::new(LsmOptions::default()).build());
-        let mut cache = BlockCache::new(LsmOptions::default());
+        let block1 = Arc::new(BlockBuilder::new(Arc::new(LsmOptions::default())).build());
+        let block2 = Arc::new(BlockBuilder::new(Arc::new(LsmOptions::default())).build());
+        let block3 = Arc::new(BlockBuilder::new(Arc::new(LsmOptions::default())).build());
+        let mut cache = BlockCache::new(Arc::new(LsmOptions::default()));
 
         cache.put(1, block1);
         cache.put(2, block2);

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use bytes::Bytes;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
@@ -12,7 +13,7 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn encode(self, options: LsmOptions) -> Vec<u8> {
+    pub fn encode(self, options: &Arc<LsmOptions>) -> Vec<u8> {
         let mut encoded: Vec<u8> = Vec::with_capacity(options.block_size_bytes);
 
         self.encode_entries(&mut encoded);
@@ -47,7 +48,7 @@ impl Block {
 
     pub fn get_key_by_index(&self, n_entry_index: usize) -> Key {
         let entry_index: usize = self.offsets[n_entry_index] as usize;
-        let key_length: usize = utils::u8_to_u16_le(&self.entries, entry_index) as usize;
+        let key_length: usize = utils::u8_vec_to_u16_le(&self.entries, entry_index) as usize;
         let key_slice: &[u8] = &self.entries[entry_index + 2..(key_length + entry_index + 2)];
         let key = String::from_utf8(key_slice.to_vec())
             .expect("Error while parsing with UTF-8");
@@ -57,9 +58,9 @@ impl Block {
 
     pub fn get_value_by_index(&self, n_entry_index: usize) -> Bytes {
         let entry_index = self.offsets[n_entry_index];
-        let key_length = utils::u8_to_u16_le(&self.entries, entry_index as usize);
+        let key_length = utils::u8_vec_to_u16_le(&self.entries, entry_index as usize);
         let value_index = (entry_index as usize) + 2 + key_length as usize;
-        let value_length = utils::u8_to_u16_le(&self.entries, value_index) as usize;
+        let value_length = utils::u8_vec_to_u16_le(&self.entries, value_index) as usize;
 
         Bytes::copy_from_slice(&self.entries[(value_index + 2)..((value_index + 2) + value_length)])
     }
@@ -78,7 +79,7 @@ impl Block {
         &self,
         start_offsets_offset: usize,
         encoded: &mut Vec<u8>,
-        options: LsmOptions
+        options: &Arc<LsmOptions>
     ) {
         let n_entries: u16 = self.entries.len() as u16;
         utils::u16_to_u8_le(n_entries, options.block_size_bytes - 4, encoded);
@@ -86,13 +87,13 @@ impl Block {
         utils::u16_to_u8_le(start_offsets_offset as u16, options.block_size_bytes - 2, encoded);
     }
 
-    pub fn decode(encoded: &Vec<u8>, options: LsmOptions) -> Result<Block, ()> {
+    pub fn decode(encoded: &Vec<u8>, options: Arc<LsmOptions>) -> Result<Block, ()> {
         if encoded.len() != options.block_size_bytes {
             return Err(());
         }
 
-        let offsets_offset: u16 = utils::u8_to_u16_le(&encoded, options.block_size_bytes - 2);
-        let n_entries: u16 = utils::u8_to_u16_le(&encoded, options.block_size_bytes - 4);
+        let offsets_offset: u16 = utils::u8_vec_to_u16_le(&encoded, options.block_size_bytes - 2);
+        let n_entries: u16 = utils::u8_vec_to_u16_le(&encoded, options.block_size_bytes - 4);
 
         let offsets = Self::decode_offsets(encoded, offsets_offset, n_entries);
         let entries = Self::decode_entries(encoded, offsets_offset);
@@ -124,6 +125,7 @@ impl Block {
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
     use bytes::Bytes;
     use crate::block::block::Block;
     use crate::block::block_builder::BlockBuilder;
@@ -132,13 +134,13 @@ mod test {
 
     #[test]
     fn encode_and_decode() {
-        let mut block_builder = BlockBuilder::new(LsmOptions::default());
+        let mut block_builder = BlockBuilder::new(Arc::new(LsmOptions::default()));
         block_builder.add_entry(Key::new("Jaime"), Bytes::from(vec![1, 2, 3]));
         block_builder.add_entry(Key::new("Pedro"), Bytes::from(vec![4, 5, 6]));
         let block = block_builder.build();
 
-        let encoded = block.encode(LsmOptions::default());
-        let decoded_block_to_test = Block::decode(&encoded, LsmOptions::default())
+        let encoded = block.encode(&Arc::new(LsmOptions::default()));
+        let decoded_block_to_test = Block::decode(&encoded, Arc::new(LsmOptions::default()))
             .unwrap();
 
         assert_eq!(decoded_block_to_test.get_value_by_index(0), vec![1, 2, 3]);

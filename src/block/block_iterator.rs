@@ -68,7 +68,7 @@ mod test {
 
     #[test]
     fn iterator() {
-        let mut block_builder = BlockBuilder::new(LsmOptions::default());
+        let mut block_builder = BlockBuilder::new(Arc::new(LsmOptions::default()));
         block_builder.add_entry(Key::new("Jaime"), Bytes::from(vec![1, 2, 3]));
         block_builder.add_entry(Key::new("Pedro"), Bytes::from(vec![4, 5, 6]));
         let block = Arc::new(block_builder.build());

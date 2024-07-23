@@ -1,10 +1,8 @@
 use std::sync::Arc;
-use bytes::Bytes;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::{MemTable, MemtableIterator};
 use crate::memtables::memtables::Memtables;
-use crate::sst::sstable::SSTable;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
 use crate::sst::ssttable_iterator::SSTableIterator;
@@ -13,17 +11,17 @@ use crate::utils::storage_iterator::StorageIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 
 pub struct Lsm {
-    options: LsmOptions,
+    options: Arc<LsmOptions>,
     memtables: Memtables,
     sstables: SSTables,
 }
 
 impl Lsm {
-    pub fn new(lsm_options: LsmOptions) -> Lsm {
+    pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
         Lsm {
-            options: lsm_options,
-            memtables: Memtables::new(lsm_options),
-            sstables: SSTables::new(),
+            options: lsm_options.clone(),
+            memtables: Memtables::new(lsm_options.clone()),
+            sstables: SSTables::new(lsm_options),
         }
     }
 
@@ -56,7 +54,8 @@ impl Lsm {
     }
 
     fn flush_memtable(&mut self, memtable: Arc<MemTable>) -> Result<(), ()> {
-        let sstable_builder_ready: SSTableBuilder = MemTable::to_sst(self.options, memtable);
-        self.sstables.flush_to_disk(sstable_builder_ready)
+        let sstable_builder_ready: SSTableBuilder = MemTable::to_sst(self.options.clone(), memtable);
+        self.sstables.flush_to_disk(sstable_builder_ready);
+        Ok(())
     }
 }

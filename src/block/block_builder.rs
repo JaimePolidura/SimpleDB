@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use bytes::{BufMut, Bytes};
 use crate::block::block::{Block, BLOCK_FOOTER_LENGTH};
 use crate::key::Key;
@@ -7,7 +8,7 @@ use crate::utils::utils;
 pub struct BlockBuilder {
     entries: Vec<Entry>,
     current_size: usize,
-    options: LsmOptions,
+    options: Arc<LsmOptions>,
 }
 
 struct Entry {
@@ -16,7 +17,7 @@ struct Entry {
 }
 
 impl BlockBuilder {
-    pub fn new(options: LsmOptions) -> BlockBuilder {
+    pub fn new(options: Arc<LsmOptions>) -> BlockBuilder {
         BlockBuilder {
             entries: Vec::new(),
             current_size: BLOCK_FOOTER_LENGTH,
@@ -73,6 +74,7 @@ impl BlockBuilder {
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
     use crate::block::block_builder::BlockBuilder;
     use crate::key::Key;
     use crate::lsm_options::LsmOptions;
@@ -80,7 +82,7 @@ mod test {
 
     #[test]
     fn build() {
-        let mut block_builder = BlockBuilder::new(LsmOptions::default());
+        let mut block_builder = BlockBuilder::new(Arc::new(LsmOptions::default()));
         block_builder.add_entry(Key::new("Jaime"), Bytes::from(vec![1, 2, 3]));
         block_builder.add_entry(Key::new("Pedro"), Bytes::from(vec![4, 5, 6]));
         let block = block_builder.build();
