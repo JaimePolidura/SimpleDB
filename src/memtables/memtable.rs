@@ -3,10 +3,10 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use bytes::Bytes;
-use crossbeam_skiplist::map::{Entry, Iter};
 use crossbeam_skiplist::SkipMap;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
+use crate::sst::sstable_builder::SSTableBuilder;
 use crate::utils::storage_iterator::{StorageIterator};
 
 const TOMBSTONE: Bytes = Bytes::new();
@@ -67,6 +67,19 @@ impl MemTable {
         );
 
         Ok(())
+    }
+
+    pub fn to_sst(options: LsmOptions, memtable: Arc<MemTable>) -> SSTableBuilder {
+        let mut memtable_iterator = MemtableIterator::new(&memtable);
+        let mut sstable_builder = SSTableBuilder::new(options);
+
+        while memtable_iterator.next() {
+            let value = memtable_iterator.value();
+            let key = memtable_iterator.key();
+            sstable_builder.add_entry(key.clone(), Bytes::copy_from_slice(value));
+        }
+
+        sstable_builder
     }
 }
 

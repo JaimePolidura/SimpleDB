@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock, RwLockWriteGuard};
+use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 
@@ -55,26 +55,26 @@ impl Memtables {
         }
     }
 
-    pub fn set(&mut self, key: &Key, value: &[u8]) {
+    pub fn set(&mut self, key: &Key, value: &[u8]) -> Option<Arc<MemTable>> {
         unsafe {
             let memtable_ref = (*self.current_memtable.load(Acquire)).clone();
             let set_result = memtable_ref.set(key, value);
 
             match set_result {
                 Err(_) => self.set_current_memtable_as_inactive(),
-                _ => {}
-            };
+                _ => None
+            }
         }
     }
 
-    pub fn delete(&mut self, key: &Key) {
+    pub fn delete(&mut self, key: &Key) -> Option<Arc<MemTable>> {
         unsafe {
             let memtable_ref = (*self.current_memtable.load(Acquire)).clone();
             let delete_result = memtable_ref.delete(key);
 
             match delete_result {
                 Err(_) => self.set_current_memtable_as_inactive(),
-                _ => {},
+                _ => None,
             }
         }
     }
@@ -95,19 +95,18 @@ impl Memtables {
         }
     }
 
-    fn set_current_memtable_as_inactive(&mut self) {
+    fn set_current_memtable_as_inactive(&mut self) -> Option<Arc<MemTable>> {
         let new_memtable_id = self.next_memtable_id.fetch_add(1, Relaxed);
         let new_memtable = Box::into_raw(Box::new(Arc::new(MemTable::new(&self.options, new_memtable_id))));
         let current_memtable = self.current_memtable.load(Acquire);
 
         match self.current_memtable.compare_exchange(current_memtable, new_memtable, Release, Relaxed) {
             Ok(prev_memtable) => unsafe { self.move_current_memtable_inactive_list(prev_memtable) },
-            // Err(_) => self.next_memtable_id.fetch_sub(1, Relaxed)
-            Err(_) => {}
+            Err(_) => { self.next_memtable_id.fetch_sub(1, Relaxed); None }
         }
     }
 
-    unsafe fn move_current_memtable_inactive_list(&mut self, prev_memtable: * mut Arc<MemTable>) {
+    unsafe fn move_current_memtable_inactive_list(&mut self, prev_memtable: * mut Arc<MemTable>) -> Option<Arc<MemTable>> {
         let mut memtables_rw_result = self.inactive_memtables.load(Acquire)
             .as_mut()
             .unwrap()
@@ -119,15 +118,9 @@ impl Memtables {
         memtables.push((*prev_memtable).clone());
 
         if memtables.len() > self.options.max_memtables_inactive {
-            self.flush_inactive_memtables_to_disk(memtables);
+            return Some(memtables.pop().unwrap());
         }
-    }
 
-    unsafe fn flush_inactive_memtables_to_disk(&mut self, to_flush: &mut RwLockWriteGuard<Vec<Arc<MemTable>>>) {
-        self.inactive_memtables.store(Box::into_raw(Box::new(RwLock::new(
-            Vec::with_capacity(self.options.max_memtables_inactive)))), Release
-        );
-
-        //TODO Flush to disk. In this point there will be no writers to to_flush
+        None
     }
 }
