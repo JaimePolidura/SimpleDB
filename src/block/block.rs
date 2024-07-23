@@ -22,7 +22,30 @@ impl Block {
         encoded
     }
 
-    pub fn get_key(&self, n_entry_index: usize) -> Key {
+    pub fn get_value(&self, key_lookup: &Key) -> Option<bytes::Bytes> {
+        let mut left = 0;
+        let mut right = self.offsets.len() / 2;
+
+        loop {
+            let current_index = (left + right) / 2;
+            let current_key = self.get_key_by_index(current_index);
+
+            if left == right {
+                return None;
+            }
+            if current_key.eq(key_lookup) {
+                return Some(self.get_value_by_index(current_index));
+            }
+            if current_key.gt(key_lookup) {
+                right = current_index;
+            }
+            if current_key.lt(key_lookup) {
+                left = current_index;
+            }
+        }
+    }
+
+    pub fn get_key_by_index(&self, n_entry_index: usize) -> Key {
         let entry_index: usize = self.offsets[n_entry_index] as usize;
         let key_length: usize = utils::u8_to_u16_le(&self.entries, entry_index) as usize;
         let key_slice: &[u8] = &self.entries[entry_index + 2..(key_length + entry_index + 2)];
@@ -32,7 +55,7 @@ impl Block {
         Key::new(key.as_str())
     }
 
-    pub fn get_value(&self, n_entry_index: usize) -> Bytes {
+    pub fn get_value_by_index(&self, n_entry_index: usize) -> Bytes {
         let entry_index = self.offsets[n_entry_index];
         let key_length = utils::u8_to_u16_le(&self.entries, entry_index as usize);
         let value_index = (entry_index as usize) + 2 + key_length as usize;
@@ -118,10 +141,10 @@ mod test {
         let decoded_block_to_test = Block::decode(&encoded, LsmOptions::default())
             .unwrap();
 
-        assert_eq!(decoded_block_to_test.get_value(0), vec![1, 2, 3]);
-        assert_eq!(decoded_block_to_test.get_key(0).to_string(), String::from("Jaime"));
+        assert_eq!(decoded_block_to_test.get_value_by_index(0), vec![1, 2, 3]);
+        assert_eq!(decoded_block_to_test.get_key_by_index(0).to_string(), String::from("Jaime"));
 
-        assert_eq!(decoded_block_to_test.get_value(1), vec![4, 5, 6]);
-        assert_eq!(decoded_block_to_test.get_key(1).to_string(), String::from("Pedro"));
+        assert_eq!(decoded_block_to_test.get_value_by_index(1), vec![4, 5, 6]);
+        assert_eq!(decoded_block_to_test.get_key_by_index(1).to_string(), String::from("Pedro"));
     }
 }

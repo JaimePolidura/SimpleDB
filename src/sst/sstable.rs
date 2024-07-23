@@ -6,6 +6,7 @@ use crate::lsm_options::LsmOptions;
 use crate::sst::block_cache::BlockCache;
 use crate::utils::bloom_filter::BloomFilter;
 use crate::utils::lsm_file::LSMFile;
+use crate::utils::utils;
 
 pub struct SSTable {
     pub(crate) id: usize,
@@ -60,6 +61,44 @@ impl SSTable {
         }
 
         Ok(block)
+    }
+
+    pub fn get(&self, key: &Key) -> Option<bytes::Bytes> {
+        if !self.bloom_filter.may_contain(utils::hash(key.as_bytes())) {
+            return None;
+        }
+
+        return match self.get_block_metadata(key) {
+            Some((index, _)) => {
+                self.load_block(index)
+                    .expect("Error whiile reading block")
+                    .get_value(key)
+            },
+            None => None
+        };
+    }
+
+    pub(crate) fn get_block_metadata(&self, key: &Key) -> Option<(usize, &BlockMetadata)> {
+        let mut right = self.block_metadata.len() - 1;
+        let mut left = 0;
+
+        loop {
+            let current_index = (left + right) / 2;
+            let current_block_metadata = &self.block_metadata[current_index];
+
+            if left == right {
+                return None;
+            }
+            if current_block_metadata.contains(key) {
+                return Some((current_index, current_block_metadata));
+            }
+            if current_block_metadata.first_key.gt(key) {
+                right = current_index;
+            }
+            if current_block_metadata.last_key.lt(key) {
+                left = current_index;
+            }
+        }
     }
 }
 

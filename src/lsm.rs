@@ -31,7 +31,21 @@ impl Lsm {
     }
 
     pub fn get(&self, key: &Key) -> Option<bytes::Bytes> {
-        self.memtables.get(key)
+        match self.memtables.get(key) {
+            Some(value_from_memtable) => Some(value_from_memtable),
+            None => self.search_in_sstables(key),
+        }
+    }
+
+    fn search_in_sstables(&self, key: &Key) -> Option<bytes::Bytes> {
+        for sstable in &self.sstables {
+            match sstable.get(key) {
+                Some(value) => return Some(value),
+                None => continue
+            }
+        }
+
+        None
     }
 
     pub fn set(&mut self, key: &Key, value: &[u8]) {

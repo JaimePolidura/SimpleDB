@@ -26,28 +26,12 @@ impl SSTableIterator {
     }
 
     pub fn seek_to_key(&mut self, key: &Key) {
-        let mut right = self.pending_blocks.len() - 1;
-        let mut left = 0;
-
-        loop {
-            let current_index = (left + right) / 2;
-            let current_block_metadata = &self.pending_blocks[current_index];
-
-            if left == right {
-                self.set_iterator_as_empty();
-                break
-            }
-            if current_block_metadata.contains(key) {
-                self.current_block_id = current_index as i32;
-                self.set_iterating_block(current_block_metadata.clone());
-                break
-            }
-            if current_block_metadata.first_key.gt(key) {
-                right = current_index;
-            }
-            if current_block_metadata.last_key.lt(key) {
-                left = current_index;
-            }
+        match self.sstable.get_block_metadata(key) {
+            Some((index, block_metadata)) => {
+                self.current_block_id = index as i32;
+                self.set_iterating_block(block_metadata.clone());
+            },
+            None => self.set_iterator_as_empty()
         }
     }
 

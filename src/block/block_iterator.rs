@@ -30,8 +30,8 @@ impl StorageIterator for BlockIterator {
         let has_next = self.has_next();
 
         if has_next {
-            self.current_value = Some(self.block.get_value(self.current_index));
-            self.current_key = Some(self.block.get_key(self.current_index));
+            self.current_value = Some(self.block.get_value_by_index(self.current_index));
+            self.current_key = Some(self.block.get_key_by_index(self.current_index));
             self.current_items_iterated = self.current_items_iterated + 1;
             self.current_index = self.current_index + 1;
         }
