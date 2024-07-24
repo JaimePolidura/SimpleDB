@@ -1,3 +1,4 @@
+use std::arch::x86_64::_mm_prefetch;
 use std::ops::Bound::Excluded;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
@@ -110,9 +111,11 @@ impl<'a> StorageIterator for MemtableIterator {
             return has_advanced;
         }
 
+
+
         match &self.current_key {
             Some(prev_key) => {
-                if let Some(next_entry) = self.memtable.data.upper_bound(Excluded(prev_key)) {
+                if let Some(next_entry) = self.memtable.data.lower_bound(Excluded(prev_key)) {
                     self.n_elements_iterated = self.n_elements_iterated + 1;
                     self.current_value = Some(next_entry.value().clone());
                     self.current_key = Some(next_entry.key().clone());

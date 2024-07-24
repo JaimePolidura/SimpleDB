@@ -41,7 +41,7 @@ pub fn u8_vec_to_u16_vec(u8_vec: &Vec<u8>) -> Vec<u16> {
 }
 
 pub fn hash(key: &[u8]) -> u32 {
-    unimplemented!();
+    farmhash::hash32(key)
 }
 
 pub fn fill_vec<T>(vec: &mut Vec<T>, size: usize, value: T)

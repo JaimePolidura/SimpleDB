@@ -1,6 +1,3 @@
-use std::io;
-use std::path::Path;
-
 pub struct LsmOptions {
     pub n_cached_blocks_per_sstable: usize,
     pub memtable_max_size_bytes: usize,
@@ -13,11 +10,6 @@ pub struct LsmOptions {
 
 impl Default for LsmOptions {
     fn default() -> Self {
-        let mut guess: String = String::new();
-        io::stdin()
-            .read_line(&mut guess)
-            .expect("Failed to read the line");
-
         LsmOptions {
             memtable_max_size_bytes: 1048576, //1Mb
             bloom_filter_n_entries: 32768, //4kb of bloom filter so it fits in a page
@@ -25,7 +17,7 @@ impl Default for LsmOptions {
             sst_size_bytes: 268435456, //256 MB ~ 64 blocks
             n_cached_blocks_per_sstable: 8, //Expect power of two
             max_memtables_inactive: 8,
-            base_path: String::from("i"),
+            base_path: String::from("ignored"),
         }
     }
 }

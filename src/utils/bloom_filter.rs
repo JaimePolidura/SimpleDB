@@ -80,4 +80,20 @@ mod test {
 
         assert!(!bloom.may_contain(1729187290));
     }
+
+    #[test]
+    fn decode_encode() {
+        let encoded = BloomFilter::new(&vec![101212, 1389172819, 182971, 12, 1729187291], 64)
+            .encode();
+        let decoded_result = BloomFilter::decode(&encoded, 0);
+
+        assert!(decoded_result.is_ok());
+        let decoded_result = decoded_result.unwrap();
+
+        assert!(decoded_result.may_contain(101212));
+        assert!(decoded_result.may_contain(1389172819));
+        assert!(decoded_result.may_contain(182971));
+        assert!(decoded_result.may_contain(12));
+        assert!(decoded_result.may_contain(1729187291));
+    }
 }
