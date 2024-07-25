@@ -1,26 +1,26 @@
 use std::sync::Arc;
 use bytes::Bytes;
+use crate::block::block_encoder::encode_block;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::utils::utils;
 
-//Nº Entries + Offset of entrie's offset in block
-pub const BLOCK_FOOTER_LENGTH: usize = std::mem::size_of::<u16>() + std::mem::size_of::<u16>();
+pub const PREFIX_COMPRESSED: u64 = 0x01;
+pub const NOT_COMPRESSED: u64 = 0x00;
+
+pub const BLOCK_FOOTER_LENGTH: usize =
+    std::mem::size_of::<u16>() + //Nº Entries
+        std::mem::size_of::<u16>() + //Offset entries in the block
+        std::mem::size_of::<u64>(); //Flags
 
 pub struct Block {
     pub(crate) entries: Vec<u8>,
-    pub(crate) offsets: Vec<u16>
+    pub(crate) offsets: Vec<u16>,
 }
 
 impl Block {
-    pub fn encode(self, options: &Arc<LsmOptions>) -> Vec<u8> {
-        let mut encoded: Vec<u8> = Vec::with_capacity(options.block_size_bytes);
-
-        self.encode_entries(&mut encoded);
-        let start_offsets_offset = self.encode_offsets(&mut encoded);
-        self.encode_footer(start_offsets_offset, &mut encoded, options);
-
-        encoded
+    pub fn encode(&self, options: &Arc<LsmOptions>) -> Vec<u8> {
+        encode_block(&self, options)
     }
 
     pub fn get_value(&self, key_lookup: &Key) -> Option<bytes::Bytes> {
@@ -46,6 +46,7 @@ impl Block {
         }
     }
 
+    //Expect n_entry_index to be an index to block::offsets aray
     pub fn get_key_by_index(&self, n_entry_index: usize) -> Key {
         let entry_index: usize = self.offsets[n_entry_index] as usize;
         let key_length: usize = utils::u8_vec_to_u16_le(&self.entries, entry_index) as usize;
@@ -56,6 +57,7 @@ impl Block {
         Key::new(key.as_str())
     }
 
+    //Expect n_entry_index to be an index to block::offsets aray
     pub fn get_value_by_index(&self, n_entry_index: usize) -> Bytes {
         let entry_index = self.offsets[n_entry_index];
         let key_length = utils::u8_vec_to_u16_le(&self.entries, entry_index as usize);
@@ -63,28 +65,6 @@ impl Block {
         let value_length = utils::u8_vec_to_u16_le(&self.entries, value_index) as usize;
 
         Bytes::copy_from_slice(&self.entries[(value_index + 2)..((value_index + 2) + value_length)])
-    }
-
-    fn encode_entries(&self, encoded: &mut Vec<u8>) {
-        encoded.extend(&self.entries);
-    }
-
-    fn encode_offsets(&self, encoded: &mut Vec<u8>) -> usize {
-        let offsetts_offset_xd = encoded.len();
-        encoded.extend(utils::u16_vec_to_u8_vec(&self.offsets));
-        offsetts_offset_xd
-    }
-
-    fn encode_footer(
-        &self,
-        start_offsets_offset: usize,
-        encoded: &mut Vec<u8>,
-        options: &Arc<LsmOptions>
-    ) {
-        let n_entries: u16 = self.entries.len() as u16;
-        utils::u16_to_u8_le(n_entries, options.block_size_bytes - 4, encoded);
-
-        utils::u16_to_u8_le(start_offsets_offset as u16, options.block_size_bytes - 2, encoded);
     }
 
     pub fn decode(encoded: &Vec<u8>, options: Arc<LsmOptions>) -> Result<Block, ()> {

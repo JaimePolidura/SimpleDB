@@ -15,6 +15,19 @@ pub fn u16_to_u8_le(value: u16, start_index: usize, vector: &mut Vec<u8>) {
     vector[start_index + 1] = (value >> 8 & 0xff) as u8;
 }
 
+pub fn u64_to_u8_le(value: u64, start_index: usize, vector: &mut Vec<u8>) {
+    fill_u8_vec_if_emtpy(vector, start_index + 7, 0);
+
+    vector[start_index] =     (value & 0xff) as u8;
+    vector[start_index + 1] = (value >> 8 & 0xff) as u8;
+    vector[start_index + 2] = (value >> 16 & 0xff) as u8;
+    vector[start_index + 3] = (value >> 24 & 0xff) as u8;
+    vector[start_index + 4] = (value >> 32 & 0xff) as u8;
+    vector[start_index + 5] = (value >> 40 & 0xff) as u8;
+    vector[start_index + 6] = (value >> 48 & 0xff) as u8;
+    vector[start_index + 7] = (value >> 56 & 0xff) as u8;
+}
+
 pub fn u8_vec_to_u16_le(vec: &Vec<u8>, start_index: usize) -> u16 {
     vec[start_index] as u16 | ((vec[start_index + 1] as u16) << 8)
 }

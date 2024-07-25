@@ -24,6 +24,32 @@ impl Key {
     pub fn as_bytes(&self) -> &[u8] {
         self.string.as_bytes()
     }
+
+    //"Juan".prefix_difference("Justo") -> (2, 2)
+    pub fn prefix_difference(&self, other: &Key) -> (usize, usize) {
+        let mut same_chars_count = 0;
+        let mut current_char_self = self.string.chars();
+        let mut current_char_other = other.string.chars();
+
+        while let (
+            Some(char_self), Some(char_other)) =
+            (current_char_self.next(), current_char_other.next()) {
+
+            if char_self != char_other {
+                break
+            }
+
+            same_chars_count = same_chars_count + 1;
+        }
+
+        (same_chars_count, self.len() - same_chars_count)
+    }
+
+    //"Juan".split(2) -> ("Ju", "an")
+    pub fn split(&self, index: usize) -> (Key, Key) {
+        let (h1, h2) = self.string.split_at(index);
+        (Key::new(h1), Key::new(h2))
+    }
 }
 
 impl fmt::Display for Key {
