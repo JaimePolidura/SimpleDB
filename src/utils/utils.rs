@@ -39,6 +39,17 @@ pub fn u8_vec_to_u32_le(vec: &Vec<u8>, start_index: usize) -> u32 {
         ((vec[start_index + 3] as u32) << 24)
 }
 
+pub fn u8_vec_to_u64_le(vec: &Vec<u8>, start_index: usize) -> u64 {
+    vec[start_index] as u64 |
+        ((vec[start_index + 1] as u64) <<  8) |
+        ((vec[start_index + 2] as u64) << 16) |
+        ((vec[start_index + 3] as u64) << 24) |
+        ((vec[start_index + 4] as u64) << 32) |
+        ((vec[start_index + 5] as u64) << 40) |
+        ((vec[start_index + 6] as u64) << 48) |
+        ((vec[start_index + 7] as u64) << 56)
+}
+
 pub fn u8_vec_to_u16_vec(u8_vec: &Vec<u8>) -> Vec<u16> {
     if u8_vec.len() % 2 != 0 {
         panic!("Vector's length in method u8_vec_to_u16_vec() expeted to be even");

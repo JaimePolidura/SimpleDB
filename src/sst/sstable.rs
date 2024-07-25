@@ -84,7 +84,7 @@ impl SSTable {
         //Read from disk
         let metadata = &self.block_metadata[block_id];
         let encoded_block = self.file.read(metadata.offset, self.lsm_options.block_size_bytes)?;
-        let block = Block::decode(&encoded_block, self.lsm_options.clone())?;
+        let block = Block::decode(&encoded_block, &self.lsm_options)?;
         let block = Arc::new(block);
 
         {

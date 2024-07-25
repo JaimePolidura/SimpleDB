@@ -1,4 +1,3 @@
-use std::io::Read;
 use std::sync::Arc;
 use bytes::BufMut;
 use crate::block::block::{Block, BLOCK_FOOTER_LENGTH, NOT_COMPRESSED, PREFIX_COMPRESSED};
@@ -21,12 +20,17 @@ pub(crate) fn encode_block(
         let start_offsets_offset = encode_offsets(&block.offsets, &mut encoded);
         encode_footer(start_offsets_offset, block, &mut encoded, NOT_COMPRESSED, options);
     }
-    
+
     encoded
 }
 
 //Sucess if prefix compressed was sucessful & new offsets
-fn encode_entries(block: &Block, encoded: &mut Vec<u8>, flags: u64, options: &Arc<LsmOptions>) -> (bool, Vec<u16>) {
+fn encode_entries(
+    block: &Block,
+    encoded: &mut Vec<u8>,
+    flags: u64,
+    options: &Arc<LsmOptions>
+) -> (bool, Vec<u16>) {
     match flags {
         PREFIX_COMPRESSED => encode_prefix_compressed_entries(block, encoded, options),
         NOT_COMPRESSED => { encoded.extend(&block.entries); (true, block.offsets.to_vec()) },
@@ -41,7 +45,7 @@ fn encode_prefix_compressed_entries(
 ) -> (bool, Vec<u16>) {
     let mut prev_key: Option<Key> = None;
     let mut new_offsets: Vec<u16> = Vec::new();
-    let mut current_size: usize = BLOCK_FOOTER_LENGTH + block.offsets.len() * std::mem::size_of::<u16>();
+    let mut current_size: usize = BLOCK_FOOTER_LENGTH + (block.offsets.len() * std::mem::size_of::<u16>());
 
     for current_index in 0..block.offsets.len() {
         let current_value = block.get_value_by_index(current_index);
@@ -77,7 +81,7 @@ fn encode_prefix_compressed_entries(
         prev_key = Some(current_key);
     }
 
-    (encoded.len() < options.block_size_bytes, new_offsets)
+    (current_size < options.block_size_bytes, new_offsets)
 }
 
 fn encode_offsets(offsets: &Vec<u16>, encoded: &mut Vec<u8>) -> usize {

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use bytes::Bytes;
+use crate::block::block_decoder::decode_block;
 use crate::block::block_encoder::encode_block;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
@@ -21,6 +22,10 @@ pub struct Block {
 impl Block {
     pub fn encode(&self, options: &Arc<LsmOptions>) -> Vec<u8> {
         encode_block(&self, options)
+    }
+
+    pub fn decode(encoded: &Vec<u8>, options: &Arc<LsmOptions>) -> Result<Block, ()> {
+        decode_block(encoded, options)
     }
 
     pub fn get_value(&self, key_lookup: &Key) -> Option<bytes::Bytes> {
@@ -66,41 +71,6 @@ impl Block {
 
         Bytes::copy_from_slice(&self.entries[(value_index + 2)..((value_index + 2) + value_length)])
     }
-
-    pub fn decode(encoded: &Vec<u8>, options: Arc<LsmOptions>) -> Result<Block, ()> {
-        if encoded.len() != options.block_size_bytes {
-            return Err(());
-        }
-
-        let offsets_offset: u16 = utils::u8_vec_to_u16_le(&encoded, options.block_size_bytes - 2);
-        let n_entries: u16 = utils::u8_vec_to_u16_le(&encoded, options.block_size_bytes - 4);
-
-        let offsets = Self::decode_offsets(encoded, offsets_offset, n_entries);
-        let entries = Self::decode_entries(encoded, offsets_offset);
-
-        Ok(Block{ offsets, entries })
-    }
-
-    fn decode_offsets(
-        encoded: &Vec<u8>,
-        offsets_offset: u16,
-        n_entries: u16,
-    ) -> Vec<u16> {
-        let start_index = offsets_offset as usize;
-        let end_inedx = start_index + (n_entries * std::mem::size_of::<u16>() as u16) as usize;
-
-        utils::u8_vec_to_u16_vec(&encoded[start_index..end_inedx].to_vec())
-    }
-
-    fn decode_entries(
-        encoded: &Vec<u8>,
-        offsets_offset: u16,
-    ) -> Vec<u8> {
-        let start_index = 0;
-        let end_index = offsets_offset as usize;
-
-        encoded[start_index..=end_index].to_vec()
-    }
 }
 
 #[cfg(test)]
@@ -120,7 +90,7 @@ mod test {
         let block = block_builder.build();
 
         let encoded = block.encode(&Arc::new(LsmOptions::default()));
-        let decoded_block_to_test = Block::decode(&encoded, Arc::new(LsmOptions::default()))
+        let decoded_block_to_test = Block::decode(&encoded, &Arc::new(LsmOptions::default()))
             .unwrap();
 
         assert_eq!(decoded_block_to_test.get_value_by_index(0), vec![1, 2, 3]);

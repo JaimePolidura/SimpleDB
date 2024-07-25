@@ -50,6 +50,12 @@ impl Key {
         let (h1, h2) = self.string.split_at(index);
         (Key::new(h1), Key::new(h2))
     }
+
+    pub fn merge(a: &Key, b: &Key) -> Key {
+        let mut result = String::from(&a.string);
+        result.extend(b.string.chars());
+        Key {string: result }
+    }
 }
 
 impl fmt::Display for Key {
