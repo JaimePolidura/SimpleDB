@@ -85,18 +85,35 @@ mod test {
     #[test]
     fn encode_and_decode() {
         let mut block_builder = BlockBuilder::new(Arc::new(LsmOptions::default()));
-        block_builder.add_entry(Key::new("Jaime"), Bytes::from(vec![1, 2, 3]));
-        block_builder.add_entry(Key::new("Pedro"), Bytes::from(vec![4, 5, 6]));
+        block_builder.add_entry(Key::new("Jaime"), Bytes::from(vec![1]));
+        block_builder.add_entry(Key::new("Javier"), Bytes::from(vec![2]));
+        block_builder.add_entry(Key::new("Jose"), Bytes::from(vec![3]));
+        block_builder.add_entry(Key::new("Juan"), Bytes::from(vec![4]));
+        block_builder.add_entry(Key::new("Justo"), Bytes::from(vec![5]));
+        block_builder.add_entry(Key::new("Justoo"), Bytes::from(vec![6]));
+        block_builder.add_entry(Key::new("Kia"), Bytes::from(vec![7]));
         let block = block_builder.build();
 
         let encoded = block.encode(&Arc::new(LsmOptions::default()));
+
         let decoded_block_to_test = Block::decode(&encoded, &Arc::new(LsmOptions::default()))
             .unwrap();
 
-        assert_eq!(decoded_block_to_test.get_value_by_index(0), vec![1, 2, 3]);
-        assert_eq!(decoded_block_to_test.get_key_by_index(0).to_string(), String::from("Jaime"));
+        println!("Hola");
 
-        assert_eq!(decoded_block_to_test.get_value_by_index(1), vec![4, 5, 6]);
-        assert_eq!(decoded_block_to_test.get_key_by_index(1).to_string(), String::from("Pedro"));
+        assert_eq!(decoded_block_to_test.get_key_by_index(0).to_string(), String::from("Jaime"));
+        assert_eq!(decoded_block_to_test.get_value_by_index(0), vec![1]);
+        assert_eq!(decoded_block_to_test.get_key_by_index(1).to_string(), String::from("Javier"));
+        assert_eq!(decoded_block_to_test.get_value_by_index(1), vec![2]);
+        assert_eq!(decoded_block_to_test.get_key_by_index(2).to_string(), String::from("Jose"));
+        assert_eq!(decoded_block_to_test.get_value_by_index(2), vec![3]);
+        assert_eq!(decoded_block_to_test.get_key_by_index(3).to_string(), String::from("Juan"));
+        assert_eq!(decoded_block_to_test.get_value_by_index(3), vec![4]);
+        assert_eq!(decoded_block_to_test.get_key_by_index(4).to_string(), String::from("Justo"));
+        assert_eq!(decoded_block_to_test.get_value_by_index(4), vec![5]);
+        assert_eq!(decoded_block_to_test.get_key_by_index(5).to_string(), String::from("Justoo"));
+        assert_eq!(decoded_block_to_test.get_value_by_index(5), vec![6]);
+        assert_eq!(decoded_block_to_test.get_key_by_index(6).to_string(), String::from("Kia"));
+        assert_eq!(decoded_block_to_test.get_value_by_index(6), vec![7]);
     }
 }

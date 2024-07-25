@@ -56,7 +56,7 @@ fn encode_prefix_compressed_entries(
             Some(prev_key) => {
                 //Key
                 let (key_overlap_size, rest_key_size) = current_key.prefix_difference(&prev_key);
-                let (_, rest_key) = current_key.split(rest_key_size);
+                let (_, rest_key) = current_key.split(key_overlap_size);
                 encoded.put_u16_le(key_overlap_size as u16);
                 encoded.put_u16_le(rest_key_size as u16);
                 if !rest_key.is_empty() {
@@ -97,7 +97,7 @@ fn encode_footer(
     flags: u64,
     options: &Arc<LsmOptions>
 ) {
-    let n_entries: u16 = block.entries.len() as u16;
+    let n_entries: u16 = block.offsets.len() as u16;
     utils::u64_to_u8_le(flags, options.block_size_bytes - 12, encoded);
     utils::u16_to_u8_le(n_entries, options.block_size_bytes - 4, encoded);
     utils::u16_to_u8_le(start_offsets_offset as u16, options.block_size_bytes - 2, encoded);

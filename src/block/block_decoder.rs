@@ -41,7 +41,7 @@ fn decode_offsets(
 
 fn decode_entries_prefix_compressed(
     encoded: &Vec<u8>,
-    offsets: &Vec<u16>
+    offsets: &Vec<u16>,
 ) -> (Vec<u8>, Vec<u16>) {
     let mut entries_decoded: Vec<u8> = Vec::new();
     let mut prev_key: Option<Key> = None;
