@@ -20,13 +20,15 @@ pub struct SSTableBuilder {
     first_key: Option<Key>,
     last_key: Option<Key>,
 
-    lsm_options: Arc<LsmOptions>
+    lsm_options: Arc<LsmOptions>,
+    level: u32,
 }
 
 impl SSTableBuilder {
-    pub fn new(lsm_options: Arc<LsmOptions>) -> SSTableBuilder {
+    pub fn new(lsm_options: Arc<LsmOptions>, level: u32) -> SSTableBuilder {
         SSTableBuilder {
             current_block_builder: BlockBuilder::new(lsm_options.clone()),
+            level,
             key_hashes: Vec::new(),
             block_metadata: Vec::new(),
             encoded_blocks: Vec::new(),
@@ -71,12 +73,13 @@ impl SSTableBuilder {
         let bloom_offset = encoded.len();
         encoded.extend(bloom_filter.encode());
         //Bloom & blocks metadata offsets
+        encoded.put_u32_le(self.level as u32);
         encoded.put_u32_le(bloom_offset as u32);
         encoded.put_u32_le(meta_offset as u32);
 
         match LsmFile::create(path, &encoded) {
             Ok(lsm_file) => Ok(SSTable::new(
-                self.block_metadata, bloom_filter, self.lsm_options, lsm_file, id
+                self.block_metadata, bloom_filter, self.lsm_options, lsm_file, id, self.level
             )),
             Err(_) => Err(())
         }

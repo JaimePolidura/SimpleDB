@@ -192,7 +192,8 @@ mod test {
                 BlockMetadata{offset: 8, first_key: Key::new("Cigu"), last_key: Key::new("De")},
                 BlockMetadata{offset: 16, first_key: Key::new("Estonia"), last_key: Key::new("Zi")},
             ],
-            lsm_options: Arc::new(LsmOptions::default())
+            lsm_options: Arc::new(LsmOptions::default()),
+            level: 0
         });
 
         SSTableIterator::new(sstable)

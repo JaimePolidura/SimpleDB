@@ -1,4 +1,3 @@
-use std::f32::consts::E;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use bytes::BufMut;
@@ -17,6 +16,7 @@ pub struct SSTable {
     pub(crate) block_cache: Mutex<BlockCache>,
     pub(crate) block_metadata: Vec<BlockMetadata>,
     pub(crate) lsm_options: Arc<LsmOptions>,
+    pub(crate) level: u32,
 }
 
 impl SSTable {
@@ -25,7 +25,8 @@ impl SSTable {
         bloom_filter: BloomFilter,
         lsm_options: Arc<LsmOptions>,
         file: LsmFile,
-        id: usize
+        id: usize,
+        level: u32
     ) -> SSTable {
         SSTable {
             block_cache: Mutex::new(BlockCache::new(lsm_options.clone())),
@@ -33,7 +34,8 @@ impl SSTable {
             bloom_filter,
             file,
             id,
-            lsm_options
+            lsm_options,
+            level
         }
     }
 
@@ -56,6 +58,7 @@ impl SSTable {
     ) -> Result<Arc<SSTable>, ()> {
         let meta_offset = utils::u8_vec_to_u32_le(bytes, bytes.len() - 4);
         let bloom_offset = utils::u8_vec_to_u32_le(bytes, bytes.len() - 8);
+        let level = utils::u8_vec_to_u32_le(bytes, bytes.len() - 12);
 
         let block_metadata = BlockMetadata::decode_all(bytes, meta_offset as usize)?;
         let bloom_filter = BloomFilter::decode(bytes, bloom_offset as usize)?;
@@ -65,7 +68,8 @@ impl SSTable {
             bloom_filter,
             lsm_options,
             file,
-            id
+            id,
+            level
         )))
     }
 
