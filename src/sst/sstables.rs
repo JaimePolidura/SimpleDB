@@ -10,15 +10,20 @@ use crate::sst::ssttable_iterator::SSTableIterator;
 use crate::utils::merge_iterator::MergeIterator;
 
 pub struct SSTables {
-    sstables: RwLock<Vec<Arc<SSTable>>>,
+    //For each level one index entry
+    sstables: RwLock<Vec<Vec<Arc<SSTable>>>>,
     next_memtable_id: AtomicUsize,
     lsm_options: Arc<LsmOptions>
 }
 
 impl SSTables {
     pub fn new(lsm_options: Arc<LsmOptions>) -> SSTables {
+        let mut levels: Vec<Vec<Arc<SSTable>>> = Vec::with_capacity(64);
+        for _ in 0..64 {
+            levels.push(Vec::new());
+        }
         SSTables {
-            sstables: RwLock::new(Vec::new()),
+            sstables: RwLock::new(levels),
             next_memtable_id: AtomicUsize::new(0),
             lsm_options
         }
@@ -31,8 +36,10 @@ impl SSTables {
             .unwrap();
         let mut iterators: Vec<Box<SSTableIterator>> = Vec::with_capacity(sstables.len());
 
-        for sstable in sstables.iter() {
-            iterators.push(Box::new(SSTableIterator::new(sstable.clone())));
+        for sstables_in_level in sstables.iter() {
+            for sstable in sstables_in_level {
+                iterators.push(Box::new(SSTableIterator::new(sstable.clone())));
+            }
         }
 
         MergeIterator::new(iterators)
@@ -44,10 +51,12 @@ impl SSTables {
             .as_ref()
             .unwrap();
 
-        for sstable in sstables.iter() {
-            match sstable.get(key) {
-                Some(value) => return Some(value),
-                None => continue
+        for sstables_in_level in sstables.iter() {
+            for sstable in sstables_in_level {
+                match sstable.get(key) {
+                    Some(value) => return Some(value),
+                    None => continue
+                }
             }
         }
 
@@ -67,7 +76,7 @@ impl SSTables {
 
         match sstable_build_result {
             Ok(sstable_built) => {
-                sstables.push(Arc::new(sstable_built));
+                sstables[sstable_built.level as usize].push(Arc::new(sstable_built));
                 Ok(())
             },
             Err(_) => Err(()),
