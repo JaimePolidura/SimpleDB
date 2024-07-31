@@ -16,12 +16,8 @@ pub struct LsmOptions {
 impl Default for LsmOptions {
     fn default() -> Self {
         LsmOptions {
-            simple_leveled_options: SimpleLeveledOptions {
-                level0_file_num_compaction_trigger: 1,
-                size_ratio_percent: 1,
-                max_levels: 8,
-            },
-            compaction_strategy: CompactionStrategy::SimpleLeveled,
+            compaction_strategy: CompactionStrategy::SimpleLeveled(SimpleLeveledOptions::default()),
+            simple_leveled_options: SimpleLeveledOptions::default(),
             memtable_max_size_bytes: 1048576, //1Mb
             bloom_filter_n_entries: 32768, //4kb of bloom filter so it fits in a page
             block_size_bytes: 4096, //4kb

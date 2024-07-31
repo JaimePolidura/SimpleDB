@@ -1,8 +1,8 @@
-use crate::compaction::simple_leveled::{can_start_simple_leveled_compaction, SimpleLeveledOptions, start_simple_leveled_compaction};
+use crate::compaction::simple_leveled::{can_compact_simple_leveled_compaction, SimpleLeveledOptions, start_simple_leveled_compaction};
 use crate::sst::sstables::SSTables;
 
 pub enum CompactionStrategy {
-    SimpleLeveled {config: SimpleLeveledOptions },
+    SimpleLeveled(SimpleLeveledOptions),
 }
 
 pub fn can_compact(
@@ -10,7 +10,7 @@ pub fn can_compact(
     sstables: &SSTables
 ) -> bool {
     match compaction_strategy {
-        CompactionStrategy::SimpleLeveled(config) => can_start_simple_leveled_compaction(config, sstables)
+        CompactionStrategy::SimpleLeveled(config) => can_compact_simple_leveled_compaction(config, sstables)
     }
 }
 

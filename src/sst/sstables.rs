@@ -15,6 +15,7 @@ pub struct SSTables {
     next_memtable_id: AtomicUsize,
     lsm_options: Arc<LsmOptions>,
     n_current_levels: usize,
+    path_buff: PathBuf
 }
 
 impl SSTables {
@@ -28,6 +29,7 @@ impl SSTables {
             next_memtable_id: AtomicUsize::new(0),
             lsm_options,
             n_current_levels: 0,
+            path_buff: PathBuf::new(),
         }
     }
 
@@ -65,7 +67,7 @@ impl SSTables {
         None
     }
 
-    pub fn get_n_sst_files(&self, level: usize) -> usize {
+    pub fn get_n_sstables(&self, level: usize) -> usize {
         match self.sstables.read().unwrap().get(level) {
             Some(sstables) => sstables.len(),
             None => 0
@@ -83,9 +85,13 @@ impl SSTables {
             .as_mut()
             .unwrap();
 
-        let mut sstable_build_result = sstable_builder.build(
+        //SSTable file path
+        self.path_buff = PathBuf::from(self.lsm_options.base_path.to_string());
+        self.path_buff.push(sstable_id.to_string());
+
+        let sstable_build_result = sstable_builder.build(
             sstable_id,
-            &self.get_path_sstable_flush(sstable_id),
+            self.path_buff.as_path(),
         );
 
         match sstable_build_result {
@@ -95,11 +101,5 @@ impl SSTables {
             },
             Err(_) => Err(()),
         }
-    }
-
-    fn get_path_sstable_flush(&self, sstable_id: usize) -> &Path {
-        let mut path_buff = PathBuf::from(self.lsm_options.base_path.to_string());
-        path_buff.push(sstable_id.to_string());
-        path_buff.as_path()
     }
 }
