@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
@@ -13,7 +13,8 @@ pub struct SSTables {
     //For each level one index entry
     sstables: RwLock<Vec<Vec<Arc<SSTable>>>>,
     next_memtable_id: AtomicUsize,
-    lsm_options: Arc<LsmOptions>
+    lsm_options: Arc<LsmOptions>,
+    n_current_levels: usize,
 }
 
 impl SSTables {
@@ -25,7 +26,8 @@ impl SSTables {
         SSTables {
             sstables: RwLock::new(levels),
             next_memtable_id: AtomicUsize::new(0),
-            lsm_options
+            lsm_options,
+            n_current_levels: 0,
         }
     }
 
@@ -63,15 +65,27 @@ impl SSTables {
         None
     }
 
+    pub fn get_n_sst_files(&self, level: usize) -> usize {
+        match self.sstables.read().unwrap().get(level) {
+            Some(sstables) => sstables.len(),
+            None => 0
+        }
+    }
+
+    pub fn get_n_levels(&self) -> usize {
+        self.n_current_levels
+    }
+
     pub fn flush_to_disk(&mut self, sstable_builder: SSTableBuilder) -> Result<(), ()> {
         let mut lock_result = self.sstables.write();
+        let sstable_id: usize = self.next_memtable_id.fetch_add(1, Relaxed);
         let sstables = lock_result
             .as_mut()
             .unwrap();
 
         let mut sstable_build_result = sstable_builder.build(
-            self.next_memtable_id.fetch_add(1, Relaxed),
-            &self.get_path_sstable_flush(),
+            sstable_id,
+            &self.get_path_sstable_flush(sstable_id),
         );
 
         match sstable_build_result {
@@ -83,7 +97,9 @@ impl SSTables {
         }
     }
 
-    fn get_path_sstable_flush(&self) -> &Path {
-        unimplemented!();
+    fn get_path_sstable_flush(&self, sstable_id: usize) -> &Path {
+        let mut path_buff = PathBuf::from(self.lsm_options.base_path.to_string());
+        path_buff.push(sstable_id.to_string());
+        path_buff.as_path()
     }
 }

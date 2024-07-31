@@ -5,6 +5,7 @@ mod lsm;
 mod key;
 mod block;
 mod sst;
+mod compaction;
 
 fn main() {
     println!("Hello, world!");
