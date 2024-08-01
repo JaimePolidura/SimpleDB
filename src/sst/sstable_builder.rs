@@ -4,7 +4,7 @@ use bytes::{BufMut, Bytes};
 use crate::block::block_builder::BlockBuilder;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
-use crate::sst::sstable::{BlockMetadata, SSTable};
+use crate::sst::sstable::{BlockMetadata, SSTable, SSTABLE_ACTIVE};
 use crate::utils::bloom_filter::BloomFilter;
 use crate::utils::lsm_file::LsmFile;
 use crate::utils::utils;
@@ -72,14 +72,15 @@ impl SSTableBuilder {
         //Block
         let bloom_offset = encoded.len();
         encoded.extend(bloom_filter.encode());
-        //Bloom & blocks metadata offsets
-        encoded.put_u32_le(self.level as u32);
+        //Bloom & blocks metadata offsets, state
+        encoded.push(SSTABLE_ACTIVE);
+        encoded.put_u32_le(self.level);
         encoded.put_u32_le(bloom_offset as u32);
         encoded.put_u32_le(meta_offset as u32);
 
         match LsmFile::create(path, &encoded) {
             Ok(lsm_file) => Ok(SSTable::new(
-                self.block_metadata, bloom_filter, self.lsm_options, lsm_file, id, self.level
+                self.block_metadata, bloom_filter, self.lsm_options, lsm_file, id, self.level, SSTABLE_ACTIVE
             )),
             Err(_) => Err(())
         }

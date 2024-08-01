@@ -1,5 +1,7 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::AtomicU8;
+use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use bytes::BufMut;
 use crate::block::block::Block;
 use crate::key::Key;
@@ -9,6 +11,9 @@ use crate::utils::bloom_filter::BloomFilter;
 use crate::utils::lsm_file::LsmFile;
 use crate::utils::utils;
 
+pub const SSTABLE_DELETED: u8 = 2;
+pub const SSTABLE_ACTIVE: u8 = 1;
+
 pub struct SSTable {
     pub(crate) id: usize,
     pub(crate) bloom_filter: BloomFilter,
@@ -17,6 +22,7 @@ pub struct SSTable {
     pub(crate) block_metadata: Vec<BlockMetadata>,
     pub(crate) lsm_options: Arc<LsmOptions>,
     pub(crate) level: u32,
+    pub(crate) state: AtomicU8,
 }
 
 impl SSTable {
@@ -26,10 +32,12 @@ impl SSTable {
         lsm_options: Arc<LsmOptions>,
         file: LsmFile,
         id: usize,
-        level: u32
+        level: u32,
+        state: u8,
     ) -> SSTable {
         SSTable {
             block_cache: Mutex::new(BlockCache::new(lsm_options.clone())),
+            state: AtomicU8::new(state),
             block_metadata,
             bloom_filter,
             file,
@@ -59,6 +67,7 @@ impl SSTable {
         let meta_offset = utils::u8_vec_to_u32_le(bytes, bytes.len() - 4);
         let bloom_offset = utils::u8_vec_to_u32_le(bytes, bytes.len() - 8);
         let level = utils::u8_vec_to_u32_le(bytes, bytes.len() - 12);
+        let state = bytes[bytes.len() - 13];
 
         let block_metadata = BlockMetadata::decode_all(bytes, meta_offset as usize)?;
         let bloom_filter = BloomFilter::decode(bytes, bloom_offset as usize)?;
@@ -69,8 +78,13 @@ impl SSTable {
             lsm_options,
             file,
             id,
-            level
+            level,
+            state
         )))
+    }
+
+    pub fn delete(&self) {
+        self.state.store(SSTABLE_DELETED, Release);
     }
 
     pub fn load_block(&self, block_id: usize) -> Result<Arc<Block>, ()> {

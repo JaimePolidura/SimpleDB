@@ -1,15 +1,17 @@
 use std::fs::File;
 use std::os::windows::fs::FileExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub struct LsmFile {
     file: Option<File>,
+    path: Option<PathBuf>,
     size: usize
 }
 
 impl LsmFile {
     pub fn empty() -> LsmFile {
         LsmFile {
+            path: None,
             file: None,
             size: 0
         }
@@ -27,11 +29,20 @@ impl LsmFile {
         path: &Path,
         data: &Vec<u8>
     ) -> Result<LsmFile, ()> {
-        std::fs::write(path, data);
+        std::fs::write(path, data).expect("Cannot create file");
 
         match File::open(path) {
-            Ok(file) => Ok(LsmFile { size: data.len(), file: Some(file) }),
+            Ok(file) => Ok(LsmFile { size: data.len(), file: Some(file), path: Some(path.to_path_buf()) }),
             Err(_) => Err(())
+        }
+    }
+
+    pub fn delete(&self) {
+        match &self.file {
+            Some(_) => {
+                std::fs::remove_file(self.path.as_ref().unwrap().as_path()).expect("Cannot delete file");
+            },
+            None => {},
         }
     }
 

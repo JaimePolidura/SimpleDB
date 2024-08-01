@@ -113,12 +113,13 @@ impl StorageIterator for SSTableIterator {
 #[cfg(test)]
 mod test {
     use std::sync::{Arc, Mutex};
+    use std::sync::atomic::AtomicU8;
     use bytes::Bytes;
     use crate::block::block_builder::BlockBuilder;
     use crate::key::Key;
     use crate::lsm_options::LsmOptions;
     use crate::sst::block_cache::BlockCache;
-    use crate::sst::sstable::{BlockMetadata, SSTable};
+    use crate::sst::sstable::{BlockMetadata, SSTable, SSTABLE_ACTIVE};
     use crate::sst::ssttable_iterator::SSTableIterator;
     use crate::utils::bloom_filter::BloomFilter;
     use crate::utils::lsm_file::LsmFile;
@@ -193,7 +194,8 @@ mod test {
                 BlockMetadata{offset: 16, first_key: Key::new("Estonia"), last_key: Key::new("Zi")},
             ],
             lsm_options: Arc::new(LsmOptions::default()),
-            level: 0
+            level: 0,
+            state: AtomicU8::new(SSTABLE_ACTIVE)
         });
 
         SSTableIterator::new(sstable)
