@@ -23,16 +23,20 @@ pub struct SSTable {
     pub(crate) lsm_options: Arc<LsmOptions>,
     pub(crate) level: u32,
     pub(crate) state: AtomicU8,
+    pub(crate) first_key: Key,
+    pub(crate) last_key: Key,
 }
 
 impl SSTable {
     pub fn new(
         block_metadata: Vec<BlockMetadata>,
-        bloom_filter: BloomFilter,
         lsm_options: Arc<LsmOptions>,
+        bloom_filter: BloomFilter,
+        first_key: Key,
+        last_key: Key,
         file: LsmFile,
-        id: usize,
         level: u32,
+        id: usize,
         state: u8,
     ) -> SSTable {
         SSTable {
@@ -40,10 +44,12 @@ impl SSTable {
             state: AtomicU8::new(state),
             block_metadata,
             bloom_filter,
+            lsm_options,
+            first_key,
+            last_key,
+            level,
             file,
             id,
-            lsm_options,
-            level
         }
     }
 
@@ -72,15 +78,28 @@ impl SSTable {
         let block_metadata = BlockMetadata::decode_all(bytes, meta_offset as usize)?;
         let bloom_filter = BloomFilter::decode(bytes, bloom_offset as usize)?;
 
+        let first_key = Self::get_first_key(&block_metadata);
+        let last_key = Self::get_last_key(&block_metadata);
+
         Ok(Arc::new(SSTable::new(
             block_metadata,
-            bloom_filter,
             lsm_options,
+            bloom_filter,
+            first_key,
+            last_key,
             file,
-            id,
             level,
+            id,
             state
         )))
+    }
+
+    fn get_last_key(block_metadata: &Vec<BlockMetadata>) -> Key {
+        block_metadata.get(block_metadata.len() - 1).unwrap().last_key.clone()
+    }
+
+    fn get_first_key(block_metadata: &Vec<BlockMetadata>) -> Key {
+        block_metadata.get(0).unwrap().first_key.clone()
     }
 
     pub fn delete(&self) {
@@ -114,8 +133,11 @@ impl SSTable {
 
         Ok(block)
     }
-
+    
     pub fn get(&self, key: &Key) -> Option<bytes::Bytes> {
+        if self.first_key.lt(key) && self.last_key.gt(key) {
+            return None;
+        }
         if !self.bloom_filter.may_contain(utils::hash(key.as_bytes())) {
             return None;
         }

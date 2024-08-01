@@ -195,7 +195,9 @@ mod test {
             ],
             lsm_options: Arc::new(LsmOptions::default()),
             level: 0,
-            state: AtomicU8::new(SSTABLE_ACTIVE)
+            state: AtomicU8::new(SSTABLE_ACTIVE),
+            first_key:  Key::new("Alberto"),
+            last_key: Key::new("Zi"),
         });
 
         SSTableIterator::new(sstable)
