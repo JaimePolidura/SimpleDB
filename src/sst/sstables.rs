@@ -64,7 +64,7 @@ impl SSTables {
         None
     }
 
-    pub fn delete_sstables(&mut self, level: usize, sstables_id: Vec<usize>) {
+    pub fn delete_sstables(&self, level: usize, sstables_id: Vec<usize>) {
         match self.sstables.get(level) {
             Some(sstables_lock) => {
                 let mut lock_result = sstables_lock.write();
@@ -116,16 +116,16 @@ impl SSTables {
         self.n_current_levels
     }
 
-    pub fn flush_to_disk(&mut self, sstable_builder: SSTableBuilder) -> Result<usize, ()> {
+    pub fn flush_to_disk(&self, sstable_builder: SSTableBuilder) -> Result<usize, ()> {
         let sstable_id: usize = self.next_memtable_id.fetch_add(1, Relaxed);
 
         //SSTable file path
-        self.path_buff = PathBuf::from(self.lsm_options.base_path.to_string());
-        self.path_buff.push(sstable_id.to_string());
+        let mut path_buff = PathBuf::from(self.lsm_options.base_path.to_string());
+        path_buff.push(sstable_id.to_string());
 
         let sstable_build_result = sstable_builder.build(
             sstable_id,
-            self.path_buff.as_path(),
+            path_buff.as_path(),
         );
 
         match sstable_build_result {

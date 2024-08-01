@@ -27,14 +27,14 @@ impl Default for SimpleLeveledOptions {
 
 pub(crate) fn can_compact_simple_leveled_compaction(
     options: SimpleLeveledOptions,
-    sstables: &SSTables
+    sstables: &Arc<SSTables>
 ) -> bool {
     get_level_to_compact(options, sstables).is_some()
 }
 
 pub(crate) fn start_simple_leveled_compaction(
     options: &Arc<LsmOptions>,
-    sstables: &mut SSTables
+    sstables: &Arc<SSTables>
 ) {
     while let Some(level_to_compact) = get_level_to_compact(options.simple_leveled_options, sstables) {
         let sstables_in_level_to_compact: Vec<Arc<SSTable>> = sstables.get_sstables(level_to_compact);
@@ -73,7 +73,7 @@ pub(crate) fn start_simple_leveled_compaction(
 
 fn get_level_to_compact(
     options: SimpleLeveledOptions,
-    sstables: &SSTables
+    sstables: &Arc<SSTables>
 ) -> Option<usize> {
     //Trigger l0 to l1 compaction
     if sstables.get_n_sstables(0) >= options.level0_file_num_compaction_trigger {

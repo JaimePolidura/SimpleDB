@@ -4,6 +4,7 @@ use crate::compaction::simple_leveled::SimpleLeveledOptions;
 pub struct LsmOptions {
     pub simple_leveled_options: SimpleLeveledOptions,
     pub compaction_strategy: CompactionStrategy,
+    pub compaction_task_frequency_ms: usize,
     pub n_cached_blocks_per_sstable: usize,
     pub memtable_max_size_bytes: usize,
     pub max_memtables_inactive: usize,
@@ -16,8 +17,9 @@ pub struct LsmOptions {
 impl Default for LsmOptions {
     fn default() -> Self {
         LsmOptions {
-            compaction_strategy: CompactionStrategy::SimpleLeveled(SimpleLeveledOptions::default()),
+            compaction_strategy: CompactionStrategy::SimpleLeveled,
             simple_leveled_options: SimpleLeveledOptions::default(),
+            compaction_task_frequency_ms: 100, //100ms
             memtable_max_size_bytes: 1048576, //1Mb
             bloom_filter_n_entries: 32768, //4kb of bloom filter so it fits in a page
             block_size_bytes: 4096, //4kb

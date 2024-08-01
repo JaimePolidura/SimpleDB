@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use crate::compaction::compaction::Compaction;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::{MemTable, MemtableIterator};
@@ -11,17 +12,21 @@ use crate::utils::storage_iterator::StorageIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 
 pub struct Lsm {
-    options: Arc<LsmOptions>,
     memtables: Memtables,
-    sstables: SSTables,
+    sstables: Arc<SSTables>,
+    compaction: Arc<Compaction>,
+
+    options: Arc<LsmOptions>,
 }
 
 impl Lsm {
     pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
+        let sstables = Arc::new(SSTables::new(lsm_options.clone()));
         Lsm {
             options: lsm_options.clone(),
             memtables: Memtables::new(lsm_options.clone()),
-            sstables: SSTables::new(lsm_options),
+            sstables: sstables.clone(),
+            compaction: Compaction::new(lsm_options, sstables.clone())
         }
     }
 
