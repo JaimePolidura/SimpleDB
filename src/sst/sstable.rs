@@ -106,6 +106,10 @@ impl SSTable {
         self.state.store(SSTABLE_DELETED, Release);
     }
 
+    pub fn size(&self) -> usize {
+        self.file.size()
+    }
+
     pub fn load_block(&self, block_id: usize) -> Result<Arc<Block>, ()> {
         {
             //Try read from cache
@@ -133,7 +137,7 @@ impl SSTable {
 
         Ok(block)
     }
-    
+
     pub fn get(&self, key: &Key) -> Option<bytes::Bytes> {
         if self.first_key.lt(key) && self.last_key.gt(key) {
             return None;

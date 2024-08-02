@@ -33,6 +33,21 @@ impl SSTables {
         }
     }
 
+    pub fn iter(&self, levels_id: &Vec<usize>) -> MergeIterator<SSTableIterator> {
+        let mut iterators: Vec<Box<SSTableIterator>> = Vec::new();
+
+        for level_id in levels_id {
+            let lock = self.sstables[*level_id].read();
+            let sstables_in_level = lock.as_ref().unwrap();
+
+            for sstable in sstables_in_level.iter() {
+                iterators.push(Box::new(SSTableIterator::new(sstable.clone())))
+            }
+        }
+
+        MergeIterator::new(iterators)
+    }
+
     pub fn scan(&self) -> MergeIterator<SSTableIterator> {
         let mut iterators: Vec<Box<SSTableIterator>> = Vec::with_capacity(self.sstables.len());
 
@@ -62,6 +77,17 @@ impl SSTables {
         }
 
         None
+    }
+
+    pub fn delete_all_sstables(&self, level_id: usize) {
+        match self.sstables.get(level_id) {
+            Some(lock) => {
+                let mut lock_result = lock.write();
+                let mut sstables = lock_result.as_mut().unwrap();
+                sstables.clear();
+            },
+            None => {}
+        };
     }
 
     pub fn delete_sstables(&self, level: usize, sstables_id: Vec<usize>) {
@@ -138,5 +164,31 @@ impl SSTables {
             },
             Err(_) => Err(()),
         }
+    }
+
+    pub fn calculate_space_amplificacion(&self) -> usize {
+        let last_level_space: usize = match self.sstables.last() {
+            Some(l0_sstables) => {
+                l0_sstables.read()
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .map(|sstable| sstable.size())
+                    .sum::<usize>()
+            }
+            None => 0,
+        };
+        let rest_space: usize = self.sstables[0..self.sstables.len() - 1].iter()
+            .map(|level_lock| {
+                level_lock.read()
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .map(|sstable| sstable.size())
+                    .sum::<usize>()
+            })
+            .sum();
+
+        rest_space / last_level_space
     }
 }

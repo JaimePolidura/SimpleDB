@@ -9,15 +9,15 @@ use crate::utils::merge_iterator::MergeIterator;
 use crate::utils::storage_iterator::StorageIterator;
 
 #[derive(Clone, Copy)]
-pub struct SimpleLeveledOptions {
+pub struct SimpleLeveledCompactionOptions {
     pub level0_file_num_compaction_trigger: usize,
     pub size_ratio_percent: usize,
     pub max_levels: usize,
 }
 
-impl Default for SimpleLeveledOptions {
+impl Default for SimpleLeveledCompactionOptions {
     fn default() -> Self {
-        SimpleLeveledOptions {
+        SimpleLeveledCompactionOptions {
             level0_file_num_compaction_trigger: 1,
             size_ratio_percent: 1,
             max_levels: 8,
@@ -26,7 +26,7 @@ impl Default for SimpleLeveledOptions {
 }
 
 pub(crate) fn can_compact_simple_leveled_compaction(
-    options: SimpleLeveledOptions,
+    options: SimpleLeveledCompactionOptions,
     sstables: &Arc<SSTables>
 ) -> bool {
     get_level_to_compact(options, sstables).is_some()
@@ -36,18 +36,18 @@ pub(crate) fn start_simple_leveled_compaction(
     options: &Arc<LsmOptions>,
     sstables: &Arc<SSTables>
 ) {
-    while let Some(level_to_compact) = get_level_to_compact(options.simple_leveled_options, sstables) {
-        let sstables_in_level_to_compact: Vec<Arc<SSTable>> = sstables.get_sstables(level_to_compact);
-        let sstables_in_next_level: Vec<Arc<SSTable>> = sstables.get_sstables(level_to_compact + 1);
+    while let Some(level_to_compact) = get_level_to_compact(options.simple_leveled_compaction_options, sstables) {
+        if level_to_compact > options.simple_leveled_compaction_options.max_levels {
+            break;
+        }
 
         let sstables_id_in_next_level = sstables.get_sstables_id(level_to_compact + 1);
         let sstables_id_in_level = sstables.get_sstables_id(level_to_compact);
 
-        let iterator = create_merge_iterator(sstables_in_level_to_compact, sstables_in_next_level);
+        let iterator = sstables.iter(&vec![level_to_compact, level_to_compact + 1]);
         let mut new_sstable_builder = Some(SSTableBuilder::new(
             options.clone(), (level_to_compact + 1) as u32
         ));
-        let mut sstables_id_created: Vec<usize> = Vec::new();
 
         while iterator.has_next() {
             new_sstable_builder.as_mut().unwrap().add_entry(
@@ -56,10 +56,9 @@ pub(crate) fn start_simple_leveled_compaction(
             );
 
             if new_sstable_builder.as_ref().unwrap().estimated_size_bytes() > options.sst_size_bytes {
-                let sstable_id_created = sstables.flush_to_disk(new_sstable_builder.take().unwrap())
+                sstables.flush_to_disk(new_sstable_builder.take().unwrap())
                     .unwrap();
 
-                sstables_id_created.push(sstable_id_created);
                 new_sstable_builder = Some(SSTableBuilder::new(
                     options.clone(), (level_to_compact + 1) as u32
                 ));
@@ -72,7 +71,7 @@ pub(crate) fn start_simple_leveled_compaction(
 }
 
 fn get_level_to_compact(
-    options: SimpleLeveledOptions,
+    options: SimpleLeveledCompactionOptions,
     sstables: &Arc<SSTables>
 ) -> Option<usize> {
     //Trigger l0 to l1 compaction
@@ -91,20 +90,4 @@ fn get_level_to_compact(
     }
 
     return None;
-}
-
-fn create_merge_iterator(
-    sstables_1: Vec<Arc<SSTable>>,
-    sstables_2: Vec<Arc<SSTable>>,
-) -> MergeIterator<SSTableIterator> {
-    let mut iterators: Vec<Box<SSTableIterator>> = Vec::new();
-
-    for sstable in sstables_1 {
-        iterators.push(Box::new(SSTableIterator::new(sstable)));
-    }
-    for sstable in sstables_2 {
-        iterators.push(Box::new(SSTableIterator::new(sstable)));
-    }
-
-    MergeIterator::new(iterators)
 }
