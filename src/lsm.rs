@@ -21,7 +21,7 @@ pub struct Lsm {
 
 impl Lsm {
     pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
-        let sstables = Arc::new(SSTables::new(lsm_options.clone()));
+        let sstables = Arc::new(SSTables::open(lsm_options.clone()));
         Lsm {
             options: lsm_options.clone(),
             memtables: Memtables::new(lsm_options.clone()),

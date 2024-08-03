@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicUsize;
@@ -7,6 +8,7 @@ use crate::lsm_options::LsmOptions;
 use crate::sst::sstable::SSTable;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::ssttable_iterator::SSTableIterator;
+use crate::utils::lsm_file::LsmFile;
 use crate::utils::merge_iterator::MergeIterator;
 
 pub struct SSTables {
@@ -19,18 +21,48 @@ pub struct SSTables {
 }
 
 impl SSTables {
-    pub fn new(lsm_options: Arc<LsmOptions>) -> SSTables {
+    pub fn open(lsm_options: Arc<LsmOptions>) -> SSTables {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
         }
         SSTables {
-            sstables: levels,
+            sstables: Self::load_sstables(&lsm_options),
             next_memtable_id: AtomicUsize::new(0),
             lsm_options,
             n_current_levels: 0,
             path_buff: PathBuf::new(),
         }
+    }
+
+    fn load_sstables(lsm_options: &Arc<LsmOptions>) -> Vec<RwLock<Vec<Arc<SSTable>>>> {
+        let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
+        for _ in 0..64 {
+            levels.push(RwLock::new(Vec::new()));
+        }
+
+        let path = PathBuf::from(&lsm_options.base_path)
+            .as_path();
+
+        for file in fs::read_dir(path).expect("Failed to read base path") {
+            let file = file.unwrap();
+
+            let sstable_id = file.file_name().to_str()
+                .unwrap()
+                .parse::<usize>();
+            if sstable_id.is_ok() {
+                let sstable = SSTable::from_file(
+                    sstable_id.unwrap(), file.path().as_path(), lsm_options.clone()
+                ).expect(&format!("Cannot read SSTable with id/file name: {:?}", sstable_id));
+
+                let lock: RwLock<Vec<Arc<SSTable>>> = levels[sstable.level];
+                let write_result = lock.write();
+                write_result.unwrap().push(sstable);
+            }
+
+        }
+
+        Vec::new()
     }
 
     pub fn iter(&self, levels_id: &Vec<usize>) -> MergeIterator<SSTableIterator> {
