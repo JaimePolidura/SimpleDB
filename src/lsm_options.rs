@@ -1,9 +1,11 @@
 use crate::compaction::compaction::CompactionStrategy;
+use crate::compaction::leveled::LeveledCompactionOptions;
 use crate::compaction::simple_leveled::SimpleLeveledCompactionOptions;
 use crate::compaction::tiered::TieredCompactionOptions;
 
 pub struct LsmOptions {
     pub simple_leveled_compaction_options: SimpleLeveledCompactionOptions,
+    pub leveled_compaction_options: LeveledCompactionOptions,
     pub tiered_compaction_options: TieredCompactionOptions,
     pub compaction_strategy: CompactionStrategy,
     pub compaction_task_frequency_ms: usize,
@@ -20,6 +22,7 @@ impl Default for LsmOptions {
     fn default() -> Self {
         LsmOptions {
             simple_leveled_compaction_options: SimpleLeveledCompactionOptions::default(),
+            leveled_compaction_options: LeveledCompactionOptions::default(),
             tiered_compaction_options: TieredCompactionOptions::default(),
             compaction_strategy: CompactionStrategy::SimpleLeveled,
             compaction_task_frequency_ms: 100, //100ms

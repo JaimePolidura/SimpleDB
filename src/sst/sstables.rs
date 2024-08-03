@@ -121,6 +121,16 @@ impl SSTables {
         }
     }
 
+    pub fn get_level_size_bytes(&self, level_id: usize) -> usize {
+        match self.sstables.get(level_id) {
+            Some(sstables) => sstables.read().unwrap()
+                .iter()
+                .map(|it| it.size())
+                .sum(),
+            None => 0,
+        }
+    }
+
     pub fn get_sstables_id(&self, level: usize) -> Vec<usize> {
         match self.sstables.get(level) {
             Some(sstables) => sstables.read().unwrap()

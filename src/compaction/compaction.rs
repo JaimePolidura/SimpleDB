@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
+use crate::compaction::leveled::{can_compact_leveled_compaction, start_leveled_compaction};
 use crate::compaction::simple_leveled::{can_compact_simple_leveled_compaction, start_simple_leveled_compaction};
 use crate::compaction::tiered::{can_compact_tiered_compaction, start_tiered_compaction};
 use crate::lsm_options::LsmOptions;
@@ -12,6 +13,7 @@ pub struct Compaction {
 
 pub enum CompactionStrategy {
     SimpleLeveled,
+    Leveled,
     Tiered,
 }
 
@@ -51,6 +53,9 @@ impl Compaction {
             CompactionStrategy::Tiered => can_compact_tiered_compaction(
                 self.lsm_options.tiered_compaction_options, &self.sstables
             ),
+            CompactionStrategy::Leveled => can_compact_leveled_compaction(
+                self.lsm_options.leveled_compaction_options, &self.sstables
+            )
         }
     }
 
@@ -60,6 +65,9 @@ impl Compaction {
                 &self.lsm_options, &self.sstables
             ),
             CompactionStrategy::Tiered => start_tiered_compaction(
+                &self.lsm_options, &self.sstables
+            ),
+            CompactionStrategy::Leveled => start_leveled_compaction(
                 &self.lsm_options, &self.sstables
             )
         }

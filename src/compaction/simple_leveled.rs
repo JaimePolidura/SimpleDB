@@ -1,11 +1,8 @@
 use std::sync::Arc;
 use bytes::Bytes;
 use crate::lsm_options::LsmOptions;
-use crate::sst::sstable::SSTable;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
-use crate::sst::ssttable_iterator::SSTableIterator;
-use crate::utils::merge_iterator::MergeIterator;
 use crate::utils::storage_iterator::StorageIterator;
 
 #[derive(Clone, Copy)]
