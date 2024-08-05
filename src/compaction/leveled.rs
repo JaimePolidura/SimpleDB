@@ -25,7 +25,7 @@ pub(crate) fn can_compact_leveled_compaction(
     options: LeveledCompactionOptions,
     sstables: &Arc<SSTables>
 ) -> bool {
-
+    false
 }
 
 pub(crate) fn start_leveled_compaction(

@@ -27,7 +27,8 @@ impl SSTables {
             levels.push(RwLock::new(Vec::new()));
         }
         SSTables {
-            sstables: Self::load_sstables(&lsm_options),
+            sstables: Self::load_sstables(&lsm_options)
+                .expect("Error reading SSTables"),
             next_memtable_id: AtomicUsize::new(0),
             lsm_options,
             n_current_levels: 0,
@@ -35,14 +36,14 @@ impl SSTables {
         }
     }
 
-    fn load_sstables(lsm_options: &Arc<LsmOptions>) -> Vec<RwLock<Vec<Arc<SSTable>>>> {
+    fn load_sstables(lsm_options: &Arc<LsmOptions>) -> Result<Vec<RwLock<Vec<Arc<SSTable>>>>, ()> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
         }
 
-        let path = PathBuf::from(&lsm_options.base_path)
-            .as_path();
+        let path = PathBuf::from(&lsm_options.base_path);
+        let path = path.as_path();
 
         for file in fs::read_dir(path).expect("Failed to read base path") {
             let file = file.unwrap();
@@ -52,17 +53,17 @@ impl SSTables {
                 .parse::<usize>();
             if sstable_id.is_ok() {
                 let sstable = SSTable::from_file(
-                    sstable_id.unwrap(), file.path().as_path(), lsm_options.clone()
+                    sstable_id.clone().unwrap(), file.path().as_path(), lsm_options.clone()
                 ).expect(&format!("Cannot read SSTable with id/file name: {:?}", sstable_id));
 
-                let lock: RwLock<Vec<Arc<SSTable>>> = levels[sstable.level];
+                let lock: &RwLock<Vec<Arc<SSTable>>> = &levels[sstable.level as usize];
                 let write_result = lock.write();
                 write_result.unwrap().push(sstable);
             }
 
         }
 
-        Vec::new()
+        Ok(levels)
     }
 
     pub fn iter(&self, levels_id: &Vec<usize>) -> MergeIterator<SSTableIterator> {
