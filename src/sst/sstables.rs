@@ -8,6 +8,7 @@ use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::sst::sstable::SSTable;
 use crate::sst::sstable_builder::SSTableBuilder;
+use crate::sst::sstables_files::{extract_sstable_id_from_file, is_sstable_file, to_sstable_file_name};
 use crate::sst::ssttable_iterator::SSTableIterator;
 use crate::utils::lsm_file::LsmFile;
 use crate::utils::merge_iterator::MergeIterator;
@@ -48,16 +49,11 @@ impl SSTables {
         for file in fs::read_dir(path).expect("Failed to read base path") {
             let file = file.unwrap();
 
-            if !Self::is_sstable_file(&file) {
+            if !is_sstable_file(&file) {
                 continue;
             }
 
-            let sstable_id = file.file_name().to_str()
-                .unwrap()
-                .parse::<usize>();
-            if sstable_id.is_ok() {
-                let sstable_id = sstable_id.unwrap();
-
+            if let Ok(sstable_id) = extract_sstable_id_from_file(&file) {
                 let sstable_read_result = SSTable::from_file(
                     sstable_id, file.path().as_path(), lsm_options.clone()
                 );
@@ -200,7 +196,7 @@ impl SSTables {
 
         //SSTable file path
         let mut path_buff = PathBuf::from(self.lsm_options.base_path.to_string());
-        path_buff.push(sstable_id.to_string());
+        path_buff.push(to_sstable_file_name(sstable_id));
 
         let sstable_build_result = sstable_builder.build(
             sstable_id,

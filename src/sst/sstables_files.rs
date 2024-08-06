@@ -1,3 +1,4 @@
+use std::fmt::format;
 use std::fs::{DirEntry, File};
 
 pub(crate) fn is_sstable_file(file: &DirEntry) -> bool {
@@ -5,11 +6,13 @@ pub(crate) fn is_sstable_file(file: &DirEntry) -> bool {
 }
 
 pub(crate) fn to_sstable_file_name(sstable_id: usize) -> String {
-    concat!("sst-", sstable_id.to_string()).to_string()
+    let result = format!("sst- {}", sstable_id);
+    result
 }
 
 pub(crate) fn extract_sstable_id_from_file(file: &DirEntry) -> Result<usize, ()> {
-    let split = file.file_name()
+    let file_name = file.file_name();
+    let split = file_name
         .to_str()
         .unwrap()
         .split("-")

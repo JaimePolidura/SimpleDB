@@ -61,7 +61,7 @@ impl SSTableBuilder {
         };
     }
 
-    pub fn build (
+    pub fn build(
         mut self,
         id: usize,
         path: &Path
