@@ -21,7 +21,12 @@ pub struct Lsm {
 
 impl Lsm {
     pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
-        let sstables = Arc::new(SSTables::open(lsm_options.clone()));
+        let sstables = SSTables::open(lsm_options.clone());
+        if sstables.is_err() {
+            panic!("Failed to read SSTable with ID ?{}", sstables.err().unwrap());
+        }
+        let sstables = Arc::new(sstables.unwrap());
+
         Lsm {
             options: lsm_options.clone(),
             memtables: Memtables::new(lsm_options.clone()),

@@ -1,4 +1,5 @@
 use std::fs;
+use std::fs::DirEntry;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicUsize;
@@ -21,22 +22,21 @@ pub struct SSTables {
 }
 
 impl SSTables {
-    pub fn open(lsm_options: Arc<LsmOptions>) -> SSTables {
+    pub fn open(lsm_options: Arc<LsmOptions>) -> Result<SSTables, usize> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
         }
-        SSTables {
-            sstables: Self::load_sstables(&lsm_options)
-                .expect("Error reading SSTables"),
+        Ok(SSTables {
+            sstables: Self::load_sstables(&lsm_options)?,
             next_memtable_id: AtomicUsize::new(0),
             lsm_options,
             n_current_levels: 0,
             path_buff: PathBuf::new(),
-        }
+        })
     }
 
-    fn load_sstables(lsm_options: &Arc<LsmOptions>) -> Result<Vec<RwLock<Vec<Arc<SSTable>>>>, ()> {
+    fn load_sstables(lsm_options: &Arc<LsmOptions>) -> Result<Vec<RwLock<Vec<Arc<SSTable>>>>, usize> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
@@ -48,19 +48,29 @@ impl SSTables {
         for file in fs::read_dir(path).expect("Failed to read base path") {
             let file = file.unwrap();
 
+            if !Self::is_sstable_file(&file) {
+                continue;
+            }
+
             let sstable_id = file.file_name().to_str()
                 .unwrap()
                 .parse::<usize>();
             if sstable_id.is_ok() {
-                let sstable = SSTable::from_file(
-                    sstable_id.clone().unwrap(), file.path().as_path(), lsm_options.clone()
-                ).expect(&format!("Cannot read SSTable with id/file name: {:?}", sstable_id));
+                let sstable_id = sstable_id.unwrap();
 
-                let lock: &RwLock<Vec<Arc<SSTable>>> = &levels[sstable.level as usize];
-                let write_result = lock.write();
-                write_result.unwrap().push(sstable);
+                let sstable_read_result = SSTable::from_file(
+                    sstable_id, file.path().as_path(), lsm_options.clone()
+                );
+
+                if sstable_read_result.is_ok() {
+                    let sstable = sstable_read_result.unwrap();
+                    let lock: &RwLock<Vec<Arc<SSTable>>> = &levels[sstable.level as usize];
+                    let write_result = lock.write();
+                    write_result.unwrap().push(sstable);
+                } else {
+                    return Err(sstable_id);
+                }
             }
-
         }
 
         Ok(levels)
