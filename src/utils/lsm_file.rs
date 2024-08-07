@@ -50,6 +50,17 @@ impl LsmFile {
         self.size
     }
 
+    pub fn fsync(&self) {
+        self.file
+            .as_ref()
+            .unwrap()
+            .sync_all();
+    }
+
+    pub fn write_replace(&mut self, bytes: &[u8]) -> Result<(), ()> {
+        unimplemented!()
+    }
+
     pub fn read(&self, offset: usize, length: usize) -> Result<Vec<u8>, ()> {
         let mut result: Vec<u8> = Vec::with_capacity(length);
         match self.file.as_ref().unwrap().seek_read(&mut result[..], offset as u64) {

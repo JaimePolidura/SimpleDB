@@ -6,6 +6,7 @@ mod key;
 mod block;
 mod sst;
 mod compaction;
+mod manifest;
 
 fn main() {
     println!("Hello, world!");
