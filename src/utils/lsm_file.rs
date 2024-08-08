@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::Write;
 use std::os::windows::fs::FileExt;
 use std::path::{Path, PathBuf};
 
@@ -58,7 +59,11 @@ impl LsmFile {
     }
 
     pub fn write_replace(&mut self, bytes: &[u8]) -> Result<(), ()> {
-        unimplemented!()
+        self.file
+            .as_mut()
+            .unwrap()
+            .write_all(bytes)
+            .map_err(|e| ())
     }
 
     pub fn read(&self, offset: usize, length: usize) -> Result<Vec<u8>, ()> {
