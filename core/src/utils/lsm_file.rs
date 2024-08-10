@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{Read, SeekFrom, Write};
 use std::os::windows::fs::FileExt;
 use std::path::{Path, PathBuf};
 
@@ -81,8 +81,8 @@ impl LsmFile {
     }
 
     pub fn read(&self, offset: usize, length: usize) -> Result<Vec<u8>, ()> {
-        let mut result: Vec<u8> = Vec::with_capacity(length);
-        match self.file.as_ref().unwrap().seek_read(&mut result[..], offset as u64) {
+        let mut result: Vec<u8> = vec![0; length];
+        match self.file.as_ref().unwrap().seek_read(&mut result, offset as u64) {
             Ok(_) => Ok(result),
             Err(_) => Err(())
         }

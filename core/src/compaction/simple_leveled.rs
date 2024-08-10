@@ -86,5 +86,5 @@ fn get_level_to_compact(
         }
     }
 
-    return None;
+    None
 }
