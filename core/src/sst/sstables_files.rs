@@ -1,12 +1,11 @@
-use std::fmt::format;
-use std::fs::{DirEntry, File};
+use std::fs::DirEntry;
 
 pub(crate) fn is_sstable_file(file: &DirEntry) -> bool {
     file.file_name().to_str().unwrap().starts_with("sst-")
 }
 
 pub(crate) fn to_sstable_file_name(sstable_id: usize) -> String {
-    let result = format!("sst- {}", sstable_id);
+    let result = format!("sst-{}", sstable_id);
     result
 }
 

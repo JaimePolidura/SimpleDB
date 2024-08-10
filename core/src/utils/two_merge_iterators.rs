@@ -85,6 +85,7 @@ impl<A: StorageIterator, B: StorageIterator> StorageIterator for TwoMergeIterato
 #[cfg(test)]
 mod test {
     use std::sync::Arc;
+    use crate::key;
     use crate::key::Key;
     use crate::lsm_options::LsmOptions;
     use crate::memtables::memtable::{MemTable, MemtableIterator};
@@ -94,15 +95,15 @@ mod test {
     #[test]
     fn two_merge_iterator() {
         let memtable1 = Arc::new(MemTable::new(&LsmOptions::default(), 0));
-        memtable1.set(&Key::new("a"), &vec![1]);
-        memtable1.set(&Key::new("b"), &vec![2]);
-        memtable1.set(&Key::new("d"), &vec![4]);
+        memtable1.set(&key::new("a"), &vec![1]);
+        memtable1.set(&key::new("b"), &vec![2]);
+        memtable1.set(&key::new("d"), &vec![4]);
 
         let memtable2 = Arc::new(MemTable::new(&LsmOptions::default(), 0));
-        memtable1.set(&Key::new("a"), &vec![1]);
-        memtable1.set(&Key::new("c"), &vec![3]);
-        memtable1.set(&Key::new("d"), &vec![4]);
-        memtable1.set(&Key::new("f"), &vec![5]);
+        memtable1.set(&key::new("a"), &vec![1]);
+        memtable1.set(&key::new("c"), &vec![3]);
+        memtable1.set(&key::new("d"), &vec![4]);
+        memtable1.set(&key::new("f"), &vec![5]);
 
         let mut two_merge_iterators = TwoMergeIterator::new(
             MemtableIterator::new(&memtable1),
@@ -111,27 +112,27 @@ mod test {
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&Key::new("a")));
+        assert!(two_merge_iterators.key().eq(&key::new("a")));
         assert!(two_merge_iterators.value().eq(&vec![1]));
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&Key::new("b")));
+        assert!(two_merge_iterators.key().eq(&key::new("b")));
         assert!(two_merge_iterators.value().eq(&vec![2]));
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&Key::new("c")));
+        assert!(two_merge_iterators.key().eq(&key::new("c")));
         assert!(two_merge_iterators.value().eq(&vec![3]));
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&Key::new("d")));
+        assert!(two_merge_iterators.key().eq(&key::new("d")));
         assert!(two_merge_iterators.value().eq(&vec![4]));
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&Key::new("f")));
+        assert!(two_merge_iterators.key().eq(&key::new("f")));
         assert!(two_merge_iterators.value().eq(&vec![5]));
 
         assert!(!two_merge_iterators.has_next());

@@ -153,6 +153,7 @@ impl<'a> StorageIterator for MemtableIterator {
 #[cfg(test)]
 mod test {
     use std::sync::Arc;
+    use crate::key;
     use crate::key::Key;
     use crate::lsm_options::LsmOptions;
     use crate::memtables::memtable::{MemTable, MemtableIterator};
@@ -163,46 +164,46 @@ mod test {
         let memtable: MemTable = MemTable::new(&LsmOptions::default(), 0);
         let value: Vec<u8> = vec![10, 12];
 
-        assert!(memtable.get(&Key::new("nombre")).is_none());
+        assert!(memtable.get(&key::new("nombre")).is_none());
 
-        memtable.set(&Key::new("nombre"), &value);
-        memtable.set(&Key::new("edad"), &value);
+        memtable.set(&key::new("nombre"), &value);
+        memtable.set(&key::new("edad"), &value);
 
-        assert!(memtable.get(&Key::new("nombre")).is_some());
-        assert!(memtable.get(&Key::new("edad")).is_some());
+        assert!(memtable.get(&key::new("nombre")).is_some());
+        assert!(memtable.get(&key::new("edad")).is_some());
 
-        memtable.delete(&Key::new("nombre"));
+        memtable.delete(&key::new("nombre"));
 
-        assert!(memtable.get(&Key::new("nombre")).is_none());
+        assert!(memtable.get(&key::new("nombre")).is_none());
     }
 
     #[test]
     fn iterators() {
         let memtable = Arc::new(MemTable::new(&LsmOptions::default(), 0));
         let value: Vec<u8> = vec![10, 12];
-        memtable.set(&Key::new("alberto"), &value);
-        memtable.set(&Key::new("jaime"), &value);
-        memtable.set(&Key::new("gonchi"), &value);
-        memtable.set(&Key::new("wili"), &value);
+        memtable.set(&key::new("alberto"), &value);
+        memtable.set(&key::new("jaime"), &value);
+        memtable.set(&key::new("gonchi"), &value);
+        memtable.set(&key::new("wili"), &value);
 
         let mut iterator = MemtableIterator::new(&memtable);
 
         assert!(iterator.has_next());
         iterator.next();
 
-        assert!(iterator.key().eq(&Key::new("alberto")));
+        assert!(iterator.key().eq(&key::new("alberto")));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&Key::new("gonchi")));
+        assert!(iterator.key().eq(&key::new("gonchi")));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&Key::new("jaime")));
+        assert!(iterator.key().eq(&key::new("jaime")));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&Key::new("wili")));
+        assert!(iterator.key().eq(&key::new("wili")));
 
         assert!(!iterator.has_next());
     }

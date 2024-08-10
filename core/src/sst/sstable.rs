@@ -1,8 +1,3 @@
-use std::path::Path;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::AtomicU8;
-use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
-use bytes::BufMut;
 use crate::block::block::Block;
 use crate::key;
 use crate::key::Key;
@@ -11,6 +6,12 @@ use crate::sst::block_cache::BlockCache;
 use crate::utils::bloom_filter::BloomFilter;
 use crate::utils::lsm_file::LsmFile;
 use crate::utils::utils;
+use bytes::BufMut;
+use std::path::Path;
+use std::sync::atomic::AtomicU8;
+use std::sync::atomic::Ordering::Release;
+use std::sync::{Arc, Mutex};
+use crate::sst::block_metadata::BlockMetadata;
 
 pub const SSTABLE_DELETED: u8 = 2;
 pub const SSTABLE_ACTIVE: u8 = 1;
@@ -147,14 +148,14 @@ impl SSTable {
             return None;
         }
 
-        return match self.get_block_metadata(key) {
+        match self.get_block_metadata(key) {
             Some((index, _)) => {
                 self.load_block(index)
                     .expect("Error whiile reading block")
                     .get_value(key)
             },
             None => None
-        };
+        }
     }
 
     pub(crate) fn get_block_metadata(&self, key: &Key) -> Option<(usize, &BlockMetadata)> {
@@ -177,97 +178,6 @@ impl SSTable {
             if current_block_metadata.last_key.lt(key) {
                 left = current_index;
             }
-        }
-    }
-}
-
-pub struct BlockMetadata {
-    pub(crate) offset: usize,
-    pub(crate) first_key: Key,
-    pub(crate) last_key: Key
-}
-
-impl BlockMetadata {
-    pub fn decode_all(bytes: &Vec<u8>, start_index: usize) -> Result<Vec<BlockMetadata>, ()> {
-        let expected_crc = utils::u8_vec_to_u32_le(bytes, start_index);
-        let n_blocks_metadata = utils::u8_vec_to_u32_le(bytes, start_index + 4);
-
-        let mut last_index: usize = start_index;
-        let mut blocks_metadata_decoded: Vec<BlockMetadata> = Vec::with_capacity(n_blocks_metadata as usize);
-        for _ in 0..n_blocks_metadata {
-            let (new_last_index, blockmetadata_decoded) = Self::decode(&bytes, last_index)?;
-            last_index = new_last_index;
-            blocks_metadata_decoded.push(blockmetadata_decoded);
-        }
-
-        let actual_crc = crc32fast::hash(&bytes[start_index..last_index]);
-        if actual_crc != expected_crc {
-            return Err(());
-        }
-
-        Ok((blocks_metadata_decoded))
-    }
-
-    pub fn encode_all(blocks_metadata: &Vec<BlockMetadata>) -> Vec<u8> {
-        let mut encoded: Vec<u8> = Vec::new();
-
-        let mut metadata_encoded: Vec<u8> = Vec::new();
-        for block_metadata in blocks_metadata {
-            metadata_encoded.extend(block_metadata.encode());
-        }
-
-        encoded.put_u32_le(crc32fast::hash(&metadata_encoded));
-        encoded.put_u32_le(blocks_metadata.len() as u32);
-        encoded.extend(metadata_encoded);
-        encoded
-    }
-
-    pub fn decode(bytes: &Vec<u8>, start_index: usize) -> Result<(usize, BlockMetadata), ()> {
-        let mut current_index = start_index;
-
-        let first_key_length = utils::u8_vec_to_u32_le(&bytes, current_index) as usize;
-        current_index = current_index + 4;
-        let first_key = String::from_utf8(bytes[current_index..first_key_length].to_vec())
-            .expect("Cannot parse utf8");
-        current_index = current_index + (first_key_length + 4);
-
-        let last_key_length = utils::u8_vec_to_u32_le(&bytes, current_index) as usize;
-        current_index = current_index + 4;
-        let last_key = String::from_utf8(bytes[current_index..last_key_length].to_vec())
-            .expect("Cannot parse utf8");
-        current_index = current_index + (last_key_length + 4) as usize;
-
-        let offset = utils::u8_vec_to_u32_le(&bytes, current_index) as usize;
-        current_index = current_index + 4;
-
-        Ok((current_index, BlockMetadata{
-            first_key: key::new(first_key.as_str()),
-            last_key: key::new(last_key.as_str()),
-            offset
-        }))
-    }
-
-    pub fn encode(&self) -> Vec<u8> {
-        let mut metadata_encoded: Vec<u8> = Vec::new();
-        metadata_encoded.put_u32_le(self.first_key.len() as u32);
-        metadata_encoded.extend(self.first_key.as_bytes());
-        metadata_encoded.put_u32_le(self.last_key.len() as u32);
-        metadata_encoded.extend(self.last_key.as_bytes());
-        metadata_encoded.put_u32_le(self.offset as u32);
-        metadata_encoded
-    }
-
-    pub fn contains(&self, key: &Key) -> bool {
-        self.first_key.le(key) && self.last_key.ge(key)
-    }
-}
-
-impl Clone for BlockMetadata {
-    fn clone(&self) -> Self {
-        BlockMetadata{
-            offset: self.offset,
-            first_key: self.first_key.clone(),
-            last_key: self.last_key.clone(),
         }
     }
 }
