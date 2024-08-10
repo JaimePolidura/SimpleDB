@@ -5,7 +5,7 @@ use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::utils::utils;
 
-pub(crate) fn encode_block(
+pub(crate) fn encode_block (
     block: &Block,
     options: &Arc<LsmOptions>
 ) -> Vec<u8> {
@@ -16,6 +16,7 @@ pub(crate) fn encode_block(
         let start_offsets_offset = encode_offsets(&offsets_updated, &mut encoded);
         encode_footer(start_offsets_offset, block, &mut encoded, PREFIX_COMPRESSED, options);
     } else {
+        encoded.clear();
         encode_entries(block, &mut encoded, NOT_COMPRESSED, options);
         let start_offsets_offset = encode_offsets(&block.offsets, &mut encoded);
         encode_footer(start_offsets_offset, block, &mut encoded, NOT_COMPRESSED, options);

@@ -40,7 +40,7 @@ impl BlockBuilder {
             offsets.push(offset as u16);
         }
 
-        Block{ entries, offsets }
+        Block { entries, offsets }
     }
 
     //TODO Handle block overflow
@@ -63,12 +63,11 @@ impl BlockBuilder {
     }
 
     fn calculate_entry_size(&self, key: &Key, value: &Bytes) -> usize {
-        return std::mem::size_of::<i16>() + //Key length size
+        std::mem::size_of::<i16>() + //Key length size
             key.len() + //Key bytes
             std::mem::size_of::<i16>() + //Value length
             value.len() + //Value bytes
-            std::mem::size_of::<i16>() //Entry Offset
-        ;
+            std::mem::size_of::<i16>()
     }
 }
 

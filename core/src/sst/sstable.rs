@@ -1,5 +1,4 @@
 use crate::block::block::Block;
-use crate::key;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::sst::block_cache::BlockCache;
