@@ -102,6 +102,11 @@ impl SSTableBuilder {
     }
 
     fn build_current_block(&mut self) {
+        //Nothing to build
+        if self.first_key_current_block.is_none() {
+            return
+        }
+
         let encoded_block: Vec<u8> = self.current_block_builder.build()
             .encode(&self.lsm_options);
         self.current_block_builder = BlockBuilder::new(self.lsm_options.clone());

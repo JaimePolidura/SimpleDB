@@ -65,7 +65,7 @@ impl Lsm {
 
     fn flush_memtable(&mut self, memtable: Arc<MemTable>) -> Result<(), ()> {
         let sstable_builder_ready: SSTableBuilder = MemTable::to_sst(self.options.clone(), memtable);
-        self.sstables.flush_to_disk(sstable_builder_ready);
+        self.sstables.flush_to_disk(sstable_builder_ready)?;
         Ok(())
     }
 }
