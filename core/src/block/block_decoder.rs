@@ -3,6 +3,7 @@ use bytes::BufMut;
 use block::{NOT_COMPRESSED, PREFIX_COMPRESSED};
 use crate::block::block;
 use crate::block::block::Block;
+use crate::key;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::utils::utils;
@@ -60,10 +61,10 @@ fn decode_entries_prefix_compressed(
         let current_key = match prev_key.as_ref() {
             Some(prev_key) => {
                 let (overlaps, _) = prev_key.split(key_overlap_size as usize);
-                let rest_key = Key::new(String::from_utf8(rest_key_u8_vec).unwrap().as_str());
+                let rest_key = key::new(String::from_utf8(rest_key_u8_vec).unwrap().as_str());
                 Key::merge(&overlaps, &rest_key)
             },
-            None => Key::new(String::from_utf8(rest_key_u8_vec).unwrap().as_str())
+            None => key::new(String::from_utf8(rest_key_u8_vec).unwrap().as_str())
         };
         current_index = current_index + rest_key_size as usize;
         entries_decoded.put_u16_le(current_key.len() as u16);

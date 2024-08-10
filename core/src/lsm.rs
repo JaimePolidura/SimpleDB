@@ -19,22 +19,22 @@ pub struct Lsm {
     options: Arc<LsmOptions>,
 }
 
-impl Lsm {
-    pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
-        let sstables = SSTables::open(lsm_options.clone());
-        if sstables.is_err() {
-            panic!("Failed to read SSTable with ID ?{}", sstables.err().unwrap());
-        }
-        let sstables = Arc::new(sstables.unwrap());
-
-        Lsm {
-            options: lsm_options.clone(),
-            memtables: Memtables::new(lsm_options.clone()),
-            sstables: sstables.clone(),
-            compaction: Compaction::new(lsm_options, sstables.clone())
-        }
+pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
+    let sstables = SSTables::open(lsm_options.clone());
+    if sstables.is_err() {
+        panic!("Failed to read SSTable with ID ?{}", sstables.err().unwrap());
     }
+    let sstables = Arc::new(sstables.unwrap());
 
+    Lsm {
+        options: lsm_options.clone(),
+        memtables: Memtables::new(lsm_options.clone()),
+        sstables: sstables.clone(),
+        compaction: Compaction::new(lsm_options, sstables.clone())
+    }
+}
+
+impl Lsm {
     pub fn scan(&self) -> TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>> {
         TwoMergeIterator::new(
             self.memtables.scan(),

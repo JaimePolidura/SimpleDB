@@ -1,9 +1,16 @@
 use std::fmt;
 use std::fmt::Formatter;
+use crate::key;
 
 #[derive(Debug)]
 pub struct Key {
     string: String,
+}
+
+pub fn new(string: &str) -> Key {
+    Key {
+        string: string.to_string()
+    }
 }
 
 impl Key {
@@ -13,12 +20,6 @@ impl Key {
 
     pub fn is_empty(&self) -> bool {
         self.string.is_empty()
-    }
-
-    pub fn new(string: &str) -> Key {
-        Key {
-            string: string.to_string()
-        }
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -48,7 +49,7 @@ impl Key {
     //"Juan".split(2) -> ("Ju", "an")
     pub fn split(&self, index: usize) -> (Key, Key) {
         let (h1, h2) = self.string.split_at(index);
-        (Key::new(h1), Key::new(h2))
+        (key::new(h1), key::new(h2))
     }
 
     pub fn merge(a: &Key, b: &Key) -> Key {

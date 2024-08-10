@@ -4,6 +4,7 @@ use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use bytes::BufMut;
 use crate::block::block::Block;
+use crate::key;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::sst::block_cache::BlockCache;
@@ -240,8 +241,8 @@ impl BlockMetadata {
         current_index = current_index + 4;
 
         Ok((current_index, BlockMetadata{
-            first_key: Key::new(first_key.as_str()),
-            last_key: Key::new(last_key.as_str()),
+            first_key: key::new(first_key.as_str()),
+            last_key: key::new(last_key.as_str()),
             offset
         }))
     }

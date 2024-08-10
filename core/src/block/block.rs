@@ -2,6 +2,7 @@ use std::sync::Arc;
 use bytes::Bytes;
 use crate::block::block_decoder::decode_block;
 use crate::block::block_encoder::encode_block;
+use crate::key;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::utils::utils;
@@ -59,7 +60,7 @@ impl Block {
         let key = String::from_utf8(key_slice.to_vec())
             .expect("Error while parsing with UTF-8");
 
-        Key::new(key.as_str())
+        key::new(key.as_str())
     }
 
     //Expect n_entry_index to be an index to block::offsets aray
@@ -79,19 +80,19 @@ mod test {
     use bytes::Bytes;
     use crate::block::block::Block;
     use crate::block::block_builder::BlockBuilder;
-    use crate::key::Key;
+    use crate::key;
     use crate::lsm_options::LsmOptions;
 
     #[test]
     fn encode_and_decode() {
         let mut block_builder = BlockBuilder::new(Arc::new(LsmOptions::default()));
-        block_builder.add_entry(Key::new("Jaime"), Bytes::from(vec![1]));
-        block_builder.add_entry(Key::new("Javier"), Bytes::from(vec![2]));
-        block_builder.add_entry(Key::new("Jose"), Bytes::from(vec![3]));
-        block_builder.add_entry(Key::new("Juan"), Bytes::from(vec![4]));
-        block_builder.add_entry(Key::new("Justo"), Bytes::from(vec![5]));
-        block_builder.add_entry(Key::new("Justoo"), Bytes::from(vec![6]));
-        block_builder.add_entry(Key::new("Kia"), Bytes::from(vec![7]));
+        block_builder.add_entry(key::new("Jaime"), Bytes::from(vec![1]));
+        block_builder.add_entry(key::new("Javier"), Bytes::from(vec![2]));
+        block_builder.add_entry(key::new("Jose"), Bytes::from(vec![3]));
+        block_builder.add_entry(key::new("Juan"), Bytes::from(vec![4]));
+        block_builder.add_entry(key::new("Justo"), Bytes::from(vec![5]));
+        block_builder.add_entry(key::new("Justoo"), Bytes::from(vec![6]));
+        block_builder.add_entry(key::new("Kia"), Bytes::from(vec![7]));
         let block = block_builder.build();
 
         let encoded = block.encode(&Arc::new(LsmOptions::default()));
