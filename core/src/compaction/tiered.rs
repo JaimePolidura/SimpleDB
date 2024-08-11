@@ -15,7 +15,6 @@ pub struct TieredCompactionOptions {
 
 #[derive(Serialize, Deserialize)]
 pub enum TieredCompactionTask {
-    None,
     AmplificationRatioTrigger,
     SizeRatioTrigger(usize)
 }
@@ -30,24 +29,14 @@ impl Default for TieredCompactionOptions {
     }
 }
 
-pub(crate) fn can_compact_tiered_compaction(
-    options: TieredCompactionOptions,
-    sstables: &Arc<SSTables>
-) -> bool {
-    match create_tiered_compaction_task(options, sstables) {
-        TieredCompactionTask::None => false,
-        _ => true,
-    }
-}
-
 pub(crate) fn start_tiered_compaction(
+    task: TieredCompactionTask,
     options: &Arc<LsmOptions>,
     sstables: &Arc<SSTables>
 ) {
-    match create_tiered_compaction_task(options.tiered_compaction_options, sstables) {
+    match task {
         TieredCompactionTask::AmplificationRatioTrigger => do_tiered_compaction(options, sstables, sstables.get_n_levels() - 1),
         TieredCompactionTask::SizeRatioTrigger(level_id) => do_tiered_compaction(options, sstables, level_id),
-        TieredCompactionTask::None => {}
     };
 }
 
@@ -87,12 +76,12 @@ fn do_tiered_compaction(
         .for_each(|level_id| sstables.delete_all_sstables(*level_id));
 }
 
-fn create_tiered_compaction_task(
+pub(crate) fn create_tiered_compaction_task(
     options: TieredCompactionOptions,
     sstables: &Arc<SSTables>
-) -> TieredCompactionTask {
+) -> Option<TieredCompactionTask> {
     if  sstables.calculate_space_amplificacion() >= options.max_size_amplificacion {
-        return TieredCompactionTask::AmplificationRatioTrigger;
+        return Some(TieredCompactionTask::AmplificationRatioTrigger);
     }
 
     let mut prev_levels_size = 0;
@@ -102,11 +91,11 @@ fn create_tiered_compaction_task(
             .sum();
 
         if prev_levels_size / current_level_size >= options.size_ratio && level_id >= options.min_levels_trigger_size_ratio {
-            return TieredCompactionTask::SizeRatioTrigger(level_id);
+            return Some(TieredCompactionTask::SizeRatioTrigger(level_id));
         }
 
         prev_levels_size = prev_levels_size + current_level_size;
     }
 
-    TieredCompactionTask::None
+    None
 }

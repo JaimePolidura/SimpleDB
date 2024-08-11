@@ -1,10 +1,10 @@
-use std::sync::Arc;
-use std::time::Duration;
-use serde::{Deserialize, Serialize};
-use crate::compaction::simple_leveled::{can_compact_simple_leveled_compaction, start_simple_leveled_compaction, SimpleLeveledCompactionTask};
-use crate::compaction::tiered::{can_compact_tiered_compaction, start_tiered_compaction, TieredCompactionTask};
+use crate::compaction::simple_leveled::{create_simple_level_compaction_task, start_simple_leveled_compaction, SimpleLeveledCompactionTask};
+use crate::compaction::tiered::{create_tiered_compaction_task, start_tiered_compaction, TieredCompactionTask};
 use crate::lsm_options::{CompactionStrategy, LsmOptions};
+use serde::{Deserialize, Serialize};
 use crate::sst::sstables::SSTables;
+use std::time::Duration;
+use std::sync::Arc;
 
 pub struct Compaction {
     lsm_options: Arc<LsmOptions>,
@@ -14,7 +14,7 @@ pub struct Compaction {
 #[derive(Serialize, Deserialize)]
 pub enum CompactionTask {
     SimpleLeveled(SimpleLeveledCompactionTask),
-    Tiered(TieredCompactionTask)
+    Tiered(TieredCompactionTask),
 }
 
 impl Compaction {
@@ -39,30 +39,40 @@ impl Compaction {
         loop {
             std::thread::sleep(Duration::from_millis(self.lsm_options.compaction_task_frequency_ms as u64));
 
-            if self.can_compact() {
-                self.compact();
+            if let Some(compaction_task) = self.create_compaction_task() {
+                self.compact(compaction_task);
             }
         }
     }
 
-    pub fn can_compact(&self) -> bool {
+    pub fn create_compaction_task(&self) -> Option<CompactionTask> {
         match self.lsm_options.compaction_strategy {
-            CompactionStrategy::SimpleLeveled => can_compact_simple_leveled_compaction(
-                self.lsm_options.simple_leveled_compaction_options, &self.sstables
-            ),
-            CompactionStrategy::Tiered => can_compact_tiered_compaction(
-                self.lsm_options.tiered_compaction_options, &self.sstables
-            ),
+            CompactionStrategy::SimpleLeveled => {
+                if let Some(compaction_task) = create_simple_level_compaction_task(
+                    self.lsm_options.simple_leveled_compaction_options, &self.sstables
+                ) {
+                    return Some(CompactionTask::SimpleLeveled(compaction_task));
+                }
+            },
+            CompactionStrategy::Tiered => {
+                if let Some(compaction_task) = create_tiered_compaction_task(
+                    self.lsm_options.tiered_compaction_options, &self.sstables
+                ) {
+                    return Some(CompactionTask::Tiered(compaction_task));
+                }
+            },
         }
+
+        None
     }
 
-    pub fn compact(&self) {
-        match self.lsm_options.compaction_strategy {
-            CompactionStrategy::SimpleLeveled => start_simple_leveled_compaction(
-                &self.lsm_options, &self.sstables
+    pub fn compact(&self, compaction_task: CompactionTask) {
+        match compaction_task {
+            CompactionTask::SimpleLeveled(simpleLeveledTask) => start_simple_leveled_compaction(
+                simpleLeveledTask, &self.lsm_options, &self.sstables
             ),
-            CompactionStrategy::Tiered => start_tiered_compaction(
-                &self.lsm_options, &self.sstables
+            CompactionTask::Tiered(tieredTask) => start_tiered_compaction(
+                tieredTask, &self.lsm_options, &self.sstables
             ),
         }
     }

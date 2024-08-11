@@ -28,18 +28,16 @@ impl Default for SimpleLeveledCompactionOptions {
     }
 }
 
-pub(crate) fn can_compact_simple_leveled_compaction(
-    options: SimpleLeveledCompactionOptions,
-    sstables: &Arc<SSTables>
-) -> bool {
-    create_simple_level_compaction_task(options, sstables).is_some()
-}
 
 pub(crate) fn start_simple_leveled_compaction(
+    task: SimpleLeveledCompactionTask,
     options: &Arc<LsmOptions>,
     sstables: &Arc<SSTables>
 ) {
-    while let Some(compaction_task) = create_simple_level_compaction_task(options.simple_leveled_compaction_options, sstables) {
+    let mut next_compaction_task = Some(task);
+
+    while let Some(compaction_task) = next_compaction_task.take() {
+        next_compaction_task = create_simple_level_compaction_task(options.simple_leveled_compaction_options, sstables);
         let level_to_compact: usize = compaction_task.level;
 
         if level_to_compact > options.simple_leveled_compaction_options.max_levels {
@@ -88,7 +86,7 @@ pub(crate) fn start_simple_leveled_compaction(
     }
 }
 
-fn create_simple_level_compaction_task(
+pub(crate) fn create_simple_level_compaction_task(
     options: SimpleLeveledCompactionOptions,
     sstables: &Arc<SSTables>
 ) -> Option<SimpleLeveledCompactionTask> {
