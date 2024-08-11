@@ -1,3 +1,4 @@
+use std::cmp::max;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
@@ -26,16 +27,18 @@ impl SSTables {
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
         }
+        let (sstables, max_ssatble_id) = Self::load_sstables(&lsm_options)?;
+
         Ok(SSTables {
-            sstables: Self::load_sstables(&lsm_options)?,
-            next_memtable_id: AtomicUsize::new(0),
+            sstables,
+            next_memtable_id: AtomicUsize::new(max_ssatble_id + 1),
             lsm_options,
             n_current_levels: 0,
             path_buff: PathBuf::new(),
         })
     }
 
-    fn load_sstables(lsm_options: &Arc<LsmOptions>) -> Result<Vec<RwLock<Vec<Arc<SSTable>>>>, usize> {
+    fn load_sstables(lsm_options: &Arc<LsmOptions>) -> Result<(Vec<RwLock<Vec<Arc<SSTable>>>>, usize), usize> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
@@ -43,6 +46,7 @@ impl SSTables {
 
         let path = PathBuf::from(&lsm_options.base_path);
         let path = path.as_path();
+        let mut max_sstable_id: usize = 0;
 
         for file in fs::read_dir(path).expect("Failed to read base path") {
             let file = file.unwrap();
@@ -67,10 +71,12 @@ impl SSTables {
                 let lock: &RwLock<Vec<Arc<SSTable>>> = &levels[sstable.level as usize];
                 let write_result = lock.write();
                 write_result.unwrap().push(sstable);
+
+                max_sstable_id = max(max_sstable_id, sstable_id);
             }
         }
 
-        Ok(levels)
+        Ok((levels, max_sstable_id))
     }
 
     pub fn iter(&self, levels_id: &Vec<usize>) -> MergeIterator<SSTableIterator> {

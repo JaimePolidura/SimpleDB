@@ -141,7 +141,7 @@ impl SSTable {
     }
 
     pub fn get(&self, key: &Key) -> Option<bytes::Bytes> {
-        if self.first_key.lt(key) && self.last_key.gt(key) {
+        if self.first_key.gt(key) || self.last_key.lt(key) {
             return None;
         }
         if !self.bloom_filter.may_contain(utils::hash(key.as_bytes())) {

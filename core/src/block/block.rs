@@ -100,8 +100,6 @@ mod test {
         let decoded_block_to_test = Block::decode(&encoded, &Arc::new(LsmOptions::default()))
             .unwrap();
 
-        println!("Hola");
-
         assert_eq!(decoded_block_to_test.get_key_by_index(0).to_string(), String::from("Jaime"));
         assert_eq!(decoded_block_to_test.get_value_by_index(0), vec![1]);
         assert_eq!(decoded_block_to_test.get_key_by_index(1).to_string(), String::from("Javier"));

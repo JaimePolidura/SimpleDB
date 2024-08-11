@@ -81,7 +81,8 @@ impl Eq for Key {}
 
 impl Clone for Key {
     fn clone(&self) -> Self {
-        Key { string: self.string.clone() }
+        let cloned = self.string.clone();
+        Key { string: cloned }
     }
 }
 

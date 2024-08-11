@@ -42,8 +42,6 @@ pub(crate) fn start_tiered_compaction(
     options: &Arc<LsmOptions>,
     sstables: &Arc<SSTables>
 ) {
-    println!("Starting tiered compaction");
-
     match create_tiered_compaction_task(options.tiered_compaction_options, sstables) {
         TieredCompactionTask::AmplificationRatioTrigger => do_tiered_compaction(options, sstables, sstables.get_n_levels() - 1),
         TieredCompactionTask::SizeRatioTrigger(level_id) => do_tiered_compaction(options, sstables, level_id),

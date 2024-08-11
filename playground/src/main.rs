@@ -13,6 +13,17 @@ fn main() {
         .compaction_task_frequency_ms(10)
         .build());
 
+    // write(&mut lsm);
+    read(&mut lsm);
+}
+
+fn read(lsm: &mut lsm::Lsm) {
+    let value = lsm.get(&key::new("AAB"));
+    if value.is_some() {
+    }
+}
+
+fn write(lsm: &mut lsm::Lsm)  {
     loop {
         let value = next_value();
         let key = next_key();
