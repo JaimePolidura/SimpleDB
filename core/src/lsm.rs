@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use crate::compaction::compaction::Compaction;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
+use crate::manifest::manifest::Manifest;
 use crate::memtables::memtable::{MemTable, MemtableIterator};
 use crate::memtables::memtables::Memtables;
 use crate::sst::sstable_builder::SSTableBuilder;
@@ -10,27 +10,29 @@ use crate::sst::ssttable_iterator::SSTableIterator;
 use crate::utils::merge_iterator::MergeIterator;
 use crate::utils::storage_iterator::StorageIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
+use std::sync::Arc;
 
 pub struct Lsm {
     memtables: Memtables,
     sstables: Arc<SSTables>,
     compaction: Arc<Compaction>,
+    manifest: Arc<Manifest>,
 
     options: Arc<LsmOptions>,
 }
 
 pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
-    let sstables = SSTables::open(lsm_options.clone());
-    if sstables.is_err() {
-        panic!("Failed to read SSTable with ID ?{}", sstables.err().unwrap());
-    }
-    let sstables = Arc::new(sstables.unwrap());
+    let manifest = Arc::new(Manifest::new(lsm_options.clone())
+        .expect("Cannot open/create Manifest file"));
+    let sstables = Arc::new(SSTables::open(lsm_options.clone(), manifest.clone())
+        .expect("Failed to read SSTable"));
 
     Lsm {
-        options: lsm_options.clone(),
+        compaction: Compaction::new(lsm_options.clone(), sstables.clone()),
         memtables: Memtables::new(lsm_options.clone()),
+        options: lsm_options.clone(),
         sstables: sstables.clone(),
-        compaction: Compaction::new(lsm_options, sstables.clone())
+        manifest,
     }
 }
 

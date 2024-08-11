@@ -1,6 +1,5 @@
 mod memtables;
 mod utils;
-mod block;
 mod sst;
 mod compaction;
 mod manifest;

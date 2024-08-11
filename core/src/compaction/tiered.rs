@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use bytes::Bytes;
+use serde::{Deserialize, Serialize};
 use crate::lsm_options::LsmOptions;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
@@ -12,7 +13,8 @@ pub struct TieredCompactionOptions {
     pub min_levels_trigger_size_ratio: usize,
 }
 
-enum TieredCompactionTask {
+#[derive(Serialize, Deserialize)]
+pub enum TieredCompactionTask {
     None,
     AmplificationRatioTrigger,
     SizeRatioTrigger(usize)

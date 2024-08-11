@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use bytes::Bytes;
-use crate::block::block::Block;
+use crate::sst::block::block::Block;
 use crate::key::Key;
 use crate::utils::storage_iterator::StorageIterator;
 
@@ -60,8 +60,8 @@ impl StorageIterator for BlockIterator {
 mod test {
     use std::sync::Arc;
     use bytes::Bytes;
-    use crate::block::block_builder::BlockBuilder;
-    use crate::block::block_iterator::BlockIterator;
+    use crate::sst::block::block_builder::BlockBuilder;
+    use crate::sst::block::block_iterator::BlockIterator;
     use crate::key;
     use crate::key::Key;
     use crate::lsm_options::LsmOptions;

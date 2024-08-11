@@ -11,10 +11,12 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
+use crate::manifest::manifest::{Manifest, ManifestRecord, MemtableFlushManifestRecord};
 
 pub struct SSTables {
     //For each level one index entry
     sstables: Vec<RwLock<Vec<Arc<SSTable>>>>,
+    manifest: Arc<Manifest>,
     next_memtable_id: AtomicUsize,
     lsm_options: Arc<LsmOptions>,
     n_current_levels: usize,
@@ -22,7 +24,7 @@ pub struct SSTables {
 }
 
 impl SSTables {
-    pub fn open(lsm_options: Arc<LsmOptions>) -> Result<SSTables, usize> {
+    pub fn open(lsm_options: Arc<LsmOptions>, manifest: Arc<Manifest>) -> Result<SSTables, usize> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
@@ -30,11 +32,12 @@ impl SSTables {
         let (sstables, max_ssatble_id) = Self::load_sstables(&lsm_options)?;
 
         Ok(SSTables {
-            sstables,
             next_memtable_id: AtomicUsize::new(max_ssatble_id + 1),
-            lsm_options,
-            n_current_levels: 0,
             path_buff: PathBuf::new(),
+            n_current_levels: 0,
+            lsm_options,
+            sstables,
+            manifest,
         })
     }
 
@@ -200,6 +203,11 @@ impl SSTables {
 
     pub fn flush_to_disk(&self, sstable_builder: SSTableBuilder) -> Result<usize, ()> {
         let sstable_id: usize = self.next_memtable_id.fetch_add(1, Relaxed);
+
+        self.manifest.append_record(ManifestRecord::MemtableFlush(MemtableFlushManifestRecord{
+            memtable_id: sstable_builder.get_memtable_id().unwrap(),
+            sstable_id
+        }));
 
         //SSTable file path
         let mut path_buff = PathBuf::from(self.lsm_options.base_path.to_string());

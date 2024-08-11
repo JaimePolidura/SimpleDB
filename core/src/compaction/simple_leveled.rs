@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use bytes::Bytes;
+use serde::{Deserialize, Serialize};
 use crate::lsm_options::LsmOptions;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
@@ -10,6 +11,11 @@ pub struct SimpleLeveledCompactionOptions {
     pub level0_file_num_compaction_trigger: usize,
     pub size_ratio_percent: usize,
     pub max_levels: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SimpleLeveledCompactionTask {
+    level: usize,
 }
 
 impl Default for SimpleLeveledCompactionOptions {
@@ -26,14 +32,16 @@ pub(crate) fn can_compact_simple_leveled_compaction(
     options: SimpleLeveledCompactionOptions,
     sstables: &Arc<SSTables>
 ) -> bool {
-    get_level_to_compact(options, sstables).is_some()
+    create_simple_level_compaction_task(options, sstables).is_some()
 }
 
 pub(crate) fn start_simple_leveled_compaction(
     options: &Arc<LsmOptions>,
     sstables: &Arc<SSTables>
 ) {
-    while let Some(level_to_compact) = get_level_to_compact(options.simple_leveled_compaction_options, sstables) {
+    while let Some(compaction_task) = create_simple_level_compaction_task(options.simple_leveled_compaction_options, sstables) {
+        let level_to_compact: usize = compaction_task.level;
+
         if level_to_compact > options.simple_leveled_compaction_options.max_levels {
             break;
         }
@@ -80,13 +88,13 @@ pub(crate) fn start_simple_leveled_compaction(
     }
 }
 
-fn get_level_to_compact(
+fn create_simple_level_compaction_task(
     options: SimpleLeveledCompactionOptions,
     sstables: &Arc<SSTables>
-) -> Option<usize> {
+) -> Option<SimpleLeveledCompactionTask> {
     //Trigger l0 to l1 compaction
     if sstables.get_n_sstables(0) > options.level0_file_num_compaction_trigger {
-        return Some(0);
+        return Some(SimpleLeveledCompactionTask{level: 0});
     }
 
     for current_level in 1..sstables.get_n_levels() {
@@ -95,7 +103,7 @@ fn get_level_to_compact(
         let n_sstables_prev_level = sstables.get_n_sstables(prev_level);
 
         if n_sstables_prev_level / n_sstables_current_level < options.size_ratio_percent {
-            return Some(prev_level);
+            return Some(SimpleLeveledCompactionTask{level: prev_level});
         }
     }
 

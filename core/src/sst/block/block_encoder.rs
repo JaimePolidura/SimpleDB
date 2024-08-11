@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use bytes::BufMut;
-use crate::block::block::{Block, BLOCK_FOOTER_LENGTH, NOT_COMPRESSED, PREFIX_COMPRESSED};
+use crate::sst::block::block::{Block, BLOCK_FOOTER_LENGTH, NOT_COMPRESSED, PREFIX_COMPRESSED};
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::utils::utils;

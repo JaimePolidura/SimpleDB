@@ -1,6 +1,6 @@
 use std::sync::Arc;
-use crate::block::block::Block;
-use crate::block::block_iterator::BlockIterator;
+use crate::sst::block::block::Block;
+use crate::sst::block::block_iterator::BlockIterator;
 use crate::key::Key;
 use crate::sst::block_metadata::BlockMetadata;
 use crate::sst::sstable::SSTable;
@@ -116,7 +116,7 @@ mod test {
     use std::sync::{Arc, Mutex};
     use std::sync::atomic::AtomicU8;
     use bytes::Bytes;
-    use crate::block::block_builder::BlockBuilder;
+    use crate::sst::block::block_builder::BlockBuilder;
     use crate::key;
     use crate::key::Key;
     use crate::lsm_options::LsmOptions;

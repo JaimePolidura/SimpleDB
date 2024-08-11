@@ -1,9 +1,9 @@
-use crate::block::block::Block;
+use crate::sst::block::block::Block;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::sst::block_cache::BlockCache;
 use crate::utils::bloom_filter::BloomFilter;
-use crate::utils::lsm_file::LsmFile;
+use crate::utils::lsm_file::{LsmFile, LsmFileMode};
 use crate::utils::utils;
 use bytes::BufMut;
 use std::path::Path;
@@ -59,7 +59,7 @@ impl SSTable {
         path: &Path,
         lsm_options: Arc<LsmOptions>
     ) -> Result<Arc<SSTable>, ()> {
-        let sst_file = LsmFile::open(path)?;
+        let sst_file = LsmFile::open(path, LsmFileMode::RandomWrites)?;
         let sst_bytes = sst_file.read_all()?;
 
         Self::decode(&sst_bytes, id, lsm_options, sst_file)

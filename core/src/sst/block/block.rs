@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use bytes::Bytes;
-use crate::block::block_decoder::decode_block;
-use crate::block::block_encoder::encode_block;
+use crate::sst::block::block_decoder::decode_block;
+use crate::sst::block::block_encoder::encode_block;
 use crate::key;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
@@ -78,8 +78,8 @@ impl Block {
 mod test {
     use std::sync::Arc;
     use bytes::Bytes;
-    use crate::block::block::Block;
-    use crate::block::block_builder::BlockBuilder;
+    use crate::sst::block::block::Block;
+    use crate::sst::block::block_builder::BlockBuilder;
     use crate::key;
     use crate::lsm_options::LsmOptions;
 

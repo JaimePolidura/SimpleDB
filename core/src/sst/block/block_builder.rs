@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use bytes::{BufMut, Bytes};
-use crate::block::block::{Block, BLOCK_FOOTER_LENGTH};
+use crate::sst::block::block::{Block, BLOCK_FOOTER_LENGTH};
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::utils::utils;
@@ -74,7 +74,7 @@ impl BlockBuilder {
 #[cfg(test)]
 mod test {
     use std::sync::Arc;
-    use crate::block::block_builder::BlockBuilder;
+    use crate::sst::block::block_builder::BlockBuilder;
     use crate::lsm_options::LsmOptions;
     use bytes::Bytes;
     use crate::key;

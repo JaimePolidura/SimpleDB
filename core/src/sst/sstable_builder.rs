@@ -1,13 +1,13 @@
 use std::path::Path;
 use std::sync::Arc;
 use bytes::{BufMut, Bytes};
-use crate::block::block_builder::BlockBuilder;
+use crate::sst::block::block_builder::BlockBuilder;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::sst::block_metadata::BlockMetadata;
 use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
 use crate::utils::bloom_filter::BloomFilter;
-use crate::utils::lsm_file::LsmFile;
+use crate::utils::lsm_file::{LsmFile, LsmFileMode};
 use crate::utils::utils;
 
 pub struct SSTableBuilder {
@@ -25,6 +25,8 @@ pub struct SSTableBuilder {
 
     lsm_options: Arc<LsmOptions>,
     level: u32,
+
+    memtable_id: Option<usize>,
 }
 
 impl SSTableBuilder {
@@ -37,10 +39,15 @@ impl SSTableBuilder {
             builded_encoded_blocks: Vec::new(),
             first_key_current_block: None,
             last_key_current_block: None,
+            memtable_id: None,
             first_key: None,
             last_key: None,
             lsm_options,
         }
+    }
+
+    pub fn set_memtable_id(&mut self, memtable_id: usize) {
+        self.memtable_id = Some(memtable_id);
     }
 
     pub fn add_entry(&mut self, key: Key, value: Bytes) {
@@ -64,6 +71,10 @@ impl SSTableBuilder {
 
     pub fn n_entries(&self) -> usize {
         self.key_hashes.len()
+    }
+
+    pub fn get_memtable_id(&self) -> Option<usize> {
+        self.memtable_id
     }
 
     pub fn build(
@@ -92,7 +103,7 @@ impl SSTableBuilder {
         encoded.put_u32_le(bloom_offset as u32);
         encoded.put_u32_le(meta_offset as u32);
 
-        match LsmFile::create(path, &encoded) {
+        match LsmFile::create(path, &encoded, LsmFileMode::ReadOnly) {
             Ok(lsm_file) => Ok(SSTable::new(
                 self.builded_block_metadata, self.lsm_options, bloom_filter, self.first_key.unwrap(),
                 self.last_key.unwrap(), lsm_file, self.level, id, SSTABLE_ACTIVE

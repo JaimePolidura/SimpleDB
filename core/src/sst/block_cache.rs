@@ -1,6 +1,6 @@
 use std::cmp::{max, min};
 use std::sync::Arc;
-use crate::block::block::Block;
+use crate::sst::block::block::Block;
 use crate::lsm_options::LsmOptions;
 
 pub struct BlockCache {
@@ -104,7 +104,7 @@ impl BlockCacheEntry {
 
 #[cfg(test)]
 mod test {
-    use crate::block::block_builder::BlockBuilder;
+    use crate::sst::block::block_builder::BlockBuilder;
     use crate::sst::block_cache::BlockCache;
     use crate::lsm_options::LsmOptions;
     use std::sync::Arc;

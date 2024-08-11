@@ -1,20 +1,74 @@
-use std::fs::File;
-use std::io::{Read, SeekFrom, Write};
+use crate::utils::lsm_file::LsmFileMode::RandomWrites;
+use std::cmp::PartialEq;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
 use std::os::windows::fs::FileExt;
 use std::path::{Path, PathBuf};
+
+pub enum LsmFileMode {
+    RandomWrites,
+    AppendOnly,
+    ReadOnly
+}
 
 pub struct LsmFile {
     file: Option<File>,
     path: Option<PathBuf>,
-    size_bytes: usize
+
+    size_bytes: usize,
+    mode: LsmFileMode,
+}
+
+impl PartialEq for LsmFileMode {
+    fn eq(&self, other: &Self) -> bool {
+        self.eq(other)
+    }
 }
 
 impl LsmFile {
     pub fn empty() -> LsmFile {
         LsmFile {
+            mode: RandomWrites,
+            size_bytes: 0,
             path: None,
             file: None,
-            size_bytes: 0
+        }
+    }
+
+    pub fn open(path: &Path, mode: LsmFileMode) -> Result<LsmFile, ()> {
+        let is_append_only = mode == LsmFileMode::AppendOnly;
+        let is_read_only = mode == LsmFileMode::ReadOnly;
+        let file: File = OpenOptions::new()
+            .append(is_append_only)
+            .write(!is_read_only)
+            .read(is_read_only)
+            .open(path)
+            .map_err(|e| ())?;
+        let metadata = file.metadata().map_err(|e| ())?;
+
+        Ok(LsmFile{
+            size_bytes: metadata.len() as usize,
+            path: Some(path.to_path_buf()),
+            file: Some(file),
+            mode,
+        })
+    }
+
+    pub fn create(
+        path: &Path,
+        data: &Vec<u8>,
+        mode: LsmFileMode
+    ) -> Result<LsmFile, ()> {
+        std::fs::write(path, data).expect("Cannot create file");
+
+        match File::open(path) {
+            Ok(file) => Ok(LsmFile {
+                path: Some(path.to_path_buf()),
+                size_bytes: data.len(),
+                file: Some(file),
+                mode
+            }),
+            Err(_) => Err(())
         }
     }
 
@@ -29,27 +83,10 @@ impl LsmFile {
         Ok(buff)
     }
 
-    pub fn open(path: &Path) -> Result<LsmFile, ()> {
-        let file = File::open(path).map_err(|e| ())?;
-        let metadata = file.metadata().map_err(|e| ())?;
-
-        Ok(LsmFile{
-            file: Some(file),
-            path: Some(path.to_path_buf()),
-            size_bytes: metadata.len() as usize
-        })
-    }
-
-    pub fn create(
-        path: &Path,
-        data: &Vec<u8>
-    ) -> Result<LsmFile, ()> {
-        std::fs::write(path, data).expect("Cannot create file");
-
-        match File::open(path) {
-            Ok(file) => Ok(LsmFile { size_bytes: data.len(), file: Some(file), path: Some(path.to_path_buf()) }),
-            Err(_) => Err(())
-        }
+    pub fn clear(&mut self) -> Result<(), ()> {
+        self.size_bytes = 0;
+        self.file.as_mut().unwrap().set_len(0)
+            .map_err(|e| ())
     }
 
     pub fn delete(&self)  -> Result<(), ()> {
@@ -74,7 +111,7 @@ impl LsmFile {
             .map_err(|e| ())
     }
 
-    pub fn write_replace(&mut self, bytes: &[u8]) -> Result<(), ()> {
+    pub fn write(&mut self, bytes: &[u8]) -> Result<(), ()> {
         self.file
             .as_mut()
             .unwrap()

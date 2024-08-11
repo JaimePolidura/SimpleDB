@@ -1,8 +1,8 @@
 use std::sync::Arc;
 use bytes::BufMut;
 use block::{NOT_COMPRESSED, PREFIX_COMPRESSED};
-use crate::block::block;
-use crate::block::block::Block;
+use crate::sst::block::block;
+use crate::sst::block::block::Block;
 use crate::key;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
