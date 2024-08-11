@@ -42,6 +42,8 @@ pub(crate) fn start_tiered_compaction(
     options: &Arc<LsmOptions>,
     sstables: &Arc<SSTables>
 ) {
+    println!("Starting tiered compaction");
+
     match create_tiered_compaction_task(options.tiered_compaction_options, sstables) {
         TieredCompactionTask::AmplificationRatioTrigger => do_tiered_compaction(options, sstables, sstables.get_n_levels() - 1),
         TieredCompactionTask::SizeRatioTrigger(level_id) => do_tiered_compaction(options, sstables, level_id),
@@ -56,12 +58,14 @@ fn do_tiered_compaction(
 ) {
     let new_level = max_level_id_to_compact + 1;
     let levels_id_to_compact: Vec<usize> = (0..max_level_id_to_compact).into_iter().collect();
-    let iterator = sstables.iter(&levels_id_to_compact);
+    let mut iterator = sstables.iter(&levels_id_to_compact);
     let mut new_sstable_builder = Some(SSTableBuilder::new(
         options.clone(), new_level as u32
     ));
 
     while iterator.has_next() {
+        iterator.next();
+
         new_sstable_builder.as_mut().unwrap().add_entry(
             iterator.key().clone(),
             Bytes::copy_from_slice(iterator.value())
@@ -72,6 +76,11 @@ fn do_tiered_compaction(
                 .unwrap();
             new_sstable_builder = Some(SSTableBuilder::new(options.clone(), new_level as u32));
         }
+    }
+
+    if new_sstable_builder.as_ref().unwrap().n_entries() > 0 {
+        sstables.flush_to_disk(new_sstable_builder.take().unwrap())
+            .unwrap();
     }
 
     levels_id_to_compact.iter()

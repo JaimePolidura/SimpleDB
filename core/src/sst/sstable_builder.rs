@@ -62,6 +62,10 @@ impl SSTableBuilder {
         };
     }
 
+    pub fn n_entries(&self) -> usize {
+        self.key_hashes.len()
+    }
+
     pub fn build(
         mut self,
         id: usize,

@@ -52,12 +52,13 @@ impl LsmFile {
         }
     }
 
-    pub fn delete(&self) {
+    pub fn delete(&self)  -> Result<(), ()> {
         match &self.file {
             Some(_) => {
-                std::fs::remove_file(self.path.as_ref().unwrap().as_path()).expect("Cannot delete file");
+                std::fs::remove_file(self.path.as_ref().unwrap().as_path())
+                    .map_err(|e| ())
             },
-            None => {},
+            None => Ok(()),
         }
     }
 
@@ -65,11 +66,12 @@ impl LsmFile {
         self.size_bytes
     }
 
-    pub fn fsync(&self) {
+    pub fn fsync(&self) -> Result<(), ()> {
         self.file
             .as_ref()
             .unwrap()
-            .sync_all();
+            .sync_all()
+            .map_err(|e| ())
     }
 
     pub fn write_replace(&mut self, bytes: &[u8]) -> Result<(), ()> {

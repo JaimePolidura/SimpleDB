@@ -103,8 +103,9 @@ impl SSTable {
         block_metadata.get(0).unwrap().first_key.clone()
     }
 
-    pub fn delete(&self) {
+    pub fn delete(&self) -> Result<(), ()> {
         self.state.store(SSTABLE_DELETED, Release);
+        self.file.delete()
     }
 
     pub fn size(&self) -> usize {

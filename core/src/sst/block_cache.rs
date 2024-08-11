@@ -10,7 +10,7 @@ pub struct BlockCache {
 struct BlockCacheEntry {
     block: Arc<Block>,
     block_id: usize,
-    touched: u8,
+    touched: i8,
 }
 
 impl BlockCache {

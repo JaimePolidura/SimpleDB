@@ -1,17 +1,15 @@
-use std::fs;
-use std::fs::DirEntry;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::Relaxed;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
-use crate::sst::sstable::SSTable;
+use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables_files::{extract_sstable_id_from_file, is_sstable_file, to_sstable_file_name};
 use crate::sst::ssttable_iterator::SSTableIterator;
-use crate::utils::lsm_file::LsmFile;
 use crate::utils::merge_iterator::MergeIterator;
+use std::fs;
+use std::path::PathBuf;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::{Acquire, Relaxed};
+use std::sync::{Arc, RwLock};
 
 pub struct SSTables {
     //For each level one index entry
@@ -58,14 +56,17 @@ impl SSTables {
                     sstable_id, file.path().as_path(), lsm_options.clone()
                 );
 
-                if sstable_read_result.is_ok() {
-                    let sstable = sstable_read_result.unwrap();
-                    let lock: &RwLock<Vec<Arc<SSTable>>> = &levels[sstable.level as usize];
-                    let write_result = lock.write();
-                    write_result.unwrap().push(sstable);
-                } else {
+                if sstable_read_result.is_err() {
                     return Err(sstable_id);
                 }
+                let sstable = sstable_read_result.unwrap();
+                if sstable.state.load(Acquire) != SSTABLE_ACTIVE {
+                    sstable.delete();
+                }
+
+                let lock: &RwLock<Vec<Arc<SSTable>>> = &levels[sstable.level as usize];
+                let write_result = lock.write();
+                write_result.unwrap().push(sstable);
             }
         }
 
@@ -174,7 +175,7 @@ impl SSTables {
         match self.sstables.get(level) {
             Some(sstables) => sstables.read().unwrap()
                 .iter()
-                .map(|it| it.level as usize)
+                .map(|it| it.id as usize)
                 .collect(),
             None => Vec::new(),
         }
