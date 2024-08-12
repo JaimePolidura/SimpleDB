@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
-use crate::manifest::manifest::{Manifest, ManifestRecord, MemtableFlushManifestRecord};
+use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 
 pub struct SSTables {
     //For each level one index entry
@@ -204,10 +204,12 @@ impl SSTables {
     pub fn flush_to_disk(&self, sstable_builder: SSTableBuilder) -> Result<usize, ()> {
         let sstable_id: usize = self.next_memtable_id.fetch_add(1, Relaxed);
 
-        self.manifest.append_record(ManifestRecord::MemtableFlush(MemtableFlushManifestRecord{
-            memtable_id: sstable_builder.get_memtable_id().unwrap(),
-            sstable_id
-        }));
+        let id = self.manifest.append_operation(ManifestOperationContent::MemtableFlush(
+            MemtableFlushManifestOperation {
+                memtable_id: sstable_builder.get_memtable_id().unwrap(),
+                sstable_id
+            }
+        ))?;
 
         //SSTable file path
         let mut path_buff = PathBuf::from(self.lsm_options.base_path.to_string());
@@ -217,6 +219,8 @@ impl SSTables {
             sstable_id,
             path_buff.as_path(),
         );
+
+        self.manifest.mark_as_completed(id);
 
         match sstable_build_result {
             Ok(sstable_built) => {
