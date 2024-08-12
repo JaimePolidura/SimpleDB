@@ -1,4 +1,4 @@
-use crate::compaction::compaction::Compaction;
+use crate::compaction::compaction::{Compaction, CompactionTask};
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
@@ -27,13 +27,18 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
     let sstables = Arc::new(SSTables::open(lsm_options.clone(), manifest.clone())
         .expect("Failed to read SSTable"));
 
-    Lsm {
+    let mut lsm = Lsm {
         compaction: Compaction::new(lsm_options.clone(), sstables.clone(), manifest.clone()),
         memtables: Memtables::new(lsm_options.clone()),
         options: lsm_options.clone(),
         sstables: sstables.clone(),
         manifest,
-    }
+    };
+
+    lsm.recover_from_manifest();
+    lsm.compaction.start_compaction_thread();
+
+    lsm
 }
 
 impl Lsm {
@@ -69,5 +74,32 @@ impl Lsm {
         let sstable_builder_ready: SSTableBuilder = MemTable::to_sst(self.options.clone(), memtable.clone());
         self.sstables.flush_memtable_to_disk(sstable_builder_ready)?;
         Ok(())
+    }
+
+    //TODO If lsm engine crash during recovering from manifest, we will likely lose some operations
+    fn recover_from_manifest(&mut self) {
+        let manifest_operations = self.manifest.read_uncompleted_operations()
+            .expect("Cannot read Manifest");
+
+        for manifest_operation in manifest_operations {
+            match manifest_operation {
+                ManifestOperationContent::MemtableFlush(memtable_flush) => self.restart_memtable_flush(memtable_flush),
+                ManifestOperationContent::Compaction(compaction_task) => self.restart_compaction(compaction_task),
+                _ => {}
+            };
+        }
+    }
+
+    fn restart_compaction(&self, compaction: CompactionTask) {
+        self.compaction.compact(compaction);
+    }
+
+    fn restart_memtable_flush(&mut self, memtable_flush: MemtableFlushManifestOperation) {
+        //If it contains the SSTable, it means the memtable flush was completed before marking the operation as completed
+        if !self.sstables.contains_sstable_id(memtable_flush.sstable_id) {
+            let memtable_to_flush = self.memtables.get_memtable_to_flush(memtable_flush.memtable_id)
+                .unwrap();
+            self.flush_memtable(memtable_to_flush);
+        }
     }
 }

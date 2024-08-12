@@ -139,6 +139,19 @@ impl SSTables {
         };
     }
 
+    pub fn contains_sstable_id(&self, sstable_id: usize) -> bool {
+        for lock_sstables_level in &self.sstables {
+            let read_lock_result = lock_sstables_level.read().unwrap();
+            for sstable_in_level in read_lock_result.iter() {
+                if sstable_in_level.id == sstable_id {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
     pub fn delete_sstables(&self, level: usize, sstables_id: Vec<usize>) {
         match self.sstables.get(level) {
             Some(sstables_lock) => {

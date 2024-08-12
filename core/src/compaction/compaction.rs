@@ -10,6 +10,12 @@ use crate::manifest::manifest::{Manifest, ManifestOperationContent};
 pub struct Compaction {
     lsm_options: Arc<LsmOptions>,
     sstables: Arc<SSTables>,
+    manifest: Arc<Manifest>,
+}
+
+struct CompactionThread {
+    lsm_options: Arc<LsmOptions>,
+    sstables: Arc<SSTables>,
     manifest: Arc<Manifest>
 }
 
@@ -25,21 +31,39 @@ impl Compaction {
         sstables: Arc<SSTables>,
         manifest: Arc<Manifest>,
     ) -> Arc<Compaction> {
-        let compaction = Arc::new(Compaction {
+        Arc::new(Compaction {
             lsm_options: lsm_options.clone(),
             sstables: sstables.clone(),
-            manifest: manifest.clone()
-        });
-
-        let compaction_cloned = compaction.clone();
-        std::thread::spawn(move || {
-            compaction_cloned.compaction_task();
-        });
-
-        compaction
+            manifest: manifest.clone(),
+        })
     }
 
-    fn compaction_task(&self) {
+    pub fn start_compaction_thread(&self) {
+        let compaction_thread = CompactionThread{
+            lsm_options: self.lsm_options.clone(),
+            sstables: self.sstables.clone(),
+            manifest: self.manifest.clone(),
+        };
+
+        std::thread::spawn(move || {
+            compaction_thread.start_compactions();
+        });
+    }
+
+    pub fn compact(&self, compaction_task: CompactionTask) {
+        match compaction_task {
+            CompactionTask::SimpleLeveled(simpleLeveledTask) => start_simple_leveled_compaction(
+                simpleLeveledTask, &self.lsm_options, &self.sstables
+            ),
+            CompactionTask::Tiered(tieredTask) => start_tiered_compaction(
+                tieredTask, &self.lsm_options, &self.sstables
+            ),
+        }
+    }
+}
+
+impl CompactionThread {
+    fn start_compactions(&self) -> ! {
         loop {
             std::thread::sleep(Duration::from_millis(self.lsm_options.compaction_task_frequency_ms as u64));
 
@@ -76,7 +100,7 @@ impl Compaction {
         None
     }
 
-    pub fn compact(&self, compaction_task: CompactionTask) {
+    fn compact(&self, compaction_task: CompactionTask) {
         match compaction_task {
             CompactionTask::SimpleLeveled(simpleLeveledTask) => start_simple_leveled_compaction(
                 simpleLeveledTask, &self.lsm_options, &self.sstables

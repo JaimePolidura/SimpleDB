@@ -79,6 +79,25 @@ impl Memtables {
         }
     }
 
+    pub fn get_memtable_to_flush(&mut self, memtable_id: usize) -> Option<Arc<MemTable>> {
+        unsafe {
+            let current_memtable = (*self.current_memtable.load(Acquire)).clone();
+            if current_memtable.get_id() == memtable_id {
+                self.set_current_memtable_as_inactive();
+            }
+
+            let mut lock_result = self.inactive_memtables.load(Acquire).as_mut()?.write();
+            let inactive_memtables = lock_result.as_mut().unwrap();
+
+            match inactive_memtables.iter().position(|item| item.get_id() == memtable_id) {
+                Some(inactive_memtable_index) => {
+                    Some(inactive_memtables.remove(inactive_memtable_index))
+                },
+                None => None
+            }
+        }
+    }
+
     fn find_value_in_inactive_memtables(&self, key: &Key) -> Option<bytes::Bytes> {
         unsafe {
             let inactive_memtables_rw_lock = &*self.inactive_memtables.load(Acquire);
@@ -95,6 +114,9 @@ impl Memtables {
         }
     }
 
+    //Replaces current_memtable with a new one, and moves old current_memtable to self::inactive_memtables vector
+    //Returns a memtable to flush
+    //This might be called by concurrently, it might fail returing None
     fn set_current_memtable_as_inactive(&mut self) -> Option<Arc<MemTable>> {
         let new_memtable_id = self.next_memtable_id.fetch_add(1, Relaxed);
         let new_memtable = Box::into_raw(Box::new(Arc::new(MemTable::new(&self.options, new_memtable_id))));
@@ -106,10 +128,11 @@ impl Memtables {
         }
     }
 
+    //Inserts prev_memtable to self::inactive_memtables vector
+    //When the list is full, it returns an option with a memtable to flush
     unsafe fn move_current_memtable_inactive_list(&mut self, prev_memtable: * mut Arc<MemTable>) -> Option<Arc<MemTable>> {
         let mut memtables_rw_result = self.inactive_memtables.load(Acquire)
-            .as_mut()
-            .unwrap()
+            .as_mut()?
             .write();
         let memtables = memtables_rw_result
             .as_mut()
@@ -118,7 +141,7 @@ impl Memtables {
         memtables.push((*prev_memtable).clone());
 
         if memtables.len() > self.options.max_memtables_inactive {
-            return Some(memtables.pop().unwrap());
+            return Some(memtables.pop()?);
         }
 
         None
