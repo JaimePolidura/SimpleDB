@@ -1,7 +1,7 @@
 use crate::compaction::compaction::Compaction;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
-use crate::manifest::manifest::Manifest;
+use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::memtables::memtable::{MemTable, MemtableIterator};
 use crate::memtables::memtables::Memtables;
 use crate::sst::sstable_builder::SSTableBuilder;
@@ -28,7 +28,7 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
         .expect("Failed to read SSTable"));
 
     Lsm {
-        compaction: Compaction::new(lsm_options.clone(), sstables.clone()),
+        compaction: Compaction::new(lsm_options.clone(), sstables.clone(), manifest.clone()),
         memtables: Memtables::new(lsm_options.clone()),
         options: lsm_options.clone(),
         sstables: sstables.clone(),
@@ -66,8 +66,8 @@ impl Lsm {
     }
 
     fn flush_memtable(&mut self, memtable: Arc<MemTable>) -> Result<(), ()> {
-        let sstable_builder_ready: SSTableBuilder = MemTable::to_sst(self.options.clone(), memtable);
-        self.sstables.flush_to_disk(sstable_builder_ready)?;
+        let sstable_builder_ready: SSTableBuilder = MemTable::to_sst(self.options.clone(), memtable.clone());
+        self.sstables.flush_memtable_to_disk(sstable_builder_ready)?;
         Ok(())
     }
 }

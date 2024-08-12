@@ -13,8 +13,8 @@ fn main() {
         .compaction_task_frequency_ms(10)
         .build());
 
-    // write(&mut lsm);
-    read(&mut lsm);
+    write(&mut lsm);
+    // read(&mut lsm);
 }
 
 fn read(lsm: &mut lsm::Lsm) {

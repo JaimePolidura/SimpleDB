@@ -13,7 +13,7 @@ pub struct TieredCompactionOptions {
     pub min_levels_trigger_size_ratio: usize,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Copy, Clone)]
 pub enum TieredCompactionTask {
     AmplificationRatioTrigger,
     SizeRatioTrigger(usize)

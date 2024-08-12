@@ -17,7 +17,7 @@ pub struct SSTables {
     //For each level one index entry
     sstables: Vec<RwLock<Vec<Arc<SSTable>>>>,
     manifest: Arc<Manifest>,
-    next_memtable_id: AtomicUsize,
+    next_sstable_id: AtomicUsize,
     lsm_options: Arc<LsmOptions>,
     n_current_levels: usize,
     path_buff: PathBuf
@@ -32,7 +32,7 @@ impl SSTables {
         let (sstables, max_ssatble_id) = Self::load_sstables(&lsm_options)?;
 
         Ok(SSTables {
-            next_memtable_id: AtomicUsize::new(max_ssatble_id + 1),
+            next_sstable_id: AtomicUsize::new(max_ssatble_id + 1),
             path_buff: PathBuf::new(),
             n_current_levels: 0,
             lsm_options,
@@ -201,26 +201,32 @@ impl SSTables {
         self.n_current_levels
     }
 
+    pub fn flush_memtable_to_disk(&self, sstable_builder: SSTableBuilder) -> Result<usize, ()> {
+        let sstable_id: usize = self.next_sstable_id.fetch_add(1, Relaxed);
+        let flush_operation = self.manifest.append_operation(ManifestOperationContent::MemtableFlush(MemtableFlushManifestOperation{
+            memtable_id: sstable_builder.get_memtable_id().unwrap(),
+            sstable_id,
+        }));
+
+        let flush_result = self.do_flush_to_disk(sstable_builder, sstable_id);
+
+        if flush_operation.is_ok() {
+            self.manifest.mark_as_completed(flush_operation?);
+        }
+
+        flush_result
+    }
+
     pub fn flush_to_disk(&self, sstable_builder: SSTableBuilder) -> Result<usize, ()> {
-        let sstable_id: usize = self.next_memtable_id.fetch_add(1, Relaxed);
+        let sstable_id: usize = self.next_sstable_id.fetch_add(1, Relaxed);
+        self.do_flush_to_disk(sstable_builder, sstable_id)
+    }
 
-        let id = self.manifest.append_operation(ManifestOperationContent::MemtableFlush(
-            MemtableFlushManifestOperation {
-                memtable_id: sstable_builder.get_memtable_id().unwrap(),
-                sstable_id
-            }
-        ))?;
-
-        //SSTable file path
-        let mut path_buff = PathBuf::from(self.lsm_options.base_path.to_string());
-        path_buff.push(to_sstable_file_name(sstable_id));
-
+    fn do_flush_to_disk(&self, sstable_builder: SSTableBuilder, sstable_id: usize) -> Result<usize, ()> {
         let sstable_build_result = sstable_builder.build(
             sstable_id,
-            path_buff.as_path(),
+            self.get_sstable_path(sstable_id).as_path(),
         );
-
-        self.manifest.mark_as_completed(id);
 
         match sstable_build_result {
             Ok(sstable_built) => {
@@ -232,6 +238,13 @@ impl SSTables {
             },
             Err(_) => Err(()),
         }
+    }
+
+    fn get_sstable_path(&self, sstable_id: usize) -> PathBuf {
+        //SSTable file path
+        let mut path_buff = PathBuf::from(self.lsm_options.base_path.to_string());
+        path_buff.push(to_sstable_file_name(sstable_id));
+        path_buff
     }
 
     pub fn calculate_space_amplificacion(&self) -> usize {

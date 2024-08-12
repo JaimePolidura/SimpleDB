@@ -1,5 +1,4 @@
 use crate::utils::lsm_file::LsmFileMode::RandomWrites;
-use std::cmp::PartialEq;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::windows::fs::FileExt;
@@ -19,12 +18,6 @@ pub struct LsmFile {
     mode: LsmFileMode,
 }
 
-impl PartialEq for LsmFileMode {
-    fn eq(&self, other: &Self) -> bool {
-        self.eq(other)
-    }
-}
-
 impl LsmFile {
     pub fn empty() -> LsmFile {
         LsmFile {
@@ -36,14 +29,18 @@ impl LsmFile {
     }
 
     pub fn open(path: &Path, mode: LsmFileMode) -> Result<LsmFile, ()> {
-        let is_append_only = mode == LsmFileMode::AppendOnly;
-        let is_read_only = mode == LsmFileMode::ReadOnly;
+        let is_append_only = matches!(mode, LsmFileMode::AppendOnly);
+        let is_read_only = matches!(mode, LsmFileMode::ReadOnly);
         let file: File = OpenOptions::new()
+            .create(true)
             .append(is_append_only)
             .write(!is_read_only)
-            .read(is_read_only)
+            .read(true)
             .open(path)
-            .map_err(|e| ())?;
+            .map_err(|e| {
+                println!("HOla");
+                ()
+            })?;
         let metadata = file.metadata().map_err(|e| ())?;
 
         Ok(LsmFile{

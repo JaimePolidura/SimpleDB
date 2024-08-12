@@ -46,6 +46,10 @@ impl SSTableBuilder {
         }
     }
 
+    pub fn is_from_memtable(&self) -> bool {
+        self.memtable_id.is_some()
+    }
+
     pub fn set_memtable_id(&mut self, memtable_id: usize) {
         self.memtable_id = Some(memtable_id);
     }

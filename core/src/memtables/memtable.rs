@@ -29,6 +29,10 @@ impl MemTable {
         }
     }
 
+    pub fn get_id(&self) -> usize {
+        self.id
+    }
+
     pub fn get(&self, key: &Key) -> Option<Bytes> {
         match self.data.get(key) {
             Some(entry) => {

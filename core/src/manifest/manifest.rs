@@ -36,7 +36,7 @@ pub struct MemtableFlushManifestOperation {
 impl Manifest {
     pub fn new(options: Arc<LsmOptions>) -> Result<Manifest, ()> {
         match LsmFile::open(Self::manifest_path(&options).as_path(), LsmFileMode::AppendOnly) {
-            Ok(file) => Ok(Manifest{
+            Ok(file) => Ok(Manifest {
                 last_manifest_record_id: AtomicUsize::new(0),
                 file: Mutex::new(file),
             }),
