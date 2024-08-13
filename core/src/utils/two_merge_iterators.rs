@@ -94,12 +94,12 @@ mod test {
 
     #[test]
     fn two_merge_iterator() {
-        let memtable1 = Arc::new(MemTable::create(&LsmOptions::default(), 0));
+        let memtable1 = Arc::new(MemTable::create_new(&LsmOptions::default(), 0));
         memtable1.set(&key::new("a"), &vec![1]);
         memtable1.set(&key::new("b"), &vec![2]);
         memtable1.set(&key::new("d"), &vec![4]);
 
-        let memtable2 = Arc::new(MemTable::create(&LsmOptions::default(), 0));
+        let memtable2 = Arc::new(MemTable::create_new(&LsmOptions::default(), 0));
         memtable1.set(&key::new("a"), &vec![1]);
         memtable1.set(&key::new("c"), &vec![3]);
         memtable1.set(&key::new("d"), &vec![4]);

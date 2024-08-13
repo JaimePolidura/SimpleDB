@@ -1,3 +1,5 @@
+use std::fs::DirEntry;
+
 pub fn u16_vec_to_u8_vec(u16_vec: &Vec<u16>) -> Vec<u8> {
     let mut u8_vec: Vec<u8> = Vec::with_capacity(u16_vec.len() * 2);
 
@@ -62,6 +64,26 @@ pub fn u8_vec_to_u16_vec(u8_vec: &Vec<u8>) -> Vec<u16> {
     }
 
     values
+}
+
+pub fn extract_number_from_file_name(
+    file: &DirEntry,
+    separator: &str
+) -> Result<usize, ()> {
+    let file_name = file.file_name();
+    let split = file_name
+        .to_str()
+        .unwrap()
+        .split(separator)
+        .last();
+
+    if split.is_some() {
+        split.unwrap()
+            .parse::<usize>()
+            .map_err(|e| ())
+    } else {
+        Err(())
+    }
 }
 
 pub fn hash(key: &[u8]) -> u32 {

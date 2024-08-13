@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
@@ -5,6 +6,7 @@ use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::{MemTable, MemtableIterator};
+use crate::memtables::wal::Wal;
 use crate::utils::merge_iterator::MergeIterator;
 
 pub struct Memtables {
@@ -16,15 +18,14 @@ pub struct Memtables {
 }
 
 impl Memtables {
-    pub fn new(options: Arc<LsmOptions>) -> Memtables {
-        let current_memtable = MemTable::create(options.clone(), 0)
-            .expect("Failed to create memtable with ID 0");
+    pub fn create(options: Arc<LsmOptions>) -> Result<Memtables, ()> {
+        let (wals, max_memtable_id) = Wal::get_persisted_wal_id(&options)
+            .expect("Cannot read WAL from disk");
 
-        Memtables {
-            current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(current_memtable)))),
-            next_memtable_id: AtomicUsize::new(0),
-            inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(Vec::with_capacity(options.max_memtables_inactive))))),
-            options
+        if !wals.is_empty() {
+            Self::recover_memtables_from_wal(options, max_memtable_id, wals)
+        } else {
+            Self::create_memtables_no_wal(options)
         }
     }
 
@@ -122,7 +123,7 @@ impl Memtables {
     //This might be called by concurrently, it might fail returing None
     fn set_current_memtable_as_inactive(&mut self) -> Option<Arc<MemTable>> {
         let new_memtable_id = self.next_memtable_id.fetch_add(1, Relaxed);
-        let new_memtable = MemTable::create(self.options.clone(), new_memtable_id).expect("Failed to create memtable");
+        let new_memtable = MemTable::create_new(self.options.clone(), new_memtable_id).expect("Failed to create memtable");
         let new_memtable = Box::into_raw(Box::new(Arc::new(new_memtable)));
         let current_memtable = self.current_memtable.load(Acquire);
 
@@ -149,5 +150,38 @@ impl Memtables {
         }
 
         None
+    }
+
+    fn recover_memtables_from_wal(
+        options: Arc<LsmOptions>,
+        max_memtable_id: usize,
+        wals: Vec<Wal>,
+    ) -> Result<Memtables, ()> {
+        let current_memtable = MemTable::create_new(options.clone(), max_memtable_id + 1)?;
+        let mut memtables: Vec<Arc<MemTable>> = Vec::new();
+        let next_memtable_id = max_memtable_id + 2;
+
+        for wal in wals {
+            let memtable_id = wal.get_memtable_id();
+            let memtable = MemTable::create_and_recover_from_wal(options.clone(), memtable_id, wal)?;
+            memtables.push(Arc::new(memtable));
+        }
+
+        Ok(Memtables {
+            current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(current_memtable)))),
+            next_memtable_id: AtomicUsize::new(next_memtable_id),
+            inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(memtables)))),
+            options
+        })
+    }
+
+    fn create_memtables_no_wal(options: Arc<LsmOptions>) -> Result<Memtables, ()> {
+        let current_memtable = MemTable::create_new(options.clone(), 0)?;
+        Ok(Memtables {
+            current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(current_memtable)))),
+            next_memtable_id: AtomicUsize::new(0),
+            inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(Vec::with_capacity(options.max_memtables_inactive))))),
+            options
+        })
     }
 }

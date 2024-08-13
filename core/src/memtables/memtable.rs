@@ -7,7 +7,8 @@ use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
-use crate::memtables::memtable::MemtableState::RecoveringFromWal;
+use crate::memtables::memtable::MemtableState::{RecoveredFromWal, RecoveringFromWal};
+use crate::memtables::memtables::Memtables;
 use crate::memtables::wal::Wal;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::utils::storage_iterator::{StorageIterator};
@@ -26,12 +27,11 @@ pub struct MemTable {
 enum MemtableState {
     New,
     RecoveringFromWal,
-    Active,
-    Inactive
+    RecoveredFromWal,
 }
 
 impl MemTable {
-    pub fn create(options: Arc<LsmOptions>, memtable_id: usize) -> Result<MemTable, ()> {
+    pub fn create_new(options: Arc<LsmOptions>, memtable_id: usize) -> Result<MemTable, ()> {
         Ok(MemTable {
             max_size_bytes: options.memtable_max_size_bytes,
             current_size_bytes: AtomicUsize::new(0),
@@ -40,6 +40,25 @@ impl MemTable {
             wal: UnsafeCell::new(Wal::create(options, memtable_id)?),
             memtable_id
         })
+    }
+
+    pub fn create_and_recover_from_wal(
+        options: Arc<LsmOptions>,
+        memtable_id: usize,
+        wal: Wal
+    ) -> Result<MemTable, ()> {
+        let mut memtable = MemTable {
+            max_size_bytes: options.memtable_max_size_bytes,
+            current_size_bytes: AtomicUsize::new(0),
+            state: MemtableState::New,
+            data: Arc::new(SkipMap::new()),
+            wal: UnsafeCell::new(wal),
+            memtable_id
+        };
+
+        memtable.recover_from_wal();
+
+        Ok(memtable)
     }
 
     pub fn get_id(&self) -> usize {
@@ -96,8 +115,8 @@ impl MemTable {
         let wal: &mut Wal = unsafe { &mut *self.wal.get() };
 
         match self.state {
-            MemtableState::Active => wal.write(key, value),
-            _ => Ok(()),
+            MemtableState::New | MemtableState::RecoveringFromWal => Ok(()),
+            _ => wal.write(key, value),
         }
     }
 
@@ -115,14 +134,17 @@ impl MemTable {
         sstable_builder
     }
 
-    fn recover_from_wal(&mut self) {
+    fn recover_from_wal(&mut self) -> Result<(), ()> {
         self.state = RecoveringFromWal;
         let wal: &Wal = unsafe { &*self.wal.get() };
-        let mut entries = wal.read_entries();
+        let mut entries = wal.read_entries()?;
 
         while let Some(entry) = entries.pop() {
             self.write_into_skip_list(&entry.key, entry.value);
         }
+
+        self.state = RecoveredFromWal;
+        Ok(())
     }
 }
 
@@ -200,7 +222,7 @@ mod test {
 
     #[test]
     fn get_set_delete() {
-        let memtable: MemTable = MemTable::create(&LsmOptions::default(), 0)
+        let memtable: MemTable = MemTable::create_new(&LsmOptions::default(), 0)
             .unwrap();
         let value: Vec<u8> = vec![10, 12];
 
@@ -219,7 +241,7 @@ mod test {
 
     #[test]
     fn iterators() {
-        let memtable = Arc::new(MemTable::create(&LsmOptions::default(), 0).unwrap());
+        let memtable = Arc::new(MemTable::create_new(&LsmOptions::default(), 0).unwrap());
         let value: Vec<u8> = vec![10, 12];
         memtable.set(&key::new("alberto"), &value);
         memtable.set(&key::new("jaime"), &value);

@@ -26,10 +26,10 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
         .expect("Cannot open/create Manifest file"));
     let sstables = Arc::new(SSTables::open(lsm_options.clone(), manifest.clone())
         .expect("Failed to read SSTable"));
-
+        
     let mut lsm = Lsm {
         compaction: Compaction::new(lsm_options.clone(), sstables.clone(), manifest.clone()),
-        memtables: Memtables::new(lsm_options.clone()),
+        memtables: Memtables::create(lsm_options.clone()).expect("Failed to create Memtables"),
         options: lsm_options.clone(),
         sstables: sstables.clone(),
         manifest,

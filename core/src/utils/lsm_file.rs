@@ -106,6 +106,11 @@ impl LsmFile {
     }
 
     pub fn write(&mut self, bytes: &[u8]) -> Result<(), ()> {
+        match self.mode {
+            LsmFileMode::AppendOnly => self.size_bytes = self.size_bytes + bytes.len(),
+            _ => self.size_bytes = bytes.len()
+        };
+
         self.file
             .as_mut()
             .unwrap()
