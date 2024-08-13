@@ -8,6 +8,12 @@ pub enum CompactionStrategy {
     Tiered,
 }
 
+#[derive(Clone, Copy)]
+pub enum DurabilityLevel {
+    Strong, //Writes to memtable after WAL entry has been written to disk (using fsync)
+    Weak, //Writes to memtable without waiting for WAL write to complete
+}
+
 #[derive(Clone)]
 pub struct LsmOptions {
     pub simple_leveled_compaction_options: SimpleLeveledCompactionOptions,
@@ -15,6 +21,7 @@ pub struct LsmOptions {
     pub compaction_strategy: CompactionStrategy,
     pub compaction_task_frequency_ms: usize,
     pub n_cached_blocks_per_sstable: usize,
+    pub durability_level: DurabilityLevel,
     pub memtable_max_size_bytes: usize,
     pub max_memtables_inactive: usize,
     pub bloom_filter_n_entries: usize,
@@ -29,6 +36,7 @@ impl Default for LsmOptions {
             simple_leveled_compaction_options: SimpleLeveledCompactionOptions::default(),
             tiered_compaction_options: TieredCompactionOptions::default(),
             compaction_strategy: CompactionStrategy::SimpleLeveled,
+            durability_level: DurabilityLevel::Strong,
             compaction_task_frequency_ms: 100, //100ms
             memtable_max_size_bytes: 1048576, //1Mb
             bloom_filter_n_entries: 32768, //4kb of bloom filter so it fits in a page
@@ -59,6 +67,11 @@ impl LsmOptionsBuilder {
 
     pub fn tiered_compaction_options(&mut self, value: TieredCompactionOptions) -> &mut LsmOptionsBuilder {
         self.lsm_options.tiered_compaction_options = value;
+        self
+    }
+
+    pub fn durability_level(&mut self, level: DurabilityLevel) -> &mut LsmOptionsBuilder {
+        self.lsm_options.durability_level = level;
         self
     }
 

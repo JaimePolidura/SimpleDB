@@ -86,8 +86,13 @@ impl LsmFile {
     pub fn delete(&self)  -> Result<(), ()> {
         match &self.file {
             Some(_) => {
+                println!("{}", self.path.as_ref().unwrap().as_path().to_str().unwrap());
+
                 std::fs::remove_file(self.path.as_ref().unwrap().as_path())
-                    .map_err(|e| ())
+                    .map_err(|e| {
+                        println!("HOla");
+                        ()
+                    })
             },
             None => Ok(()),
         }

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use bytes::{Buf, BufMut, Bytes};
 use crate::key;
 use crate::key::Key;
-use crate::lsm_options::LsmOptions;
+use crate::lsm_options::{DurabilityLevel, LsmOptions};
 use crate::utils::lsm_file::{LsmFile, LsmFileMode};
 use crate::utils::utils;
 
@@ -30,8 +30,15 @@ impl Wal {
         })
     }
 
-    pub fn delete_wal(&mut self) -> Result<(), ()> {
-        self.file.delete()
+    pub fn write(&mut self, key: &Key, value: &[u8]) -> Result<(), ()> {
+        let encoded = self.encode(key, value);
+        self.file.write(&encoded)?;
+
+        if matches!(self.lsm_options.durability_level, DurabilityLevel::Strong) {
+            self.file.fsync()?;
+        }
+
+        Ok(())
     }
 
     pub fn read_entries(&self) -> Result<Vec<WalEntry>, ()> {
@@ -59,11 +66,8 @@ impl Wal {
         Ok(entries)
     }
 
-    pub fn write(&mut self, key: &Key, value: &[u8]) -> Result<(), ()> {
-        let encoded = self.encode(key, value);
-        self.file.write(&encoded)?;
-        self.file.fsync()?;
-        Ok(())
+    pub fn delete_wal(&mut self) -> Result<(), ()> {
+        self.file.delete()
     }
 
     pub fn get_memtable_id(&self) -> usize {

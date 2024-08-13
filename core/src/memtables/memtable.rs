@@ -78,6 +78,13 @@ impl MemTable {
         unsafe { (* self.state.get()) = RecoveringFromWal; }
     }
 
+    pub fn set_flushed(&self) {
+        unsafe {
+            (* self.state.get()) = Flushed;
+            (*self.wal.get()).delete_wal().expect("Cannot delete WAL");
+        }
+    }
+
     pub fn get_id(&self) -> usize {
         self.memtable_id
     }
@@ -156,7 +163,7 @@ impl MemTable {
     }
 
     fn recover_from_wal(&mut self) -> Result<(), ()> {
-        self.recover_from_wal();
+        self.set_recovering_from_wal();
         let wal: &Wal = unsafe { &*self.wal.get() };
         let mut entries = wal.read_entries()?;
 
@@ -172,7 +179,7 @@ impl MemTable {
         let current_state = unsafe { &*self.state.get() };
 
         match current_state {
-            MemtableState::Active => true,
+            MemtableState::Active | MemtableState::RecoveringFromWal => true,
             _ => false,
         }
     }
@@ -180,7 +187,7 @@ impl MemTable {
     fn can_memtable_wal_be_written(&self) -> bool {
         let current_state = unsafe { &*self.state.get() };
         match current_state {
-            MemtableState::Active | MemtableState::RecoveringFromWal => true,
+            MemtableState::Active => true,
             _ => false,
         }
     }
