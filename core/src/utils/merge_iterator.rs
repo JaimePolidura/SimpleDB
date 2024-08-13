@@ -155,16 +155,16 @@ mod test {
 
     #[test]
     fn iterator() {
-        let memtable1 = Arc::new(MemTable::new(&LsmOptions::default(), 0));
+        let memtable1 = Arc::new(MemTable::create(&LsmOptions::default(), 0));
         memtable1.set(&key::new("a"), &vec![1]);
         memtable1.set(&key::new("b"), &vec![1]);
         memtable1.set(&key::new("d"), &vec![1]);
 
-        let memtable2 = Arc::new(MemTable::new(&LsmOptions::default(), 0));
+        let memtable2 = Arc::new(MemTable::create(&LsmOptions::default(), 0));
         memtable2.set(&key::new("b"), &vec![2]);
         memtable2.set(&key::new("e"), &vec![2]);
 
-        let memtable3 = Arc::new(MemTable::new(&LsmOptions::default(), 0));
+        let memtable3 = Arc::new(MemTable::create(&LsmOptions::default(), 0));
         memtable3.set(&key::new("c"), &vec![3]);
         memtable3.set(&key::new("d"), &vec![3]);
         memtable3.set(&key::new("e"), &vec![3]);

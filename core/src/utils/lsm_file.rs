@@ -37,10 +37,7 @@ impl LsmFile {
             .write(!is_read_only)
             .read(true)
             .open(path)
-            .map_err(|e| {
-                println!("HOla");
-                ()
-            })?;
+            .map_err(|e| ())?;
         let metadata = file.metadata().map_err(|e| ())?;
 
         Ok(LsmFile{

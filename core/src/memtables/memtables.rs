@@ -17,8 +17,11 @@ pub struct Memtables {
 
 impl Memtables {
     pub fn new(options: Arc<LsmOptions>) -> Memtables {
+        let current_memtable = MemTable::create(options.clone(), 0)
+            .expect("Failed to create memtable with ID 0");
+
         Memtables {
-            current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(MemTable::new(&options, 0))))),
+            current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(current_memtable)))),
             next_memtable_id: AtomicUsize::new(0),
             inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(Vec::with_capacity(options.max_memtables_inactive))))),
             options
@@ -119,7 +122,8 @@ impl Memtables {
     //This might be called by concurrently, it might fail returing None
     fn set_current_memtable_as_inactive(&mut self) -> Option<Arc<MemTable>> {
         let new_memtable_id = self.next_memtable_id.fetch_add(1, Relaxed);
-        let new_memtable = Box::into_raw(Box::new(Arc::new(MemTable::new(&self.options, new_memtable_id))));
+        let new_memtable = MemTable::create(self.options.clone(), new_memtable_id).expect("Failed to create memtable");
+        let new_memtable = Box::into_raw(Box::new(Arc::new(new_memtable)));
         let current_memtable = self.current_memtable.load(Acquire);
 
         match self.current_memtable.compare_exchange(current_memtable, new_memtable, Release, Relaxed) {

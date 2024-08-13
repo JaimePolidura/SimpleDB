@@ -1,4 +1,4 @@
-use std::arch::x86_64::_mm_prefetch;
+use std::cell::UnsafeCell;
 use std::ops::Bound::Excluded;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
@@ -7,6 +7,8 @@ use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
+use crate::memtables::memtable::MemtableState::RecoveringFromWal;
+use crate::memtables::wal::Wal;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::utils::storage_iterator::{StorageIterator};
 
@@ -16,21 +18,32 @@ pub struct MemTable {
     data: Arc<SkipMap<Key, Bytes>>,
     current_size_bytes: AtomicUsize,
     max_size_bytes: usize,
-    id: usize,
+    memtable_id: usize,
+    state: MemtableState,
+    wal: UnsafeCell<Wal>,
+}
+
+enum MemtableState {
+    New,
+    RecoveringFromWal,
+    Active,
+    Inactive
 }
 
 impl MemTable {
-    pub fn new(options: &LsmOptions, id: usize) -> MemTable {
-        MemTable {
+    pub fn create(options: Arc<LsmOptions>, memtable_id: usize) -> Result<MemTable, ()> {
+        Ok(MemTable {
             max_size_bytes: options.memtable_max_size_bytes,
             current_size_bytes: AtomicUsize::new(0),
+            state: MemtableState::New,
             data: Arc::new(SkipMap::new()),
-            id
-        }
+            wal: UnsafeCell::new(Wal::create(options, memtable_id)?),
+            memtable_id
+        })
     }
 
     pub fn get_id(&self) -> usize {
-        self.id
+        self.memtable_id
     }
 
     pub fn get(&self, key: &Key) -> Option<Bytes> {
@@ -65,6 +78,8 @@ impl MemTable {
             return Err(());
         }
 
+        self.write_wal(&key, &value);
+
         self.current_size_bytes.fetch_add(key.len() + value.len(), Relaxed);
 
         self.data.insert(
@@ -74,10 +89,22 @@ impl MemTable {
         Ok(())
     }
 
+    fn write_wal(&self, key: &Key, value: &Bytes) -> Result<(), ()> {
+        //Multiple threads can write to the WAL concurrently, since the kernel already makes sure
+        //that there won't be race conditions when multiple threads are writing to an append only file
+        //https://nullprogram.com/blog/2016/08/03/
+        let wal: &mut Wal = unsafe { &mut *self.wal.get() };
+
+        match self.state {
+            MemtableState::Active => wal.write(key, value),
+            _ => Ok(()),
+        }
+    }
+
     pub fn to_sst(options: Arc<LsmOptions>, memtable: Arc<MemTable>) -> SSTableBuilder {
         let mut memtable_iterator = MemtableIterator::new(&memtable);
         let mut sstable_builder = SSTableBuilder::new(options, 0);
-        sstable_builder.set_memtable_id(memtable.id);
+        sstable_builder.set_memtable_id(memtable.memtable_id);
 
         while memtable_iterator.next() {
             let value = memtable_iterator.value();
@@ -86,6 +113,16 @@ impl MemTable {
         }
 
         sstable_builder
+    }
+
+    fn recover_from_wal(&mut self) {
+        self.state = RecoveringFromWal;
+        let wal: &Wal = unsafe { &*self.wal.get() };
+        let mut entries = wal.read_entries();
+
+        while let Some(entry) = entries.pop() {
+            self.write_into_skip_list(&entry.key, entry.value);
+        }
     }
 }
 
@@ -115,8 +152,6 @@ impl<'a> StorageIterator for MemtableIterator {
         if self.memtable.data.is_empty() {
             return has_advanced;
         }
-
-
 
         match &self.current_key {
             Some(prev_key) => {
@@ -159,14 +194,14 @@ impl<'a> StorageIterator for MemtableIterator {
 mod test {
     use std::sync::Arc;
     use crate::key;
-    use crate::key::Key;
     use crate::lsm_options::LsmOptions;
     use crate::memtables::memtable::{MemTable, MemtableIterator};
     use crate::utils::storage_iterator::StorageIterator;
 
     #[test]
     fn get_set_delete() {
-        let memtable: MemTable = MemTable::new(&LsmOptions::default(), 0);
+        let memtable: MemTable = MemTable::create(&LsmOptions::default(), 0)
+            .unwrap();
         let value: Vec<u8> = vec![10, 12];
 
         assert!(memtable.get(&key::new("nombre")).is_none());
@@ -184,7 +219,7 @@ mod test {
 
     #[test]
     fn iterators() {
-        let memtable = Arc::new(MemTable::new(&LsmOptions::default(), 0));
+        let memtable = Arc::new(MemTable::create(&LsmOptions::default(), 0).unwrap());
         let value: Vec<u8> = vec![10, 12];
         memtable.set(&key::new("alberto"), &value);
         memtable.set(&key::new("jaime"), &value);
