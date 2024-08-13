@@ -1,4 +1,3 @@
-use std::cmp::max;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
@@ -143,15 +142,19 @@ impl Memtables {
             .as_mut()
             .unwrap();
 
+        (*prev_memtable).set_inactive();
+
         memtables.push((*prev_memtable).clone());
 
         if memtables.len() > self.options.max_memtables_inactive {
-            return Some(memtables.pop()?);
+            let memtable_to_flush = memtables.pop()?;
+            memtable_to_flush.set_flushing();
+            return Some(memtable_to_flush);
         }
 
         None
     }
-
+    
     fn recover_memtables_from_wal(
         options: Arc<LsmOptions>,
         max_memtable_id: usize,
@@ -163,7 +166,8 @@ impl Memtables {
 
         for wal in wals {
             let memtable_id = wal.get_memtable_id();
-            let memtable = MemTable::create_and_recover_from_wal(options.clone(), memtable_id, wal)?;
+            let mut memtable = MemTable::create_and_recover_from_wal(options.clone(), memtable_id, wal)?;
+            memtable.set_inactive();
             memtables.push(Arc::new(memtable));
         }
 
@@ -176,7 +180,9 @@ impl Memtables {
     }
 
     fn create_memtables_no_wal(options: Arc<LsmOptions>) -> Result<Memtables, ()> {
-        let current_memtable = MemTable::create_new(options.clone(), 0)?;
+        let mut current_memtable = MemTable::create_new(options.clone(), 0)?;
+        current_memtable.set_active();
+
         Ok(Memtables {
             current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(current_memtable)))),
             next_memtable_id: AtomicUsize::new(0),

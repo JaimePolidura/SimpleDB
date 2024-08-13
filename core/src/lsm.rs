@@ -26,7 +26,7 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
         .expect("Cannot open/create Manifest file"));
     let sstables = Arc::new(SSTables::open(lsm_options.clone(), manifest.clone())
         .expect("Failed to read SSTable"));
-        
+
     let mut lsm = Lsm {
         compaction: Compaction::new(lsm_options.clone(), sstables.clone(), manifest.clone()),
         memtables: Memtables::create(lsm_options.clone()).expect("Failed to create Memtables"),
@@ -35,6 +35,7 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
         manifest,
     };
 
+    //Memtables are recovered when calling Memtables::create
     lsm.recover_from_manifest();
     lsm.compaction.start_compaction_thread();
 

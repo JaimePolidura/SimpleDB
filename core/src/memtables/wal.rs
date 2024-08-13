@@ -1,7 +1,6 @@
 use std::cmp::max;
 use std::fs;
 use std::fs::DirEntry;
-use std::io::SeekFrom::End;
 use std::path::PathBuf;
 use std::sync::Arc;
 use bytes::{Buf, BufMut, Bytes};
@@ -31,8 +30,8 @@ impl Wal {
         })
     }
 
-    pub fn clear_wal(&mut self) -> Result<(), ()> {
-        self.file.clear()
+    pub fn delete_wal(&mut self) -> Result<(), ()> {
+        self.file.delete()
     }
 
     pub fn read_entries(&self) -> Result<Vec<WalEntry>, ()> {

@@ -7,8 +7,7 @@ use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
-use crate::memtables::memtable::MemtableState::{RecoveredFromWal, RecoveringFromWal};
-use crate::memtables::memtables::Memtables;
+use crate::memtables::memtable::MemtableState::{Active, Flushed, Flusing, Inactive, RecoveringFromWal};
 use crate::memtables::wal::Wal;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::utils::storage_iterator::{StorageIterator};
@@ -20,14 +19,17 @@ pub struct MemTable {
     current_size_bytes: AtomicUsize,
     max_size_bytes: usize,
     memtable_id: usize,
-    state: MemtableState,
+    state: UnsafeCell<MemtableState>,
     wal: UnsafeCell<Wal>,
 }
 
 enum MemtableState {
     New,
     RecoveringFromWal,
-    RecoveredFromWal,
+    Active,
+    Inactive,
+    Flusing,
+    Flushed
 }
 
 impl MemTable {
@@ -35,7 +37,7 @@ impl MemTable {
         Ok(MemTable {
             max_size_bytes: options.memtable_max_size_bytes,
             current_size_bytes: AtomicUsize::new(0),
-            state: MemtableState::New,
+            state: UnsafeCell::new(MemtableState::New),
             data: Arc::new(SkipMap::new()),
             wal: UnsafeCell::new(Wal::create(options, memtable_id)?),
             memtable_id
@@ -50,15 +52,30 @@ impl MemTable {
         let mut memtable = MemTable {
             max_size_bytes: options.memtable_max_size_bytes,
             current_size_bytes: AtomicUsize::new(0),
-            state: MemtableState::New,
+            state: UnsafeCell::new(MemtableState::New),
             data: Arc::new(SkipMap::new()),
             wal: UnsafeCell::new(wal),
             memtable_id
         };
 
         memtable.recover_from_wal();
-
         Ok(memtable)
+    }
+
+    pub fn set_inactive(&self) {
+        unsafe { (* self.state.get()) = Inactive; }
+    }
+
+    pub fn set_active(&self) {
+        unsafe { (* self.state.get()) = Active; }
+    }
+
+    pub fn set_flushing(&self) {
+        unsafe { (* self.state.get()) = Flusing; }
+    }
+
+    pub fn set_recovering_from_wal(&self) {
+        unsafe { (* self.state.get()) = RecoveringFromWal; }
     }
 
     pub fn get_id(&self) -> usize {
@@ -93,6 +110,9 @@ impl MemTable {
     }
 
     fn write_into_skip_list(&self, key: &Key, value: Bytes) -> Result<(), ()> {
+        if !self.can_memtable_be_written() {
+            return Ok(());
+        }
         if self.current_size_bytes.load(Relaxed) >= self.max_size_bytes {
             return Err(());
         }
@@ -114,9 +134,10 @@ impl MemTable {
         //https://nullprogram.com/blog/2016/08/03/
         let wal: &mut Wal = unsafe { &mut *self.wal.get() };
 
-        match self.state {
-            MemtableState::New | MemtableState::RecoveringFromWal => Ok(()),
-            _ => wal.write(key, value),
+        if self.can_memtable_wal_be_written() {
+            wal.write(key, value)
+        } else {
+            Ok(())
         }
     }
 
@@ -135,16 +156,33 @@ impl MemTable {
     }
 
     fn recover_from_wal(&mut self) -> Result<(), ()> {
-        self.state = RecoveringFromWal;
+        self.recover_from_wal();
         let wal: &Wal = unsafe { &*self.wal.get() };
         let mut entries = wal.read_entries()?;
 
         while let Some(entry) = entries.pop() {
             self.write_into_skip_list(&entry.key, entry.value);
         }
+        self.set_active();
 
-        self.state = RecoveredFromWal;
         Ok(())
+    }
+
+    fn can_memtable_be_written(&self) -> bool {
+        let current_state = unsafe { &*self.state.get() };
+
+        match current_state {
+            MemtableState::Active => true,
+            _ => false,
+        }
+    }
+
+    fn can_memtable_wal_be_written(&self) -> bool {
+        let current_state = unsafe { &*self.state.get() };
+        match current_state {
+            MemtableState::Active | MemtableState::RecoveringFromWal => true,
+            _ => false,
+        }
     }
 }
 
