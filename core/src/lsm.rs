@@ -11,6 +11,7 @@ use crate::utils::merge_iterator::MergeIterator;
 use crate::utils::storage_iterator::StorageIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use std::sync::Arc;
+use bytes::Bytes;
 
 pub struct Lsm {
     memtables: Memtables,
@@ -19,6 +20,11 @@ pub struct Lsm {
     manifest: Arc<Manifest>,
 
     options: Arc<LsmOptions>,
+}
+
+pub enum WriteBatch {
+    Put(Key, Bytes),
+    Delete(Key)
 }
 
 pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
@@ -73,6 +79,17 @@ impl Lsm {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(()),
         }
+    }
+    
+    pub fn write_batch(&mut self, batch: &[WriteBatch]) -> Result<(), ()> {
+        for write_batch_record in batch {
+            match write_batch_record {
+                WriteBatch::Put(key, value) => self.set(key, value)?,
+                WriteBatch::Delete(key) => self.delete(key)?
+            };
+        }
+
+        Ok(())
     }
 
     fn flush_memtable(&mut self, memtable: Arc<MemTable>) -> Result<(), ()> {
