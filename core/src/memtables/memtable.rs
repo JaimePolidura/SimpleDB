@@ -167,6 +167,8 @@ impl MemTable {
         let wal: &Wal = unsafe { &*self.wal.get() };
         let mut entries = wal.read_entries()?;
 
+        println!("Applying {} operations from WAL to memtable with ID: {}", entries.len(), wal.get_memtable_id());
+
         while let Some(entry) = entries.pop() {
             self.write_into_skip_list(&entry.key, entry.value);
         }

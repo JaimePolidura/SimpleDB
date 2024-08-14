@@ -113,12 +113,12 @@ impl Wal {
     }
 
     fn is_wal_file(file: &DirEntry) -> bool {
-        file.file_name().to_str().unwrap().starts_with("WAL-")
+        file.file_name().to_str().unwrap().starts_with("wal-")
     }
 
     fn to_wal_file_name(lsm_options: &Arc<LsmOptions>, memtable_id: usize) -> PathBuf {
         let mut path_buff = PathBuf::from(&lsm_options.base_path);
-        let wal_file_name = format!("WAL-{}", memtable_id);
+        let wal_file_name = format!("wal-{}", memtable_id);
         path_buff.push(wal_file_name);
         path_buff
     }

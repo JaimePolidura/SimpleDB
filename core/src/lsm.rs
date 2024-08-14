@@ -22,6 +22,8 @@ pub struct Lsm {
 }
 
 pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
+    println!("Starting mini lsm engine!");
+
     let manifest = Arc::new(Manifest::new(lsm_options.clone())
         .expect("Cannot open/create Manifest file"));
     let sstables = Arc::new(SSTables::open(lsm_options.clone(), manifest.clone())
@@ -38,6 +40,8 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
     //Memtables are recovered when calling Memtables::create
     lsm.recover_from_manifest();
     lsm.compaction.start_compaction_thread();
+
+    println!("Mini lsm engine started!");
 
     lsm
 }
@@ -84,6 +88,8 @@ impl Lsm {
         let manifest_operations = self.manifest.read_uncompleted_operations()
             .expect("Cannot read Manifest");
 
+        println!("Recovering {} operations from manifest", manifest_operations.len());
+
         for manifest_operation in manifest_operations {
             match manifest_operation {
                 ManifestOperationContent::MemtableFlush(memtable_flush) => self.restart_memtable_flush(memtable_flush),
@@ -100,9 +106,10 @@ impl Lsm {
     fn restart_memtable_flush(&mut self, memtable_flush: MemtableFlushManifestOperation) {
         //If it contains the SSTable, it means the memtable flush was completed before marking the operation as completed
         if !self.sstables.contains_sstable_id(memtable_flush.sstable_id) {
-            let memtable_to_flush = self.memtables.get_memtable_to_flush(memtable_flush.memtable_id)
-                .unwrap();
-            self.flush_memtable(memtable_to_flush);
+            let memtable_to_flush = self.memtables.get_memtable_to_flush(memtable_flush.memtable_id);
+            if memtable_to_flush.is_some() {
+                self.flush_memtable(memtable_to_flush.unwrap());
+            }
         }
     }
 }

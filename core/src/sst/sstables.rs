@@ -59,6 +59,8 @@ impl SSTables {
             }
 
             if let Ok(sstable_id) = extract_sstable_id_from_file(&file) {
+                println!("Loading SSTable with ID: {}", sstable_id);
+
                 let sstable_read_result = SSTable::from_file(
                     sstable_id, file.path().as_path(), lsm_options.clone()
                 );

@@ -39,6 +39,8 @@ impl Compaction {
     }
 
     pub fn start_compaction_thread(&self) {
+        println!("Starting compaction thread");
+
         let compaction_thread = CompactionThread{
             lsm_options: self.lsm_options.clone(),
             sstables: self.sstables.clone(),

@@ -8,10 +8,12 @@ use serde::{Deserialize, Deserializer, Serialize};
 use crate::compaction::compaction::CompactionTask;
 use crate::lsm_options::LsmOptions;
 use crate::utils::lsm_file::{LsmFile, LsmFileMode};
+use crate::utils::utils;
 
 pub struct Manifest {
     file: Mutex<LsmFile>,
     last_manifest_record_id: AtomicUsize,
+    options: Arc<LsmOptions>
 }
 
 #[derive(Serialize, Deserialize)]
@@ -20,14 +22,14 @@ struct ManifestOperation {
     manifest_operation_id: usize,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum ManifestOperationContent {
     MemtableFlush(MemtableFlushManifestOperation), //Memtable id, SSTable Id
     Compaction(CompactionTask),
     Completed(usize)
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct MemtableFlushManifestOperation {
     pub memtable_id: usize,
     pub sstable_id: usize,
@@ -39,6 +41,7 @@ impl Manifest {
             Ok(file) => Ok(Manifest {
                 last_manifest_record_id: AtomicUsize::new(0),
                 file: Mutex::new(file),
+                options
             }),
             Err(_) => Err(())
         }
@@ -47,15 +50,31 @@ impl Manifest {
     pub fn read_uncompleted_operations(&self) -> Result<Vec<ManifestOperationContent>, ()> {
         let mut all_records = self.read_all_operations_from_disk()?;
         let uncompleted_operations = self.get_uncompleted_operations(&mut all_records);
+        self.rewrite_manifest(&uncompleted_operations)?;
 
         Ok(uncompleted_operations)
+    }
+
+    fn rewrite_manifest(&self, uncompleted_operations: &Vec<ManifestOperationContent>) -> Result<(), ()> {
+        self.clear_manifest()?;
+
+        for uncompleted_operation in uncompleted_operations {
+            self.append_operation(uncompleted_operation.clone())?;
+        }
+
+        Ok(())
+    }
+
+    fn clear_manifest(&self) -> Result<(), ()> {
+        let mut file = LsmFile::open(Self::manifest_path(&self.options).as_path(), LsmFileMode::RandomWrites)?;
+        file.clear()
     }
 
     fn get_uncompleted_operations(&self, all_operations: &mut Vec<ManifestOperation>) -> Vec<ManifestOperationContent> {
         let mut operations_by_id: HashMap<usize, ManifestOperation> = HashMap::new();
         let mut to_return: Vec<ManifestOperationContent> = Vec::new();
 
-        while let Some(operation) = all_operations.pop() {
+        while let Some(operation) = utils::pop_front(all_operations) {
             match operation.content {
                 ManifestOperationContent::Completed(operation_id) => operations_by_id.remove(&operation_id),
                 _ => operations_by_id.insert(operation.manifest_operation_id, operation),
@@ -94,8 +113,6 @@ impl Manifest {
             all_records.push(deserialized_record);
             records_bytes_ptr.advance(json_length);
         }
-
-        file.clear();
 
         Ok(all_records)
     }

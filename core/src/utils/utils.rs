@@ -86,6 +86,14 @@ pub fn extract_number_from_file_name(
     }
 }
 
+pub fn pop_front<T>(vec: &mut Vec<T>) -> Option<T> {
+    if vec.is_empty() {
+        None
+    } else {
+        Some(vec.remove(0))
+    }
+}
+
 pub fn hash(key: &[u8]) -> u32 {
     farmhash::hash32(key)
 }
