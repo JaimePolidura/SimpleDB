@@ -3,6 +3,8 @@ use std::sync::Arc;
 use bytes::{BufMut, Bytes};
 use crate::sst::block::block_builder::BlockBuilder;
 use crate::key::Key;
+use crate::lsm_error::LsmError;
+use crate::lsm_error::LsmError::CannotCreateSSTableFile;
 use crate::lsm_options::LsmOptions;
 use crate::sst::block_metadata::BlockMetadata;
 use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
@@ -85,7 +87,7 @@ impl SSTableBuilder {
         mut self,
         id: usize,
         path: &Path
-    ) -> Result<SSTable, ()> {
+    ) -> Result<SSTable, LsmError> {
         self.build_current_block();
 
         let bloom_filter: BloomFilter = BloomFilter::new(
@@ -116,7 +118,7 @@ impl SSTableBuilder {
                 self.builded_block_metadata, self.lsm_options, bloom_filter, self.first_key.unwrap(),
                 self.last_key.unwrap(), lsm_file, self.level, id, SSTABLE_ACTIVE
             )),
-            Err(_) => Err(())
+            Err(e) => Err(CannotCreateSSTableFile(id, e))
         }
     }
 

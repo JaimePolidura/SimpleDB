@@ -12,6 +12,7 @@ use crate::utils::storage_iterator::StorageIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use std::sync::Arc;
 use bytes::Bytes;
+use crate::lsm_error::LsmError;
 
 pub struct Lsm {
     memtables: Memtables,
@@ -67,21 +68,21 @@ impl Lsm {
         }
     }
 
-    pub fn set(&mut self, key: &Key, value: &[u8]) -> Result<(), ()> {
+    pub fn set(&mut self, key: &Key, value: &[u8]) -> Result<(), LsmError> {
         match self.memtables.set(key, value) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(())
         }
     }
 
-    pub fn delete(&mut self, key: &Key) -> Result<(), ()> {
+    pub fn delete(&mut self, key: &Key) -> Result<(), LsmError> {
         match self.memtables.delete(key) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(()),
         }
     }
 
-    pub fn write_batch(&mut self, batch: &[WriteBatch]) -> Result<(), ()> {
+    pub fn write_batch(&mut self, batch: &[WriteBatch]) -> Result<(), LsmError> {
         for write_batch_record in batch {
             match write_batch_record {
                 WriteBatch::Put(key, value) => self.set(key, value)?,
@@ -92,7 +93,7 @@ impl Lsm {
         Ok(())
     }
 
-    fn flush_memtable(&mut self, memtable: Arc<MemTable>) -> Result<(), ()> {
+    fn flush_memtable(&mut self, memtable: Arc<MemTable>) -> Result<(), LsmError> {
         let sstable_builder_ready: SSTableBuilder = MemTable::to_sst(self.options.clone(), memtable.clone());
         let sstable_id = self.sstables.flush_memtable_to_disk(sstable_builder_ready)?;
         memtable.set_flushed();

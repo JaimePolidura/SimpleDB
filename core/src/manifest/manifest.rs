@@ -6,6 +6,8 @@ use std::sync::atomic::Ordering::Relaxed;
 use bytes::{Buf, BufMut};
 use serde::{Deserialize, Deserializer, Serialize};
 use crate::compaction::compaction::CompactionTask;
+use crate::lsm_error::{DecodeErrorInfo, DecodeErrorType, LsmError};
+use crate::lsm_error::LsmError::{CannotCreateManifest, CannotDecodeManifest, CannotReadManifestOperations, CannotResetManifest};
 use crate::lsm_options::LsmOptions;
 use crate::utils::lsm_file::{LsmFile, LsmFileMode};
 use crate::utils::utils;
@@ -36,18 +38,18 @@ pub struct MemtableFlushManifestOperation {
 }
 
 impl Manifest {
-    pub fn new(options: Arc<LsmOptions>) -> Result<Manifest, ()> {
+    pub fn new(options: Arc<LsmOptions>) -> Result<Manifest, LsmError> {
         match LsmFile::open(Self::manifest_path(&options).as_path(), LsmFileMode::AppendOnly) {
             Ok(file) => Ok(Manifest {
                 last_manifest_record_id: AtomicUsize::new(0),
                 file: Mutex::new(file),
                 options
             }),
-            Err(_) => Err(())
+            Err(e) => Err(CannotCreateManifest(e))
         }
     }
 
-    pub fn read_uncompleted_operations(&self) -> Result<Vec<ManifestOperationContent>, ()> {
+    pub fn read_uncompleted_operations(&self) -> Result<Vec<ManifestOperationContent>, LsmError> {
         let mut all_records = self.read_all_operations_from_disk()?;
         let uncompleted_operations = self.get_uncompleted_operations(&mut all_records);
         self.rewrite_manifest(&uncompleted_operations)?;
@@ -55,7 +57,7 @@ impl Manifest {
         Ok(uncompleted_operations)
     }
 
-    fn rewrite_manifest(&self, uncompleted_operations: &Vec<ManifestOperationContent>) -> Result<(), ()> {
+    fn rewrite_manifest(&self, uncompleted_operations: &Vec<ManifestOperationContent>) -> Result<(), LsmError> {
         self.clear_manifest()?;
 
         for uncompleted_operation in uncompleted_operations {
@@ -65,9 +67,13 @@ impl Manifest {
         Ok(())
     }
 
-    fn clear_manifest(&self) -> Result<(), ()> {
-        let mut file = LsmFile::open(Self::manifest_path(&self.options).as_path(), LsmFileMode::RandomWrites)?;
+    fn clear_manifest(&self) -> Result<(), LsmError> {
+        let path = Self::manifest_path(&self.options);
+        let mut file = LsmFile::open(path.as_path(), LsmFileMode::RandomWrites)
+            .map_err(|e| CannotResetManifest(e))?;
+
         file.clear()
+            .map_err(|e| CannotResetManifest(e))
     }
 
     fn get_uncompleted_operations(&self, all_operations: &mut Vec<ManifestOperation>) -> Vec<ManifestOperationContent> {
@@ -95,14 +101,16 @@ impl Manifest {
         to_return
     }
 
-    fn read_all_operations_from_disk(&self) -> Result<Vec<ManifestOperation>, ()> {
+    fn read_all_operations_from_disk(&self) -> Result<Vec<ManifestOperation>, LsmError> {
         let mut file_lock_result = self.file.lock();
         let mut file = file_lock_result
             .as_mut()
             .unwrap();
-        let records_bytes = file.read_all()?;
+        let records_bytes = file.read_all()
+            .map_err(|e| CannotReadManifestOperations(e))?;
         let mut records_bytes_ptr = records_bytes.as_slice();
         let mut all_records: Vec<ManifestOperation> = Vec::new();
+        let mut current_offset = 0;
 
         while records_bytes_ptr.has_remaining() {
             let json_length = records_bytes_ptr.get_u32_le() as usize;
@@ -111,24 +119,35 @@ impl Manifest {
             let actual_crc = crc32fast::hash(json_record_bytes);
 
             if expected_crc != actual_crc {
-                return Err(());
+                return Err(CannotDecodeManifest(DecodeErrorInfo{
+                    error_type: DecodeErrorType::CorruptedCrc(expected_crc, actual_crc),
+                    index: all_records.len(),
+                    offset: current_offset,
+                    path: file.path(),
+                }));
             }
 
             let deserialized_record = serde_json::from_slice::<ManifestOperation>(json_record_bytes)
-                .map_err(|e| ())?;
+                .map_err(|e| CannotDecodeManifest(DecodeErrorInfo{
+                    error_type: DecodeErrorType::JsonSerdeDeserialization(e),
+                    index: all_records.len(),
+                    offset: current_offset,
+                    path: file.path(),
+                }))?;
 
             all_records.push(deserialized_record);
             records_bytes_ptr.advance(json_length);
+            current_offset = current_offset + 4 + 4 + json_length;
         }
 
         Ok(all_records)
     }
 
-    pub fn mark_as_completed(&self, operation_id: usize) {
-        self.append_operation(ManifestOperationContent::Completed(operation_id));
+    pub fn mark_as_completed(&self, operation_id: usize) -> Result<usize, LsmError> {
+        self.append_operation(ManifestOperationContent::Completed(operation_id))
     }
 
-    pub fn append_operation(&self, content: ManifestOperationContent) -> Result<usize, ()> {
+    pub fn append_operation(&self, content: ManifestOperationContent) -> Result<usize, LsmError> {
         let manifest_record_id = self.last_manifest_record_id.fetch_add(1, Relaxed);
         let mut file_lock_result = self.file.lock();
         let file = file_lock_result
@@ -143,11 +162,14 @@ impl Manifest {
                 serialized.put_u32_le(crc32fast::hash(&record_json_serialized));
                 serialized.extend(record_json_serialized);
 
-                file.write(&serialized)?;
+                file.write(&serialized)
+                    .map_err(|e| LsmError::CannotWriteManifestOperation(manifest_record.content.clone(), e))?;
                 file.fsync();
                 Ok(manifest_record_id)
             }
-            Err(_) => Err(())
+            //This won't happen since manifest_record does not contain a map with non string keys
+            //and Serialization implementation doesn't fail
+            Err(_) => panic!("Unexpected failure of json serialization of ManifestOperationContent")
         }
     }
 

@@ -10,6 +10,8 @@ use std::path::Path;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering::Release;
 use std::sync::{Arc, Mutex};
+use crate::lsm_error::{DecodeErrorInfo, LsmError, SSTableCorruptedPart};
+use crate::lsm_error::LsmError::{CannotDecodeSSTable, CannotDeleteSSTable, CannotOpenSSTableFile, CannotReadSSTableFile};
 use crate::sst::block_metadata::BlockMetadata;
 
 pub const SSTABLE_DELETED: u8 = 2;
@@ -58,9 +60,11 @@ impl SSTable {
         id: usize,
         path: &Path,
         lsm_options: Arc<LsmOptions>
-    ) -> Result<Arc<SSTable>, ()> {
-        let sst_file = LsmFile::open(path, LsmFileMode::RandomWrites)?;
-        let sst_bytes = sst_file.read_all()?;
+    ) -> Result<Arc<SSTable>, LsmError> {
+        let sst_file = LsmFile::open(path, LsmFileMode::RandomWrites)
+            .map_err(|e| CannotOpenSSTableFile(id, e))?;
+        let sst_bytes = sst_file.read_all()
+            .map_err(|e| CannotOpenSSTableFile(id, e))?;
 
         Self::decode(&sst_bytes, id, lsm_options, sst_file)
     }
@@ -70,14 +74,27 @@ impl SSTable {
         id: usize,
         lsm_options: Arc<LsmOptions>,
         file: LsmFile,
-    ) -> Result<Arc<SSTable>, ()> {
+    ) -> Result<Arc<SSTable>, LsmError> {
         let meta_offset = utils::u8_vec_to_u32_le(bytes, bytes.len() - 4);
         let bloom_offset = utils::u8_vec_to_u32_le(bytes, bytes.len() - 8);
         let level = utils::u8_vec_to_u32_le(bytes, bytes.len() - 12);
         let state = bytes[bytes.len() - 13];
 
-        let block_metadata = BlockMetadata::decode_all(bytes, meta_offset as usize)?;
-        let bloom_filter = BloomFilter::decode(bytes, bloom_offset as usize)?;
+        let block_metadata = BlockMetadata::decode_all(bytes, meta_offset as usize)
+            .map_err(|error_type| CannotDecodeSSTable(id, SSTableCorruptedPart::BlockMetadata, DecodeErrorInfo{
+                offset: meta_offset as usize,
+                path: file.path(),
+                error_type,
+                index: 0,
+            }))?;
+
+        let bloom_filter = BloomFilter::decode(bytes, bloom_offset as usize)
+            .map_err(|error_type| CannotDecodeSSTable(id, SSTableCorruptedPart::BloomFilter, DecodeErrorInfo{
+                offset: bloom_offset as usize,
+                path: file.path(),
+                error_type,
+                index: 0,
+            }))?;
 
         let first_key = Self::get_first_key(&block_metadata);
         let last_key = Self::get_last_key(&block_metadata);
@@ -103,16 +120,16 @@ impl SSTable {
         block_metadata.get(0).unwrap().first_key.clone()
     }
 
-    pub fn delete(&self) -> Result<(), ()> {
+    pub fn delete(&self) -> Result<(), LsmError> {
         self.state.store(SSTABLE_DELETED, Release);
-        self.file.delete()
+        self.file.delete().map_err(|e| CannotDeleteSSTable(self.id, e))
     }
 
     pub fn size(&self) -> usize {
         self.file.size()
     }
 
-    pub fn load_block(&self, block_id: usize) -> Result<Arc<Block>, ()> {
+    pub fn load_block(&self, block_id: usize) -> Result<Arc<Block>, LsmError> {
         {
             //Try read from cache
             let mut block_cache = self.block_cache.lock()
@@ -120,14 +137,23 @@ impl SSTable {
             let block_entry_from_cache = block_cache.get(block_id);
 
             if block_entry_from_cache.is_some() {
-                return Ok::<Arc<Block>, ()>(block_entry_from_cache.unwrap());
+                return Ok::<Arc<Block>, LsmError>(block_entry_from_cache.unwrap());
             }
         }
 
         //Read from disk
-        let metadata = &self.block_metadata[block_id];
-        let encoded_block = self.file.read(metadata.offset, self.lsm_options.block_size_bytes)?;
-        let block = Block::decode(&encoded_block, &self.lsm_options)?;
+        let metadata: &BlockMetadata = &self.block_metadata[block_id];
+        let encoded_block = self.file.read(metadata.offset, self.lsm_options.block_size_bytes)
+            .map_err(|e| CannotReadSSTableFile(self.id, e))?;
+
+        let block = Block::decode(&encoded_block, &self.lsm_options)
+            .map_err(|error_type| CannotDecodeSSTable(self.id, SSTableCorruptedPart::Block(block_id), DecodeErrorInfo{
+                offset: metadata.offset,
+                path: self.file.path(),
+                error_type,
+                index: 0,
+            }))?;
+
         let block = Arc::new(block);
 
         {

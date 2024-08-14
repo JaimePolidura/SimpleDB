@@ -7,3 +7,4 @@ mod manifest;
 pub mod lsm_options;
 pub mod lsm;
 pub mod key;
+mod lsm_error;

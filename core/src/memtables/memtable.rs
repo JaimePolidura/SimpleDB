@@ -6,6 +6,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
 use crate::key::Key;
+use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::MemtableState::{Active, Flushed, Flusing, Inactive, RecoveringFromWal};
 use crate::memtables::wal::Wal;
@@ -33,7 +34,10 @@ enum MemtableState {
 }
 
 impl MemTable {
-    pub fn create_new(options: Arc<LsmOptions>, memtable_id: usize) -> Result<MemTable, ()> {
+    pub fn create_new(
+        options: Arc<LsmOptions>,
+        memtable_id: usize
+    ) -> Result<MemTable, LsmError> {
         Ok(MemTable {
             max_size_bytes: options.memtable_max_size_bytes,
             current_size_bytes: AtomicUsize::new(0),
@@ -48,7 +52,7 @@ impl MemTable {
         options: Arc<LsmOptions>,
         memtable_id: usize,
         wal: Wal
-    ) -> Result<MemTable, ()> {
+    ) -> Result<MemTable, LsmError> {
         let mut memtable = MemTable {
             max_size_bytes: options.memtable_max_size_bytes,
             current_size_bytes: AtomicUsize::new(0),
@@ -102,29 +106,29 @@ impl MemTable {
         }
     }
 
-    pub fn set(&self, key: &Key, value: &[u8]) -> Result<(), ()> {
+    pub fn set(&self, key: &Key, value: &[u8]) -> Result<(), LsmError> {
         self.write_into_skip_list(
             key,
             Bytes::copy_from_slice(value)
         )
     }
 
-    pub fn delete(&self, key: &Key) -> Result<(), ()> {
+    pub fn delete(&self, key: &Key) -> Result<(), LsmError> {
         self.write_into_skip_list(
             key,
             TOMBSTONE
         )
     }
 
-    fn write_into_skip_list(&self, key: &Key, value: Bytes) -> Result<(), ()> {
+    fn write_into_skip_list(&self, key: &Key, value: Bytes) -> Result<(), LsmError> {
         if !self.can_memtable_be_written() {
             return Ok(());
         }
         if self.current_size_bytes.load(Relaxed) >= self.max_size_bytes {
-            return Err(());
+            return Err(LsmError::Internal);
         }
 
-        self.write_wal(&key, &value);
+        self.write_wal(&key, &value)?;
 
         self.current_size_bytes.fetch_add(key.len() + value.len(), Relaxed);
 
@@ -135,7 +139,7 @@ impl MemTable {
         Ok(())
     }
 
-    fn write_wal(&self, key: &Key, value: &Bytes) -> Result<(), ()> {
+    fn write_wal(&self, key: &Key, value: &Bytes) -> Result<(), LsmError> {
         //Multiple threads can write to the WAL concurrently, since the kernel already makes sure
         //that there won't be race conditions when multiple threads are writing to an append only file
         //https://nullprogram.com/blog/2016/08/03/
@@ -162,7 +166,7 @@ impl MemTable {
         sstable_builder
     }
 
-    fn recover_from_wal(&mut self) -> Result<(), ()> {
+    fn recover_from_wal(&mut self) -> Result<(), LsmError> {
         self.set_recovering_from_wal();
         let wal: &Wal = unsafe { &*self.wal.get() };
         let mut entries = wal.read_entries()?;
@@ -269,7 +273,7 @@ mod test {
 
     #[test]
     fn get_set_delete() {
-        let memtable: MemTable = MemTable::create_new(&LsmOptions::default(), 0)
+        let memtable = MemTable::create_new(&LsmOptions::default(), 0)
             .unwrap();
         let value: Vec<u8> = vec![10, 12];
 

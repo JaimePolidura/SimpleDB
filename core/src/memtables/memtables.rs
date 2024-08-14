@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 
 use crate::key::Key;
+use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::{MemTable, MemtableIterator};
 use crate::memtables::wal::Wal;
@@ -17,9 +18,8 @@ pub struct Memtables {
 }
 
 impl Memtables {
-    pub fn create(options: Arc<LsmOptions>) -> Result<Memtables, ()> {
-        let (wals, max_memtable_id) = Wal::get_persisted_wal_id(&options)
-            .expect("Cannot read WAL from disk");
+    pub fn create(options: Arc<LsmOptions>) -> Result<Memtables, LsmError> {
+        let (wals, max_memtable_id) = Wal::get_persisted_wal_id(&options)?;
 
         if !wals.is_empty() {
             Self::recover_memtables_from_wal(options, max_memtable_id, wals)
@@ -160,7 +160,7 @@ impl Memtables {
         options: Arc<LsmOptions>,
         max_memtable_id: usize,
         wals: Vec<Wal>,
-    ) -> Result<Memtables, ()> {
+    ) -> Result<Memtables, LsmError> {
         let current_memtable = MemTable::create_new(options.clone(), max_memtable_id + 1)?;
         let mut memtables: Vec<Arc<MemTable>> = Vec::new();
         let next_memtable_id = max_memtable_id + 2;
@@ -180,7 +180,7 @@ impl Memtables {
         })
     }
 
-    fn create_memtables_no_wal(options: Arc<LsmOptions>) -> Result<Memtables, ()> {
+    fn create_memtables_no_wal(options: Arc<LsmOptions>) -> Result<Memtables, LsmError> {
         let current_memtable = MemTable::create_new(options.clone(), 0)?;
         current_memtable.set_active();
 

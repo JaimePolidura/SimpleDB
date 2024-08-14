@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
+use crate::lsm_error::LsmError;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 
 pub struct SSTables {
@@ -216,28 +217,26 @@ impl SSTables {
         self.n_current_levels
     }
 
-    pub fn flush_memtable_to_disk(&self, sstable_builder: SSTableBuilder) -> Result<usize, ()> {
+    pub fn flush_memtable_to_disk(&self, sstable_builder: SSTableBuilder) -> Result<usize, LsmError> {
         let sstable_id: usize = self.next_sstable_id.fetch_add(1, Relaxed);
         let flush_operation = self.manifest.append_operation(ManifestOperationContent::MemtableFlush(MemtableFlushManifestOperation{
             memtable_id: sstable_builder.get_memtable_id().unwrap(),
             sstable_id,
-        }));
+        }))?;
 
         let flush_result = self.do_flush_to_disk(sstable_builder, sstable_id);
 
-        if flush_operation.is_ok() {
-            self.manifest.mark_as_completed(flush_operation?);
-        }
+        self.manifest.mark_as_completed(flush_operation)?;
 
         flush_result
     }
 
-    pub fn flush_to_disk(&self, sstable_builder: SSTableBuilder) -> Result<usize, ()> {
+    pub fn flush_to_disk(&self, sstable_builder: SSTableBuilder) -> Result<usize, LsmError> {
         let sstable_id: usize = self.next_sstable_id.fetch_add(1, Relaxed);
         self.do_flush_to_disk(sstable_builder, sstable_id)
     }
 
-    fn do_flush_to_disk(&self, sstable_builder: SSTableBuilder, sstable_id: usize) -> Result<usize, ()> {
+    fn do_flush_to_disk(&self, sstable_builder: SSTableBuilder, sstable_id: usize) -> Result<usize, LsmError> {
         let sstable_build_result = sstable_builder.build(
             sstable_id,
             self.get_sstable_path(sstable_id).as_path(),
@@ -251,7 +250,7 @@ impl SSTables {
                 sstables_in_level.push(Arc::new(sstable_built));
                 Ok(sstable_id)
             },
-            Err(_) => Err(()),
+            Err(e) => Err(e),
         }
     }
 

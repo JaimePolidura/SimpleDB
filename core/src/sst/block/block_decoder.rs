@@ -5,15 +5,16 @@ use crate::sst::block::block;
 use crate::sst::block::block::Block;
 use crate::key;
 use crate::key::Key;
+use crate::lsm_error::DecodeErrorType;
 use crate::lsm_options::LsmOptions;
 use crate::utils::utils;
 
 pub(crate) fn decode_block(
     encoded: &Vec<u8>,
     options: &Arc<LsmOptions>
-) -> Result<Block, ()> {
+) -> Result<Block, DecodeErrorType> {
     if encoded.len() != options.block_size_bytes {
-        return Err(());
+        return Err(DecodeErrorType::IllegalSize(options.block_size_bytes, encoded.len()));
     }
 
     let flag: u64 = utils::u8_vec_to_u64_le(&encoded, options.block_size_bytes - 12);
@@ -21,10 +22,10 @@ pub(crate) fn decode_block(
     let n_entries: u16 = utils::u8_vec_to_u16_le(&encoded, options.block_size_bytes - 4);
     let offsets = decode_offsets(encoded, offsets_offset, n_entries);
     let (entries, new_offsets) = match flag {
-        PREFIX_COMPRESSED => decode_entries_prefix_compressed(encoded, &offsets),
-        NOT_COMPRESSED => (decode_entries_not_compressed(encoded, offsets_offset), offsets),
-        _ => panic!("Illegal block flags when decoding")
-    };
+        PREFIX_COMPRESSED => Ok(decode_entries_prefix_compressed(encoded, &offsets)),
+        NOT_COMPRESSED => Ok((decode_entries_not_compressed(encoded, offsets_offset), offsets)),
+        _ => Err(DecodeErrorType::UnknownFlag(flag as usize)),
+    }?;
 
     Ok(Block{ offsets: new_offsets, entries })
 }

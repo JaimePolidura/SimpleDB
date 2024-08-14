@@ -4,6 +4,7 @@ use crate::sst::block::block_decoder::decode_block;
 use crate::sst::block::block_encoder::encode_block;
 use crate::key;
 use crate::key::Key;
+use crate::lsm_error::DecodeErrorType;
 use crate::lsm_options::LsmOptions;
 use crate::utils::utils;
 
@@ -25,10 +26,10 @@ impl Block {
         encode_block(&self, options)
     }
 
-    pub fn decode(encoded: &Vec<u8>, options: &Arc<LsmOptions>) -> Result<Block, ()> {
+    pub fn decode(encoded: &Vec<u8>, options: &Arc<LsmOptions>) -> Result<Block, DecodeErrorType> {
         decode_block(encoded, options)
     }
-    
+
     pub fn get_value(&self, key_lookup: &Key) -> Option<bytes::Bytes> {
         let mut left = 0;
         let mut right = self.offsets.len() / 2;
