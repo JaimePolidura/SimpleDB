@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
+use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
@@ -33,11 +34,11 @@ pub(crate) fn start_simple_leveled_compaction(
     compaction_task: SimpleLeveledCompactionTask,
     options: &Arc<LsmOptions>,
     sstables: &Arc<SSTables>
-) {
+) -> Result<(), LsmError> {
     let level_to_compact = compaction_task.level;
 
     if level_to_compact > options.simple_leveled_compaction_options.max_levels {
-        return;
+        return Ok(());
     }
 
     let sstables_id_in_next_level = sstables.get_sstables_id(level_to_compact + 1);
@@ -58,8 +59,7 @@ pub(crate) fn start_simple_leveled_compaction(
         );
 
         if new_sstable_builder.as_ref().unwrap().estimated_size_bytes() > options.sst_size_bytes {
-            let new_sstable_id: usize = sstables.flush_to_disk(new_sstable_builder.take().unwrap())
-                .unwrap();
+            let new_sstable_id: usize = sstables.flush_to_disk(new_sstable_builder.take().unwrap())?;
             new_sstables_id.push(new_sstable_id);
 
             new_sstable_builder = Some(SSTableBuilder::new(
@@ -69,16 +69,17 @@ pub(crate) fn start_simple_leveled_compaction(
     }
 
     if new_sstable_builder.as_ref().unwrap().n_entries() > 0 {
-        new_sstables_id.push(sstables.flush_to_disk(new_sstable_builder.take().unwrap())
-            .unwrap());
+        new_sstables_id.push(sstables.flush_to_disk(new_sstable_builder.take().unwrap())?);
     }
 
     println!("Compacted SSTables: {:?} in level {} with SSTables {:?} in level {}. Created SSTables {:?}",
              sstables_id_in_level, level_to_compact, sstables_id_in_next_level, level_to_compact + 1,
              new_sstables_id);
 
-    sstables.delete_sstables(level_to_compact + 1, sstables_id_in_next_level);
-    sstables.delete_sstables(level_to_compact, sstables_id_in_level);
+    sstables.delete_sstables(level_to_compact + 1, sstables_id_in_next_level)?;
+    sstables.delete_sstables(level_to_compact, sstables_id_in_level)?;
+
+    Ok(())
 }
 
 pub(crate) fn create_simple_level_compaction_task(

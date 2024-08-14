@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
+use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
@@ -33,18 +34,18 @@ pub(crate) fn start_tiered_compaction(
     task: TieredCompactionTask,
     options: &Arc<LsmOptions>,
     sstables: &Arc<SSTables>
-) {
+) -> Result<(), LsmError> {
     match task {
         TieredCompactionTask::AmplificationRatioTrigger => do_tiered_compaction(options, sstables, sstables.get_n_levels() - 1),
         TieredCompactionTask::SizeRatioTrigger(level_id) => do_tiered_compaction(options, sstables, level_id),
-    };
+    }
 }
 
 fn do_tiered_compaction(
     options: &Arc<LsmOptions>,
     sstables: &Arc<SSTables>,
     max_level_id_to_compact: usize //Well compact from level 0 to max_level_id_to_compact (inclusive, inclusive)
-) {
+) -> Result<(), LsmError> {
     let new_level = max_level_id_to_compact + 1;
     let levels_id_to_compact: Vec<usize> = (0..max_level_id_to_compact).into_iter().collect();
     let mut iterator = sstables.iter(&levels_id_to_compact);
@@ -61,19 +62,20 @@ fn do_tiered_compaction(
         );
 
         if new_sstable_builder.as_ref().unwrap().estimated_size_bytes() > options.sst_size_bytes {
-            sstables.flush_to_disk(new_sstable_builder.take().unwrap())
-                .unwrap();
+            sstables.flush_to_disk(new_sstable_builder.take().unwrap())?;
+
             new_sstable_builder = Some(SSTableBuilder::new(options.clone(), new_level as u32));
         }
     }
 
     if new_sstable_builder.as_ref().unwrap().n_entries() > 0 {
-        sstables.flush_to_disk(new_sstable_builder.take().unwrap())
-            .unwrap();
+        sstables.flush_to_disk(new_sstable_builder.take().unwrap())?;
     }
 
     levels_id_to_compact.iter()
         .for_each(|level_id| sstables.delete_all_sstables(*level_id));
+
+    Ok(())
 }
 
 pub(crate) fn create_tiered_compaction_task(

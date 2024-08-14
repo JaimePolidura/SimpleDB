@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::sst::sstables::SSTables;
 use std::time::Duration;
 use std::sync::Arc;
+use crate::lsm_error::LsmError;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent};
 
 pub struct Compaction {
@@ -52,7 +53,7 @@ impl Compaction {
         });
     }
 
-    pub fn compact(&self, compaction_task: CompactionTask) {
+    pub fn compact(&self, compaction_task: CompactionTask) -> Result<(), LsmError> {
         match compaction_task {
             CompactionTask::SimpleLeveled(simpleLeveledTask) => start_simple_leveled_compaction(
                 simpleLeveledTask, &self.lsm_options, &self.sstables
@@ -72,10 +73,13 @@ impl CompactionThread {
             if let Some(compaction_task) = self.create_compaction_task() {
                 let operation_id = self.manifest.append_operation(ManifestOperationContent::Compaction(compaction_task));
 
-                self.compact(compaction_task);
+                if let Err(compaction_error) = self.compact(compaction_task) {
+                    println!("Error while compacting: {:?}", compaction_error);
+                }
 
                 if let Ok(operation_id) = operation_id {
-                    self.manifest.mark_as_completed(operation_id);
+                    self.manifest.mark_as_completed(operation_id)
+                        .inspect_err(|e| println!("{:?}", e));
                 }
             }
         }
@@ -102,7 +106,7 @@ impl CompactionThread {
         None
     }
 
-    fn compact(&self, compaction_task: CompactionTask) {
+    fn compact(&self, compaction_task: CompactionTask) -> Result<(), LsmError> {
         match compaction_task {
             CompactionTask::SimpleLeveled(simpleLeveledTask) => start_simple_leveled_compaction(
                 simpleLeveledTask, &self.lsm_options, &self.sstables

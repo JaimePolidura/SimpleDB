@@ -138,7 +138,7 @@ impl SSTables {
                 let mut sstables = lock_result.as_mut().unwrap();
                 sstables.clear();
             },
-            None => {}
+            None => {},
         };
     }
 
@@ -155,7 +155,7 @@ impl SSTables {
         false
     }
 
-    pub fn delete_sstables(&self, level: usize, sstables_id: Vec<usize>) {
+    pub fn delete_sstables(&self, level: usize, sstables_id: Vec<usize>) -> Result<(), LsmError> {
         match self.sstables.get(level) {
             Some(sstables_lock) => {
                 let mut lock_result = sstables_lock.write();
@@ -172,10 +172,12 @@ impl SSTables {
 
                 for index_to_remove in indexes_to_remove.iter().rev() {
                     let mut sstable = sstables_in_level.remove(*index_to_remove);
-                    sstable.delete();
+                    sstable.delete()?;
                 }
+
+                Ok(())
             },
-            None => {}
+            None => Ok(())
         }
     }
 
@@ -200,7 +202,7 @@ impl SSTables {
         match self.sstables.get(level) {
             Some(sstables) => sstables.read().unwrap()
                 .iter()
-                .map(|it| it.id as usize)
+                .map(|it| it.id)
                 .collect(),
             None => Vec::new(),
         }
