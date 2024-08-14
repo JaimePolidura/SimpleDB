@@ -47,15 +47,30 @@ impl Wal {
         let mut entries: Vec<WalEntry> = Vec::new();
 
         while current_ptr.has_remaining() {
+            let start_entry_ptr = current_ptr.clone();
+            let mut entry_bytes_size = 0;
+
             let key_len = current_ptr.get_u32_le() as usize;
+            entry_bytes_size = entry_bytes_size + 4;
+
             let key_bytes = &current_ptr[..key_len];
             current_ptr.advance(key_len);
+            entry_bytes_size = entry_bytes_size + key_len;
             let key_string = String::from_utf8(key_bytes.to_vec()).map_err(|e| ())?;
             let key = key::new(key_string.as_str());
 
             let value_len = current_ptr.get_u32_le() as usize;
+            entry_bytes_size = entry_bytes_size + 4;
             let value_bytes = &current_ptr[..value_len];
             current_ptr.advance(value_len);
+            entry_bytes_size = entry_bytes_size + value_len;
+
+            let expected_crc = current_ptr.get_u32_le();
+            let actual_crc = crc32fast::hash(&start_entry_ptr[..entry_bytes_size]);
+
+            if expected_crc != actual_crc {
+                return Err(());
+            }
 
             entries.push(WalEntry{
                 value: Bytes::copy_from_slice(value_bytes),
@@ -99,12 +114,15 @@ impl Wal {
 
         Ok((wals, max_memtable_id))
     }
+
     fn encode(&self, key: &Key, value: &[u8]) -> Vec<u8> {
         let mut encoded: Vec<u8> = Vec::new();
         encoded.put_u32_le(key.len() as u32);
         encoded.extend(key.as_bytes());
         encoded.put_u32_le(value.len() as u32);
         encoded.extend(value);
+        encoded.put_u32_le(crc32fast::hash(&encoded));
+
         encoded
     }
 

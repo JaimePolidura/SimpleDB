@@ -106,7 +106,14 @@ impl Manifest {
 
         while records_bytes_ptr.has_remaining() {
             let json_length = records_bytes_ptr.get_u32_le() as usize;
+            let expected_crc = records_bytes_ptr.get_u32_le();
             let json_record_bytes = &records_bytes_ptr[..json_length];
+            let actual_crc = crc32fast::hash(json_record_bytes);
+
+            if expected_crc != actual_crc {
+                return Err(());
+            }
+
             let deserialized_record = serde_json::from_slice::<ManifestOperation>(json_record_bytes)
                 .map_err(|e| ())?;
 
@@ -133,7 +140,9 @@ impl Manifest {
             Ok(record_json_serialized) => {
                 let mut serialized: Vec<u8> = Vec::new();
                 serialized.put_u32_le(record_json_serialized.len() as u32);
+                serialized.put_u32_le(crc32fast::hash(&record_json_serialized));
                 serialized.extend(record_json_serialized);
+
                 file.write(&serialized)?;
                 file.fsync();
                 Ok(manifest_record_id)

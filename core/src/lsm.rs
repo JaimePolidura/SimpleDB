@@ -80,7 +80,7 @@ impl Lsm {
             None => Ok(()),
         }
     }
-    
+
     pub fn write_batch(&mut self, batch: &[WriteBatch]) -> Result<(), ()> {
         for write_batch_record in batch {
             match write_batch_record {

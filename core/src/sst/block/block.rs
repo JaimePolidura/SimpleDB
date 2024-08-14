@@ -28,7 +28,7 @@ impl Block {
     pub fn decode(encoded: &Vec<u8>, options: &Arc<LsmOptions>) -> Result<Block, ()> {
         decode_block(encoded, options)
     }
-
+    
     pub fn get_value(&self, key_lookup: &Key) -> Option<bytes::Bytes> {
         let mut left = 0;
         let mut right = self.offsets.len() / 2;

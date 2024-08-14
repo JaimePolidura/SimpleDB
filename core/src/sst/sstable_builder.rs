@@ -97,10 +97,14 @@ impl SSTableBuilder {
 
         //Blocks metadata
         let meta_offset = encoded.len();
-        encoded.extend(BlockMetadata::encode_all(&self.builded_block_metadata));
-        //Block
+        let meta_encoded = BlockMetadata::encode_all(&self.builded_block_metadata);
+        encoded.extend(meta_encoded);
+
+        //Bloom
         let bloom_offset = encoded.len();
-        encoded.extend(bloom_filter.encode());
+        let bloom_encoded = bloom_filter.encode();
+        encoded.extend(bloom_encoded);
+
         //Bloom & blocks metadata offsets, state
         encoded.push(SSTABLE_ACTIVE);
         encoded.put_u32_le(self.level);
