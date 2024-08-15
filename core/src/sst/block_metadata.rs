@@ -1,10 +1,8 @@
-use std::string::FromUtf8Error;
-use bytes::BufMut;
 use crate::key;
 use crate::key::Key;
-use crate::lsm_error::{DecodeErrorInfo, DecodeErrorType, LsmError, SSTableCorruptedPart};
-use crate::lsm_error::LsmError::CannotDecodeSSTable;
+use crate::lsm_error::DecodeErrorType;
 use crate::utils::utils;
+use bytes::BufMut;
 
 #[derive(Eq, PartialEq)]
 pub struct BlockMetadata {
@@ -58,12 +56,16 @@ impl BlockMetadata {
 
         let first_key_length = utils::u8_vec_to_u32_le(&bytes, current_index) as usize;
         current_index = current_index + 4;
+        let first_key_timestamp = utils::u8_vec_to_u64_le(&bytes, current_index);
+        current_index = current_index + 8;
         let first_key = String::from_utf8(bytes[current_index..(current_index + first_key_length)].to_vec())
             .map_err(|e| DecodeErrorType::Utf8Decode(e))?;
         current_index = current_index + first_key_length;
 
         let last_key_length = utils::u8_vec_to_u32_le(&bytes, current_index) as usize;
         current_index = current_index + 4;
+        let last_key_timestamp = utils::u8_vec_to_u64_le(&bytes, current_index);
+        current_index = current_index + 8;
         let last_key = String::from_utf8(bytes[current_index..(current_index + last_key_length)].to_vec())
             .map_err(|e| DecodeErrorType::Utf8Decode(e))?;
 
@@ -73,17 +75,22 @@ impl BlockMetadata {
         current_index = current_index + 4;
 
         Ok((current_index, BlockMetadata{
-            first_key: key::new(first_key.as_str()),
-            last_key: key::new(last_key.as_str()),
+            first_key: key::new(first_key.as_str(), first_key_timestamp),
+            last_key: key::new(last_key.as_str(), last_key_timestamp),
             offset
         }))
     }
 
     pub fn encode(&self) -> Vec<u8> {
         let mut metadata_encoded: Vec<u8> = Vec::new();
+        //First key
         metadata_encoded.put_u32_le(self.first_key.len() as u32);
+        metadata_encoded.put_u64_le(self.first_key.timestamp());
         metadata_encoded.extend(self.first_key.as_bytes());
+
+        //Las key
         metadata_encoded.put_u32_le(self.last_key.len() as u32);
+        metadata_encoded.put_u64_le(self.last_key.timestamp());
         metadata_encoded.extend(self.last_key.as_bytes());
         metadata_encoded.put_u32_le(self.offset as u32);
         metadata_encoded
@@ -112,22 +119,22 @@ mod test {
     #[test]
     fn encode_decode() {
         let metadata = vec![
-            BlockMetadata{offset: 0, first_key: key::new("a"), last_key: key::new("b")},
-            BlockMetadata{offset: 1, first_key: key::new("b"), last_key: key::new("c")},
-            BlockMetadata{offset: 2, first_key: key::new("c"), last_key: key::new("d")},
-            BlockMetadata{offset: 3, first_key: key::new("d"), last_key: key::new("z")},
+            BlockMetadata{offset: 0, first_key: key::new("a", 1), last_key: key::new("b", 1)},
+            BlockMetadata{offset: 1, first_key: key::new("b", 1), last_key: key::new("c", 1)},
+            BlockMetadata{offset: 2, first_key: key::new("c", 1), last_key: key::new("d", 1)},
+            BlockMetadata{offset: 3, first_key: key::new("d", 1), last_key: key::new("z", 1)},
         ];
         let encoded = BlockMetadata::encode_all(&metadata);
-        let decoded = BlockMetadata::decode_all(&encoded, 0, 0);
+        let decoded = BlockMetadata::decode_all(&encoded, 0);
 
         assert!(decoded.is_ok());
         let decoded = decoded.unwrap();
 
         assert_eq!(decoded.len(), 4);
 
-        assert!(decoded[0].offset == 0 && decoded[0].first_key == key::new("a") && decoded[0].last_key == key::new("b"));
-        assert!(decoded[1].offset == 1 && decoded[1].first_key == key::new("b") && decoded[1].last_key == key::new("c"));
-        assert!(decoded[2].offset == 2 && decoded[2].first_key == key::new("c") && decoded[2].last_key == key::new("d"));
-        assert!(decoded[3].offset == 3 && decoded[3].first_key == key::new("d") && decoded[3].last_key == key::new("z"));
+        assert!(decoded[0].offset == 0 && decoded[0].first_key == key::new("a", 1) && decoded[0].last_key == key::new("b", 1));
+        assert!(decoded[1].offset == 1 && decoded[1].first_key == key::new("b", 1) && decoded[1].last_key == key::new("c", 1));
+        assert!(decoded[2].offset == 2 && decoded[2].first_key == key::new("c", 1) && decoded[2].last_key == key::new("d", 1));
+        assert!(decoded[3].offset == 3 && decoded[3].first_key == key::new("d", 1) && decoded[3].last_key == key::new("z", 1));
     }
 }

@@ -58,14 +58,17 @@ fn decode_entries_prefix_compressed(
         current_index = current_index + 2;
         let rest_key_size = utils::u8_vec_to_u16_le(encoded, current_index);
         current_index = current_index + 2;
+        let key_timestamp = utils::u8_vec_to_u64_le(encoded, current_index);
+        current_index = current_index + 8;
         let rest_key_u8_vec = encoded[current_index..(current_index + rest_key_size as usize)].to_vec();
+
         let current_key = match prev_key.as_ref() {
             Some(prev_key) => {
                 let (overlaps, _) = prev_key.split(key_overlap_size as usize);
-                let rest_key = key::new(String::from_utf8(rest_key_u8_vec).unwrap().as_str());
-                Key::merge(&overlaps, &rest_key)
+                let rest_key = key::new(String::from_utf8(rest_key_u8_vec).unwrap().as_str(), key_timestamp);
+                Key::merge(&overlaps, &rest_key, key_timestamp)
             },
-            None => key::new(String::from_utf8(rest_key_u8_vec).unwrap().as_str())
+            None => key::new(String::from_utf8(rest_key_u8_vec).unwrap().as_str(), key_timestamp)
         };
         current_index = current_index + rest_key_size as usize;
         entries_decoded.put_u16_le(current_key.len() as u16);

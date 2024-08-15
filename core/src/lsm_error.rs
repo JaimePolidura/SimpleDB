@@ -11,7 +11,7 @@ pub enum DecodeErrorType {
     UnknownFlag(usize), //Current flag value
 }
 
-pub struct DecodeErrorInfo {
+pub struct DecodeError {
     pub path: PathBuf,
     pub offset: usize,
     pub index: usize,
@@ -31,19 +31,19 @@ pub enum LsmError {
     CannotWriteWalEntry(usize, std::io::Error),
     CannotReadWalEntries(usize, std::io::Error),
     CannotReadWalFiles(std::io::Error),
-    CannotDecodeWal(usize, DecodeErrorInfo),
+    CannotDecodeWal(usize, DecodeError),
 
     //Manifest errors
     CannotCreateManifest(std::io::Error),
     CannotWriteManifestOperation(ManifestOperationContent, std::io::Error),
     CannotReadManifestOperations(std::io::Error),
-    CannotDecodeManifest(DecodeErrorInfo),
+    CannotDecodeManifest(DecodeError),
     CannotResetManifest(std::io::Error),
 
     //SSTable errors
     CannotOpenSSTableFile(usize, std::io::Error),
     CannotReadSSTableFile(usize, std::io::Error),
-    CannotDecodeSSTable(usize, SSTableCorruptedPart, DecodeErrorInfo),
+    CannotDecodeSSTable(usize, SSTableCorruptedPart, DecodeError),
     CannotDeleteSSTable(usize, std::io::Error),
     CannotCreateSSTableFile(usize, std::io::Error),
 
@@ -107,10 +107,24 @@ impl Debug for LsmError {
     }
 }
 
+impl Debug for DecodeErrorType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let message = decode_error_type_to_message(self);
+        write!(f, "{}", message)
+    }
+}
+
+impl Debug for DecodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let message = decode_error_to_message(self);
+        write!(f, "{}", message)
+    }
+}
+
 fn sstable_decode_error_to_message(
     sstable_id: usize,
     corrupted_part: SSTableCorruptedPart,
-    decode_error_info: &DecodeErrorInfo
+    decode_error: &DecodeError
 ) -> String {
     let mut message = String::new();
 
@@ -121,34 +135,37 @@ fn sstable_decode_error_to_message(
     };
 
     message.push_str(format!("Cannot decode SSTable {}. SSTable ID: {}. Error: {}", corrupted_part,
-                             sstable_id, decode_error_to_message(decode_error_info)).as_str());
+                             sstable_id, decode_error_to_message(decode_error)).as_str());
 
     message
 }
 
-fn decode_error_to_message(decode_error: &DecodeErrorInfo) -> String {
+fn decode_error_to_message(decode_error: &DecodeError) -> String {
     let mut message = String::new();
 
     message.push_str(format!("File {} in file offset {} in index {}: ", decode_error.path.as_path().to_str().unwrap(),
                          decode_error.offset, decode_error.index).as_str());
-
-    match &decode_error.error_type {
-        DecodeErrorType::CorruptedCrc(expected, actual) => {
-            message.push_str(format!("Corrupted CRC Expected {} Actual {}", expected, actual).as_str());
-        },
-        DecodeErrorType::Utf8Decode(utf8_error) => {
-            message.push_str(format!("Invalid UTF-8: {}", utf8_error).as_str());
-        },
-        DecodeErrorType::JsonSerdeDeserialization(serde_error) => {
-            message.push_str(format!("Invalid JSON format when deserializing: {}", serde_error).as_str());
-        },
-        DecodeErrorType::IllegalSize(expected, actual) => {
-            message.push_str(format!("Illegal size. Expected {}, Actual {}", expected, actual).as_str());
-        }
-        DecodeErrorType::UnknownFlag(unknown_flgag) => {
-            message.push_str(format!("Unknown flag {}", unknown_flgag).as_str());
-        },
-    }
+    message.push_str(decode_error_type_to_message(&decode_error.error_type).as_str());
 
     message
+}
+
+fn decode_error_type_to_message(decode_error_type: &DecodeErrorType) -> String {
+    match &decode_error_type {
+        DecodeErrorType::CorruptedCrc(expected, actual) => {
+            format!("Corrupted CRC Expected {} Actual {}", expected, actual)
+        },
+        DecodeErrorType::Utf8Decode(utf8_error) => {
+            format!("Invalid UTF-8: {}", utf8_error)
+        },
+        DecodeErrorType::JsonSerdeDeserialization(serde_error) => {
+            format!("Invalid JSON format when deserializing: {}", serde_error)
+        },
+        DecodeErrorType::IllegalSize(expected, actual) => {
+            format!("Illegal size. Expected {}, Actual {}", expected, actual)
+        }
+        DecodeErrorType::UnknownFlag(unknown_flgag) => {
+            format!("Unknown flag {}", unknown_flgag)
+        },
+    }
 }

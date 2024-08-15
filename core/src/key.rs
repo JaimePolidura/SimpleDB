@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::Formatter;
 use crate::key;
@@ -5,11 +6,13 @@ use crate::key;
 #[derive(Debug)]
 pub struct Key {
     string: String,
+    timestamp: u64,
 }
 
-pub fn new(string: &str) -> Key {
+pub fn new(string: &str, timestamp: u64) -> Key {
     Key {
-        string: string.to_string()
+        string: string.to_string(),
+        timestamp
     }
 }
 
@@ -24,6 +27,10 @@ impl Key {
 
     pub fn as_bytes(&self) -> &[u8] {
         self.string.as_bytes()
+    }
+
+    pub fn timestamp(&self) -> u64 {
+        self.timestamp
     }
 
     //"Juan".prefix_difference("Justo") -> (2, 2)
@@ -49,13 +56,13 @@ impl Key {
     //"Juan".split(2) -> ("Ju", "an")
     pub fn split(&self, index: usize) -> (Key, Key) {
         let (h1, h2) = self.string.split_at(index);
-        (key::new(h1), key::new(h2))
+        (key::new(h1, self.timestamp), key::new(h2, self.timestamp))
     }
 
-    pub fn merge(a: &Key, b: &Key) -> Key {
+    pub fn merge(a: &Key, b: &Key, timestamp: u64) -> Key {
         let mut result = String::from(&a.string);
         result.extend(b.string.chars());
-        Key {string: result }
+        Key {string: result, timestamp }
     }
 }
 
@@ -67,13 +74,13 @@ impl fmt::Display for Key {
 
 impl Default for Key {
     fn default() -> Self {
-        Key{ string: String::from("") }
+        Key{ string: String::from(""), timestamp: 0 }
     }
 }
 
 impl PartialEq for Key {
     fn eq(&self, other: &Self) -> bool {
-        self.string.eq(&other.string)
+        self.string.eq(&other.string) && self.timestamp == other.timestamp
     }
 }
 
@@ -82,18 +89,24 @@ impl Eq for Key {}
 impl Clone for Key {
     fn clone(&self) -> Self {
         let cloned = self.string.clone();
-        Key { string: cloned }
+        Key { string: cloned, timestamp: self.timestamp }
     }
 }
 
 impl PartialOrd for Key {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.string.partial_cmp(&other.string)
+        match self.string.partial_cmp(&other.string) {
+            Some(Ordering::Equal) => self.timestamp.partial_cmp(&other.timestamp),
+            other => other,
+        }
     }
 }
 
 impl Ord for Key {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.string.cmp(&other.string)
+        match self.string.cmp(&other.string) {
+            Ordering::Equal => self.timestamp.cmp(&other.timestamp),
+            other => other,
+        }
     }
 }

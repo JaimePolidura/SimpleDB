@@ -60,6 +60,7 @@ fn encode_prefix_compressed_entries(
                 let (_, rest_key) = current_key.split(key_overlap_size);
                 encoded.put_u16_le(key_overlap_size as u16);
                 encoded.put_u16_le(rest_key_size as u16);
+                encoded.put_u64_le(current_key.timestamp());
                 if !rest_key.is_empty() {
                     encoded.extend(rest_key.as_bytes());
                 }
@@ -71,6 +72,7 @@ fn encode_prefix_compressed_entries(
                 //Key
                 encoded.put_u16_le(0);
                 encoded.put_u16_le(current_key.len() as u16);
+                encoded.put_u64_le(current_key.timestamp());
                 encoded.extend(current_key.as_bytes());
                 //Value
                 encoded.put_u16_le(current_value.len() as u16);

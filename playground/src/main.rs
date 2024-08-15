@@ -18,7 +18,7 @@ fn main() {
 }
 
 fn read(lsm: &mut lsm::Lsm) {
-    let value = lsm.get(&key::new("AAB"));
+    let value = lsm.get("AAB");
     if value.is_some() {
     }
 }
@@ -35,12 +35,11 @@ fn write(lsm: &mut lsm::Lsm)  {
     }
 }
 
-fn next_key() -> key::Key {
+fn next_key() -> String {
     let mut rng = rand::thread_rng();
-    let random_string: String = (0..3)
+    (0..3)
         .map(|_| rng.gen_range(65..90) as u8 as char) // Generate a random ASCII character
-        .collect();
-    key::new(random_string.as_str())
+        .collect()
 }
 
 fn next_value() -> Vec<u8> {

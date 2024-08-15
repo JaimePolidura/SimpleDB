@@ -134,31 +134,31 @@ mod test {
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::new("Alberto")));
+        assert!(sstable_iteator.key().eq(&key::new("Alberto", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::new("Berto")));
+        assert!(sstable_iteator.key().eq(&key::new("Berto", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::new("Cigu")));
+        assert!(sstable_iteator.key().eq(&key::new("Cigu", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::new("De")));
+        assert!(sstable_iteator.key().eq(&key::new("De", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::new("Estonia")));
+        assert!(sstable_iteator.key().eq(&key::new("Estonia", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::new("Gibraltar")));
+        assert!(sstable_iteator.key().eq(&key::new("Gibraltar", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::new("Zi")));
+        assert!(sstable_iteator.key().eq(&key::new("Zi", 1)));
 
         assert!(!sstable_iteator.next());
         assert!(!sstable_iteator.has_next());
@@ -166,19 +166,19 @@ mod test {
 
     fn build_sstable_iterator() -> SSTableIterator {
         let mut block1 = BlockBuilder::new(Arc::new(LsmOptions::default()));
-        block1.add_entry(key::new("Alberto"), Bytes::from(vec![1]));
-        block1.add_entry(key::new("Berto"), Bytes::from(vec![1]));
+        block1.add_entry(key::new("Alberto", 1), Bytes::from(vec![1]));
+        block1.add_entry(key::new("Berto", 1), Bytes::from(vec![1]));
         let block1 = Arc::new(block1.build());
 
         let mut block2 = BlockBuilder::new(Arc::new(LsmOptions::default()));
-        block2.add_entry(key::new("Cigu"), Bytes::from(vec![1]));
-        block2.add_entry(key::new("De"), Bytes::from(vec![1]));
+        block2.add_entry(key::new("Cigu", 1), Bytes::from(vec![1]));
+        block2.add_entry(key::new("De", 1), Bytes::from(vec![1]));
         let block2 = Arc::new(block2.build());
 
         let mut block3 = BlockBuilder::new(Arc::new(LsmOptions::default()));
-        block3.add_entry(key::new("Estonia"), Bytes::from(vec![1]));
-        block3.add_entry(key::new("Gibraltar"), Bytes::from(vec![1]));
-        block3.add_entry(key::new("Zi"), Bytes::from(vec![1]));
+        block3.add_entry(key::new("Estonia", 1), Bytes::from(vec![1]));
+        block3.add_entry(key::new("Gibraltar", 1), Bytes::from(vec![1]));
+        block3.add_entry(key::new("Zi", 1), Bytes::from(vec![1]));
         let block3 = Arc::new(block3.build());
 
         let mut block_cache = BlockCache::new(Arc::new(LsmOptions::default()));
@@ -192,15 +192,15 @@ mod test {
             file: LsmFile::empty(),
             block_cache: Mutex::new(block_cache),
             block_metadata: vec![
-                BlockMetadata{offset: 0, first_key: key::new("Alberto"), last_key: key::new("Berto")},
-                BlockMetadata{offset: 8, first_key: key::new("Cigu"), last_key: key::new("De")},
-                BlockMetadata{offset: 16, first_key: key::new("Estonia"), last_key: key::new("Zi")},
+                BlockMetadata{offset: 0, first_key: key::new("Alberto", 1), last_key: key::new("Berto", 1)},
+                BlockMetadata{offset: 8, first_key: key::new("Cigu", 1), last_key: key::new("De", 1)},
+                BlockMetadata{offset: 16, first_key: key::new("Estonia", 1), last_key: key::new("Zi", 1)},
             ],
             lsm_options: Arc::new(LsmOptions::default()),
             level: 0,
             state: AtomicU8::new(SSTABLE_ACTIVE),
-            first_key: key::new("Alberto"),
-            last_key: key::new("Zi"),
+            first_key: key::new("Alberto", 1),
+            last_key: key::new("Zi", 1),
         });
 
         SSTableIterator::new(sstable)

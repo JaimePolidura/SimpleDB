@@ -6,7 +6,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use bytes::{Buf, BufMut};
 use serde::{Deserialize, Deserializer, Serialize};
 use crate::compaction::compaction::CompactionTask;
-use crate::lsm_error::{DecodeErrorInfo, DecodeErrorType, LsmError};
+use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
 use crate::lsm_error::LsmError::{CannotCreateManifest, CannotDecodeManifest, CannotReadManifestOperations, CannotResetManifest};
 use crate::lsm_options::LsmOptions;
 use crate::utils::lsm_file::{LsmFile, LsmFileMode};
@@ -119,7 +119,7 @@ impl Manifest {
             let actual_crc = crc32fast::hash(json_record_bytes);
 
             if expected_crc != actual_crc {
-                return Err(CannotDecodeManifest(DecodeErrorInfo{
+                return Err(CannotDecodeManifest(DecodeError {
                     error_type: DecodeErrorType::CorruptedCrc(expected_crc, actual_crc),
                     index: all_records.len(),
                     offset: current_offset,
@@ -128,7 +128,7 @@ impl Manifest {
             }
 
             let deserialized_record = serde_json::from_slice::<ManifestOperation>(json_record_bytes)
-                .map_err(|e| CannotDecodeManifest(DecodeErrorInfo{
+                .map_err(|e| CannotDecodeManifest(DecodeError {
                     error_type: DecodeErrorType::JsonSerdeDeserialization(e),
                     index: all_records.len(),
                     offset: current_offset,

@@ -32,9 +32,12 @@ impl BlockBuilder {
         for entry in &self.entries {
             let offset = entries.len();
 
-            self.add_length_to_bytes(&mut entries, entry.key.len());
+            //Key
+            utils::u16_to_u8_le(entry.key.len() as u16, entries.len(), &mut entries);
+            utils::u64_to_u8_le(entry.key.timestamp(), entries.len(), &mut entries);
             entries.put_slice(entry.key.as_bytes());
-            self.add_length_to_bytes(&mut entries, entry.value.len());
+            //Value
+            utils::u16_to_u8_le(entry.value.len() as u16, entries.len(), &mut entries);
             entries.put_slice(entry.value.as_ref());
 
             offsets.push(offset as u16);
@@ -58,12 +61,9 @@ impl BlockBuilder {
         Ok(())
     }
 
-    fn add_length_to_bytes(&self, bytes: &mut Vec<u8>, length: usize) {
-        utils::u16_to_u8_le(length as u16, bytes.len(), bytes);
-    }
-
     fn calculate_entry_size(&self, key: &Key, value: &Bytes) -> usize {
         std::mem::size_of::<i16>() + //Key length size
+            std::mem::size_of::<u64>() + //Key timestamp
             key.len() + //Key bytes
             std::mem::size_of::<i16>() + //Value length
             value.len() + //Value bytes
@@ -82,8 +82,8 @@ mod test {
     #[test]
     fn build() {
         let mut block_builder = BlockBuilder::new(Arc::new(LsmOptions::default()));
-        block_builder.add_entry(key::new("Jaime"), Bytes::from(vec![1, 2, 3]));
-        block_builder.add_entry(key::new("Pedro"), Bytes::from(vec![4, 5, 6]));
+        block_builder.add_entry(key::new("Jaime", 1), Bytes::from(vec![1, 2, 3]));
+        block_builder.add_entry(key::new("Pedro", 1), Bytes::from(vec![4, 5, 6]));
         let block = block_builder.build();
 
         assert_eq!(block.get_value_by_index(0), vec![1, 2, 3]);

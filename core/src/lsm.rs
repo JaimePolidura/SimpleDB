@@ -1,5 +1,4 @@
 use crate::compaction::compaction::{Compaction, CompactionTask};
-use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::memtables::memtable::{MemTable, MemtableIterator};
@@ -12,6 +11,7 @@ use crate::utils::storage_iterator::StorageIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use std::sync::Arc;
 use bytes::Bytes;
+use crate::key;
 use crate::lsm_error::LsmError;
 
 pub struct Lsm {
@@ -24,8 +24,8 @@ pub struct Lsm {
 }
 
 pub enum WriteBatch {
-    Put(Key, Bytes),
-    Delete(Key)
+    Put(String, Bytes),
+    Delete(String)
 }
 
 pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
@@ -61,22 +61,25 @@ impl Lsm {
         )
     }
 
-    pub fn get(&self, key: &Key) -> Option<bytes::Bytes> {
-        match self.memtables.get(key) {
+    pub fn get(&self, key: &str) -> Option<bytes::Bytes> {
+        let key = key::new(key);
+        match self.memtables.get(&key) {
             Some(value_from_memtable) => Some(value_from_memtable),
-            None => self.sstables.get(key),
+            None => self.sstables.get(&key),
         }
     }
 
-    pub fn set(&mut self, key: &Key, value: &[u8]) -> Result<(), LsmError> {
-        match self.memtables.set(key, value) {
+    pub fn set(&mut self, key: &str, value: &[u8]) -> Result<(), LsmError> {
+        let key = key::new(key);
+        match self.memtables.set(&key, value) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(())
         }
     }
 
-    pub fn delete(&mut self, key: &Key) -> Result<(), LsmError> {
-        match self.memtables.delete(key) {
+    pub fn delete(&mut self, key: &str) -> Result<(), LsmError> {
+        let key = key::new(key);
+        match self.memtables.delete(&key) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(()),
         }
@@ -85,8 +88,8 @@ impl Lsm {
     pub fn write_batch(&mut self, batch: &[WriteBatch]) -> Result<(), LsmError> {
         for write_batch_record in batch {
             match write_batch_record {
-                WriteBatch::Put(key, value) => self.set(key, value)?,
-                WriteBatch::Delete(key) => self.delete(key)?
+                WriteBatch::Put(key, value) => self.set(key.as_str(), value)?,
+                WriteBatch::Delete(key) => self.delete(key.as_str())?
             };
         }
 

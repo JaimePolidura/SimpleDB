@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering::Release;
 use std::sync::{Arc, Mutex};
-use crate::lsm_error::{DecodeErrorInfo, LsmError, SSTableCorruptedPart};
+use crate::lsm_error::{DecodeError, LsmError, SSTableCorruptedPart};
 use crate::lsm_error::LsmError::{CannotDecodeSSTable, CannotDeleteSSTable, CannotOpenSSTableFile, CannotReadSSTableFile};
 use crate::sst::block_metadata::BlockMetadata;
 
@@ -81,7 +81,7 @@ impl SSTable {
         let state = bytes[bytes.len() - 13];
 
         let block_metadata = BlockMetadata::decode_all(bytes, meta_offset as usize)
-            .map_err(|error_type| CannotDecodeSSTable(id, SSTableCorruptedPart::BlockMetadata, DecodeErrorInfo{
+            .map_err(|error_type| CannotDecodeSSTable(id, SSTableCorruptedPart::BlockMetadata, DecodeError {
                 offset: meta_offset as usize,
                 path: file.path(),
                 error_type,
@@ -89,7 +89,7 @@ impl SSTable {
             }))?;
 
         let bloom_filter = BloomFilter::decode(bytes, bloom_offset as usize)
-            .map_err(|error_type| CannotDecodeSSTable(id, SSTableCorruptedPart::BloomFilter, DecodeErrorInfo{
+            .map_err(|error_type| CannotDecodeSSTable(id, SSTableCorruptedPart::BloomFilter, DecodeError {
                 offset: bloom_offset as usize,
                 path: file.path(),
                 error_type,
@@ -147,7 +147,7 @@ impl SSTable {
             .map_err(|e| CannotReadSSTableFile(self.id, e))?;
 
         let block = Block::decode(&encoded_block, &self.lsm_options)
-            .map_err(|error_type| CannotDecodeSSTable(self.id, SSTableCorruptedPart::Block(block_id), DecodeErrorInfo{
+            .map_err(|error_type| CannotDecodeSSTable(self.id, SSTableCorruptedPart::Block(block_id), DecodeError {
                 offset: metadata.offset,
                 path: self.file.path(),
                 error_type,

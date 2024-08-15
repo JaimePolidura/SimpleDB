@@ -6,7 +6,7 @@ use std::sync::Arc;
 use bytes::{Buf, BufMut, Bytes};
 use crate::key;
 use crate::key::Key;
-use crate::lsm_error::{DecodeErrorInfo, DecodeErrorType, LsmError};
+use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
 use crate::lsm_error::LsmError::{CannotCreateWal, CannotDecodeWal, CannotReadWalEntries, CannotReadWalFiles, CannotWriteWalEntry};
 use crate::lsm_options::{DurabilityLevel, LsmOptions};
 use crate::utils::lsm_file::{LsmFile, LsmFileMode};
@@ -57,20 +57,21 @@ impl Wal {
             let mut entry_bytes_size = 0;
 
             let key_len = current_ptr.get_u32_le() as usize;
-            entry_bytes_size = entry_bytes_size + 4;
+            let key_timestmap = current_ptr.get_u64_le();
+            entry_bytes_size = entry_bytes_size + 12;
 
             let key_bytes = &current_ptr[..key_len];
             current_ptr.advance(key_len);
             entry_bytes_size = entry_bytes_size + key_len;
             let key_string = String::from_utf8(key_bytes.to_vec())
-                .map_err(|e| CannotDecodeWal(self.memtable_id, DecodeErrorInfo{
+                .map_err(|e| CannotDecodeWal(self.memtable_id, DecodeError {
                     path: self.file.path(),
                     offset: current_offset,
                     index: entries.len(),
                     error_type: DecodeErrorType::Utf8Decode(e)
                 }))?;
 
-            let key = key::new(key_string.as_str());
+            let key = key::new(key_string.as_str(), key_timestmap);
 
             let value_len = current_ptr.get_u32_le() as usize;
             entry_bytes_size = entry_bytes_size + 4;
@@ -83,7 +84,7 @@ impl Wal {
             entry_bytes_size = entry_bytes_size + 4;
 
             if expected_crc != actual_crc {
-                return Err(CannotDecodeWal(self.memtable_id, DecodeErrorInfo {
+                return Err(CannotDecodeWal(self.memtable_id, DecodeError {
                     path: self.file.path(),
                     offset: current_offset,
                     index: entries.len(),
@@ -139,10 +140,14 @@ impl Wal {
 
     fn encode(&self, key: &Key, value: &[u8]) -> Vec<u8> {
         let mut encoded: Vec<u8> = Vec::new();
+        //Key
         encoded.put_u32_le(key.len() as u32);
+        encoded.put_u64_le(key.timestamp());
         encoded.extend(key.as_bytes());
+        //Value
         encoded.put_u32_le(value.len() as u32);
         encoded.extend(value);
+
         encoded.put_u32_le(crc32fast::hash(&encoded));
 
         encoded

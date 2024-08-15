@@ -55,20 +55,23 @@ impl Block {
 
     //Expect n_entry_index to be an index to block::offsets aray
     pub fn get_key_by_index(&self, n_entry_index: usize) -> Key {
-        let entry_index: usize = self.offsets[n_entry_index] as usize;
-        let key_length: usize = utils::u8_vec_to_u16_le(&self.entries, entry_index) as usize;
+        let entry_index = self.offsets[n_entry_index] as usize;
+        let key_length = utils::u8_vec_to_u16_le(&self.entries, entry_index) as usize;
+        let key_timestamp = utils::u8_vec_to_u64_le(&self.entries, entry_index + 2);
+
         let key_slice: &[u8] = &self.entries[entry_index + 2..(key_length + entry_index + 2)];
         let key = String::from_utf8(key_slice.to_vec())
             .expect("Error while parsing with UTF-8");
 
-        key::new(key.as_str())
+        key::new(key.as_str(), key_timestamp)
     }
 
     //Expect n_entry_index to be an index to block::offsets aray
     pub fn get_value_by_index(&self, n_entry_index: usize) -> Bytes {
         let entry_index = self.offsets[n_entry_index];
         let key_length = utils::u8_vec_to_u16_le(&self.entries, entry_index as usize);
-        let value_index = (entry_index as usize) + 2 + key_length as usize;
+        //10 = (key bytes size u16) + (key timestamp length u64)
+        let value_index = (entry_index as usize) + 10 + key_length as usize;
         let value_length = utils::u8_vec_to_u16_le(&self.entries, value_index) as usize;
 
         Bytes::copy_from_slice(&self.entries[(value_index + 2)..((value_index + 2) + value_length)])
@@ -87,13 +90,13 @@ mod test {
     #[test]
     fn encode_and_decode() {
         let mut block_builder = BlockBuilder::new(Arc::new(LsmOptions::default()));
-        block_builder.add_entry(key::new("Jaime"), Bytes::from(vec![1]));
-        block_builder.add_entry(key::new("Javier"), Bytes::from(vec![2]));
-        block_builder.add_entry(key::new("Jose"), Bytes::from(vec![3]));
-        block_builder.add_entry(key::new("Juan"), Bytes::from(vec![4]));
-        block_builder.add_entry(key::new("Justo"), Bytes::from(vec![5]));
-        block_builder.add_entry(key::new("Justoo"), Bytes::from(vec![6]));
-        block_builder.add_entry(key::new("Kia"), Bytes::from(vec![7]));
+        block_builder.add_entry(key::new("Jaime", 1), Bytes::from(vec![1]));
+        block_builder.add_entry(key::new("Javier", 1), Bytes::from(vec![2]));
+        block_builder.add_entry(key::new("Jose", 1), Bytes::from(vec![3]));
+        block_builder.add_entry(key::new("Juan", 1), Bytes::from(vec![4]));
+        block_builder.add_entry(key::new("Justo", 1), Bytes::from(vec![5]));
+        block_builder.add_entry(key::new("Justoo", 1), Bytes::from(vec![6]));
+        block_builder.add_entry(key::new("Kia", 1), Bytes::from(vec![7]));
         let block = block_builder.build();
 
         let encoded = block.encode(&Arc::new(LsmOptions::default()));
