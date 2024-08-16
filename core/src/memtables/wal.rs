@@ -24,7 +24,7 @@ pub(crate) struct WalEntry {
 }
 
 impl Wal {
-    pub fn create(lsm_options: Arc<LsmOptions>, memtable_id: usize) -> Result<Wal, LsmError> {
+    pub fn new(lsm_options: Arc<LsmOptions>, memtable_id: usize) -> Result<Wal, LsmError> {
         Ok(Wal {
             file: LsmFile::open(Self::to_wal_file_name(&lsm_options, memtable_id).as_path(), LsmFileMode::AppendOnly)
                 .map_err(|e| CannotCreateWal(memtable_id, e))?,
@@ -142,7 +142,7 @@ impl Wal {
         let mut encoded: Vec<u8> = Vec::new();
         //Key
         encoded.put_u32_le(key.len() as u32);
-        encoded.put_u64_le(key.timestamp());
+        encoded.put_u64_le(key.txn_id());
         encoded.extend(key.as_bytes());
         //Value
         encoded.put_u32_le(value.len() as u32);

@@ -34,7 +34,7 @@ impl BlockBuilder {
 
             //Key
             utils::u16_to_u8_le(entry.key.len() as u16, entries.len(), &mut entries);
-            utils::u64_to_u8_le(entry.key.timestamp(), entries.len(), &mut entries);
+            utils::u64_to_u8_le(entry.key.txn_id(), entries.len(), &mut entries);
             entries.put_slice(entry.key.as_bytes());
             //Value
             utils::u16_to_u8_le(entry.value.len() as u16, entries.len(), &mut entries);
@@ -63,7 +63,7 @@ impl BlockBuilder {
 
     fn calculate_entry_size(&self, key: &Key, value: &Bytes) -> usize {
         std::mem::size_of::<i16>() + //Key length size
-            std::mem::size_of::<u64>() + //Key timestamp
+            std::mem::size_of::<u64>() + //Key txn id
             key.len() + //Key bytes
             std::mem::size_of::<i16>() + //Value length
             value.len() + //Value bytes

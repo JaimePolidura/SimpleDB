@@ -56,7 +56,7 @@ impl BlockMetadata {
 
         let first_key_length = utils::u8_vec_to_u32_le(&bytes, current_index) as usize;
         current_index = current_index + 4;
-        let first_key_timestamp = utils::u8_vec_to_u64_le(&bytes, current_index);
+        let first_key_txn_id = utils::u8_vec_to_u64_le(&bytes, current_index);
         current_index = current_index + 8;
         let first_key = String::from_utf8(bytes[current_index..(current_index + first_key_length)].to_vec())
             .map_err(|e| DecodeErrorType::Utf8Decode(e))?;
@@ -64,7 +64,7 @@ impl BlockMetadata {
 
         let last_key_length = utils::u8_vec_to_u32_le(&bytes, current_index) as usize;
         current_index = current_index + 4;
-        let last_key_timestamp = utils::u8_vec_to_u64_le(&bytes, current_index);
+        let last_key_txn_id = utils::u8_vec_to_u64_le(&bytes, current_index);
         current_index = current_index + 8;
         let last_key = String::from_utf8(bytes[current_index..(current_index + last_key_length)].to_vec())
             .map_err(|e| DecodeErrorType::Utf8Decode(e))?;
@@ -75,8 +75,8 @@ impl BlockMetadata {
         current_index = current_index + 4;
 
         Ok((current_index, BlockMetadata{
-            first_key: key::new(first_key.as_str(), first_key_timestamp),
-            last_key: key::new(last_key.as_str(), last_key_timestamp),
+            first_key: key::new(first_key.as_str(), first_key_txn_id),
+            last_key: key::new(last_key.as_str(), last_key_txn_id),
             offset
         }))
     }
@@ -85,12 +85,12 @@ impl BlockMetadata {
         let mut metadata_encoded: Vec<u8> = Vec::new();
         //First key
         metadata_encoded.put_u32_le(self.first_key.len() as u32);
-        metadata_encoded.put_u64_le(self.first_key.timestamp());
+        metadata_encoded.put_u64_le(self.first_key.txn_id());
         metadata_encoded.extend(self.first_key.as_bytes());
 
         //Las key
         metadata_encoded.put_u32_le(self.last_key.len() as u32);
-        metadata_encoded.put_u64_le(self.last_key.timestamp());
+        metadata_encoded.put_u64_le(self.last_key.txn_id());
         metadata_encoded.extend(self.last_key.as_bytes());
         metadata_encoded.put_u32_le(self.offset as u32);
         metadata_encoded

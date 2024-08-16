@@ -13,11 +13,13 @@ use std::sync::Arc;
 use bytes::Bytes;
 use crate::key;
 use crate::lsm_error::LsmError;
+use crate::transactions::transaction_manager::TransactionManager;
 
 pub struct Lsm {
-    memtables: Memtables,
-    sstables: Arc<SSTables>,
+    transacion_manager: TransactionManager,
     compaction: Arc<Compaction>,
+    sstables: Arc<SSTables>,
+    memtables: Memtables,
     manifest: Arc<Manifest>,
 
     options: Arc<LsmOptions>,
@@ -38,7 +40,8 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
 
     let mut lsm = Lsm {
         compaction: Compaction::new(lsm_options.clone(), sstables.clone(), manifest.clone()),
-        memtables: Memtables::create(lsm_options.clone()).expect("Failed to create Memtables"),
+        memtables: Memtables::new(lsm_options.clone()).expect("Failed to create Memtables"),
+        transacion_manager: TransactionManager::new(0), //TODO
         options: lsm_options.clone(),
         sstables: sstables.clone(),
         manifest,
@@ -62,7 +65,7 @@ impl Lsm {
     }
 
     pub fn get(&self, key: &str) -> Option<bytes::Bytes> {
-        let key = key::new(key);
+        let key = key::new(key, self.transacion_manager.next_txn_id());
         match self.memtables.get(&key) {
             Some(value_from_memtable) => Some(value_from_memtable),
             None => self.sstables.get(&key),
@@ -70,15 +73,15 @@ impl Lsm {
     }
 
     pub fn set(&mut self, key: &str, value: &[u8]) -> Result<(), LsmError> {
-        let key = key::new(key);
+        let key = key::new(key, self.transacion_manager.next_txn_id());
         match self.memtables.set(&key, value) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(())
         }
     }
-
+    
     pub fn delete(&mut self, key: &str) -> Result<(), LsmError> {
-        let key = key::new(key);
+        let key = key::new(key, self.transacion_manager.next_txn_id());
         match self.memtables.delete(&key) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(()),

@@ -43,7 +43,7 @@ impl MemTable {
             current_size_bytes: AtomicUsize::new(0),
             state: UnsafeCell::new(MemtableState::New),
             data: Arc::new(SkipMap::new()),
-            wal: UnsafeCell::new(Wal::create(options, memtable_id)?),
+            wal: UnsafeCell::new(Wal::new(options, memtable_id)?),
             memtable_id
         })
     }

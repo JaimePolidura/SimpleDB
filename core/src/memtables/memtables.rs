@@ -18,7 +18,7 @@ pub struct Memtables {
 }
 
 impl Memtables {
-    pub fn create(options: Arc<LsmOptions>) -> Result<Memtables, LsmError> {
+    pub fn new(options: Arc<LsmOptions>) -> Result<Memtables, LsmError> {
         let (wals, max_memtable_id) = Wal::get_persisted_wal_id(&options)?;
 
         if !wals.is_empty() {

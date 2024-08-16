@@ -57,20 +57,20 @@ impl Block {
     pub fn get_key_by_index(&self, n_entry_index: usize) -> Key {
         let entry_index = self.offsets[n_entry_index] as usize;
         let key_length = utils::u8_vec_to_u16_le(&self.entries, entry_index) as usize;
-        let key_timestamp = utils::u8_vec_to_u64_le(&self.entries, entry_index + 2);
+        let key_txn_id = utils::u8_vec_to_u64_le(&self.entries, entry_index + 2);
 
         let key_slice: &[u8] = &self.entries[entry_index + 2..(key_length + entry_index + 2)];
         let key = String::from_utf8(key_slice.to_vec())
             .expect("Error while parsing with UTF-8");
 
-        key::new(key.as_str(), key_timestamp)
+        key::new(key.as_str(), key_txn_id)
     }
 
     //Expect n_entry_index to be an index to block::offsets aray
     pub fn get_value_by_index(&self, n_entry_index: usize) -> Bytes {
         let entry_index = self.offsets[n_entry_index];
         let key_length = utils::u8_vec_to_u16_le(&self.entries, entry_index as usize);
-        //10 = (key bytes size u16) + (key timestamp length u64)
+        //10 = (key bytes size u16) + (key txn_id length u64)
         let value_index = (entry_index as usize) + 10 + key_length as usize;
         let value_length = utils::u8_vec_to_u16_le(&self.entries, value_index) as usize;
 
