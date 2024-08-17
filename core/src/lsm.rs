@@ -61,70 +61,86 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
 }
 
 impl Lsm {
-    pub fn scan_from(&self, key_start: &str) -> LsmIterator {
-        let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
-        let mut memtables_iterator = self.memtables.iterator(&transaction);
-        memtables_iterator.position(key_start);
-        let mut ssttables_iterator = self.sstables.iterator(&transaction);
-        ssttables_iterator.position(key_start);
-
-        TwoMergeIterator::new(memtables_iterator, ssttables_iterator)
-    }
-
     pub fn scan_all(&self) -> LsmIterator {
         let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
-        self.scan_all_transaction(transaction)
+        self.scan_all_with_transaction(transaction)
     }
 
-    pub fn scan_all_transaction(&self, transaction: &Transaction) -> LsmIterator {
+    pub fn scan_all_with_transaction(
+        &self,
+        transaction: &Transaction
+    ) -> LsmIterator {
         TwoMergeIterator::new(
             self.memtables.iterator(&transaction),
             self.sstables.iterator(&transaction),
         )
     }
 
-    pub fn get(&self, key: &str) -> Option<bytes::Bytes> {
+    pub fn get(
+        &self,
+        key: &str
+    ) -> Option<bytes::Bytes> {
         let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
-        self.get_transaction(key, &transaction)
+        self.get_with_transaction(&transaction, key)
     }
 
-    pub fn get_transaction(&self, key: &str, transaction: &Transaction) -> Option<bytes::Bytes> {
+    pub fn get_with_transaction(
+        &self,
+        transaction: &Transaction,
+        key: &str,
+    ) -> Option<bytes::Bytes> {
         match self.memtables.get(&key, transaction) {
             Some(value_from_memtable) => Some(value_from_memtable),
             None => self.sstables.get(&key, &transaction),
         }
     }
 
-    pub fn set(&mut self, key: &str, value: &[u8]) -> Result<(), LsmError> {
+    pub fn set(
+        &self,
+        key: &str,
+        value: &[u8]
+    ) -> Result<(), LsmError> {
         let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
-        self.set_transaction(key, value, &transaction)
+        self.set_with_transaction(&transaction, key, value)
     }
 
-    pub fn set_transaction(&mut self, key: &str, value: &[u8], transaction: &Transaction) -> Result<(), LsmError> {
+    pub fn set_with_transaction(
+        &self,
+        transaction: &Transaction,
+        key: &str,
+        value: &[u8],
+    ) -> Result<(), LsmError> {
         match self.memtables.set(&key, value, transaction) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(())
         }
     }
 
-    pub fn delete(&mut self, key: &str) -> Result<(), LsmError> {
+    pub fn delete(
+        &self,
+        key: &str
+    ) -> Result<(), LsmError> {
         let transaction = self.transacion_manager.start_transaction(IsolationLevel::ReadUncommited);
-        self.delete_transaction(key, &transaction)
+        self.delete_with_transaction(&transaction, key)
     }
 
-    pub fn delete_transaction(&mut self, key: &str, transaction: &Transaction) -> Result<(), LsmError> {
+    pub fn delete_with_transaction(
+        &self,
+        transaction: &Transaction,
+        key: &str,
+    ) -> Result<(), LsmError> {
         match self.memtables.delete(&key, transaction) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(()),
         }
     }
 
-    pub fn write_batch(&mut self, batch: &[WriteBatch]) -> Result<(), LsmError> {
+    pub fn write_batch(&self, batch: &[WriteBatch]) -> Result<(), LsmError> {
         let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         for write_batch_record in batch {
             match write_batch_record {
-                WriteBatch::Put(key, value) => self.set_transaction(key.as_str(), value, &transaction)?,
-                WriteBatch::Delete(key) => self.delete_transaction(key.as_str(), &transaction)?
+                WriteBatch::Put(key, value) => self.set_with_transaction(key.as_str(), value, &transaction)?,
+                WriteBatch::Delete(key) => self.delete_with_transaction(key.as_str(), &transaction)?
             };
         }
 
@@ -134,8 +150,12 @@ impl Lsm {
     pub fn start_transaction(&self) -> Transaction {
         self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation)
     }
+    
+    pub fn commit_transaction(&self, transaction: Transaction) {
+        self.transacion_manager.commit(transaction);
+    }
 
-    fn flush_memtable(&mut self, memtable: Arc<MemTable>) -> Result<(), LsmError> {
+    fn flush_memtable(&self, memtable: Arc<MemTable>) -> Result<(), LsmError> {
         let sstable_builder_ready: SSTableBuilder = MemTable::to_sst(self.options.clone(), memtable.clone());
         let sstable_id = self.sstables.flush_memtable_to_disk(sstable_builder_ready)?;
         memtable.set_flushed();

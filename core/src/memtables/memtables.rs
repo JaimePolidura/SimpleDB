@@ -36,7 +36,7 @@ impl Memtables {
         unsafe {
             let mut memtable_iterators: Vec<Box<MemtableIterator>> = Vec::new();
 
-            memtable_iterators.push(Box::from(MemtableIterator::new(&(*self.current_memtable.load(Acquire)))));
+            memtable_iterators.push(Box::from(MemtableIterator::new(&(*self.current_memtable.load(Acquire)), transaction.clone())));
 
             let inactive_memtables_rw_lock = &*self.inactive_memtables.load(Acquire);
             let inactive_memtables_rw_result = inactive_memtables_rw_lock.read().unwrap();
@@ -62,7 +62,7 @@ impl Memtables {
         }
     }
 
-    pub fn set(&mut self, key: &str, value: &[u8], transaction: &Transaction) -> Option<Arc<MemTable>> {
+    pub fn set(&self, key: &str, value: &[u8], transaction: &Transaction) -> Option<Arc<MemTable>> {
         unsafe {
             let memtable_ref = (*self.current_memtable.load(Acquire)).clone();
             let set_result = memtable_ref.set(key, value);
@@ -74,7 +74,7 @@ impl Memtables {
         }
     }
 
-    pub fn delete(&mut self, key: &str, transaction: &Transaction) -> Option<Arc<MemTable>> {
+    pub fn delete(&self, key: &str, transaction: &Transaction) -> Option<Arc<MemTable>> {
         unsafe {
             let memtable_ref = (*self.current_memtable.load(Acquire)).clone();
             let delete_result = memtable_ref.delete(key);
@@ -124,7 +124,7 @@ impl Memtables {
     //Replaces current_memtable with a new one, and moves old current_memtable to self::inactive_memtables vector
     //Returns a memtable to flush
     //This might be called by concurrently, it might fail returing None
-    fn set_current_memtable_as_inactive(&mut self) -> Option<Arc<MemTable>> {
+    fn set_current_memtable_as_inactive(&self) -> Option<Arc<MemTable>> {
         let new_memtable_id = self.next_memtable_id.fetch_add(1, Relaxed);
         let new_memtable = MemTable::create_new(self.options.clone(), new_memtable_id).expect("Failed to create memtable");
         new_memtable.set_active();
@@ -139,7 +139,7 @@ impl Memtables {
 
     //Inserts prev_memtable to self::inactive_memtables vector
     //When the list is full, it returns an option with a memtable to flush
-    unsafe fn move_current_memtable_inactive_list(&mut self, prev_memtable: * mut Arc<MemTable>) -> Option<Arc<MemTable>> {
+    unsafe fn move_current_memtable_inactive_list(&self, prev_memtable: * mut Arc<MemTable>) -> Option<Arc<MemTable>> {
         let mut memtables_rw_result = self.inactive_memtables.load(Acquire)
             .as_mut()?
             .write();

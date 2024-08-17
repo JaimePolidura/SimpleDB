@@ -26,10 +26,6 @@ impl<I: StorageIterator> MergeIterator<I> {
         }
     }
 
-    pub fn position(&mut self, key: &str) {
-        unimplemented!();
-    }
-
     fn advance_iterators(
         &mut self,
         min_key_seen: &Option<Key>

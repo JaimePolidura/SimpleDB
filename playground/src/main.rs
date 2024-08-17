@@ -1,7 +1,7 @@
+use std::arch::x86_64::_mm256_loadu2_m128;
 use rand::Rng;
 use core::lsm;
 use core::lsm_options;
-use core::key;
 
 fn main() {
     let mut lsm = lsm::new(lsm_options::builder()
