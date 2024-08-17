@@ -1,16 +1,18 @@
 use std::cell::UnsafeCell;
-use std::ops::Bound::Excluded;
+use std::ops::Bound::{Excluded, Included};
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
+use crate::key;
 use crate::key::Key;
 use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::MemtableState::{Active, Flushed, Flusing, Inactive, RecoveringFromWal};
 use crate::memtables::wal::Wal;
 use crate::sst::sstable_builder::SSTableBuilder;
+use crate::transactions::transaction_manager::Transaction;
 use crate::utils::storage_iterator::{StorageIterator};
 
 const TOMBSTONE: Bytes = Bytes::new();
@@ -93,16 +95,22 @@ impl MemTable {
         self.memtable_id
     }
 
-    pub fn get(&self, key: &Key) -> Option<Bytes> {
-        match self.data.get(key) {
-            Some(entry) => {
-                if entry.value() == &TOMBSTONE {
-                    return None;
+    pub fn get(&self, key_lookup: &str, transaction: &Transaction) -> Option<Bytes> {
+        let mut current_key = key::new(key_lookup, transaction.txn_id);
+
+        loop {
+            if let Some(entry) = self.data.lower_bound(Included(&current_key)) {
+                if !entry.key().as_str().eq(key_lookup) {
+                    None
+                }
+                if transaction.can_read(entry.key()) {
+                    Some(entry.value().clone())
                 }
 
-                Some(entry.value().clone())
+                current_key = entry.key().clone();
             }
-            None => None,
+
+            None
         }
     }
 
@@ -153,7 +161,7 @@ impl MemTable {
     }
 
     pub fn to_sst(options: Arc<LsmOptions>, memtable: Arc<MemTable>) -> SSTableBuilder {
-        let mut memtable_iterator = MemtableIterator::new(&memtable);
+        let mut memtable_iterator = MemtableIterator::new(&memtable, Transaction::create_empty_read_uncommited());
         let mut sstable_builder = SSTableBuilder::new(options, 0);
         sstable_builder.set_memtable_id(memtable.memtable_id);
 
@@ -206,15 +214,18 @@ pub struct MemtableIterator {
     current_key: Option<Key>,
 
     n_elements_iterated: usize,
+
+    transaction: Transaction,
 }
 
 impl MemtableIterator {
-    pub fn new(memtable: &Arc<MemTable>) -> MemtableIterator {
+    pub fn new(memtable: &Arc<MemTable>, transaction: &Transaction) -> MemtableIterator {
         MemtableIterator {
+            transaction: transaction.clone(),
             memtable: memtable.clone(),
             current_value: None,
             n_elements_iterated: 0,
-            current_key: None
+            current_key: None,
         }
     }
 }
@@ -226,24 +237,29 @@ impl<'a> StorageIterator for MemtableIterator {
             return has_advanced;
         }
 
-        match &self.current_key {
-            Some(prev_key) => {
-                if let Some(next_entry) = self.memtable.data.lower_bound(Excluded(prev_key)) {
+        loop {
+            match &self.current_key {
+                Some(prev_key) => {
+                    if let Some(next_entry) = self.memtable.data.lower_bound(Excluded(prev_key)) {
+                        self.n_elements_iterated = self.n_elements_iterated + 1;
+                        self.current_value = Some(next_entry.value().clone());
+                        self.current_key = Some(next_entry.key().clone());
+
+                        if self.transaction.can_read(next_entry.key()) {
+                            has_advanced = true;
+                        }
+                    }
+                },
+                None => {
+                    self.current_value = Some(self.memtable.data.iter().next().expect("Illegal iterator state").value().clone());
+                    self.current_key = Some(self.memtable.data.iter().next().expect("Illegal iterator state").key().clone());
                     self.n_elements_iterated = self.n_elements_iterated + 1;
-                    self.current_value = Some(next_entry.value().clone());
-                    self.current_key = Some(next_entry.key().clone());
                     has_advanced = true;
                 }
-            },
-            None => {
-                self.current_value = Some(self.memtable.data.iter().next().expect("Illegal iterator state").value().clone());
-                self.current_key = Some(self.memtable.data.iter().next().expect("Illegal iterator state").key().clone());
-                self.n_elements_iterated = self.n_elements_iterated + 1;
-                has_advanced = true;
             }
-        }
 
-        has_advanced
+            has_advanced
+        }
     }
 
     fn has_next(&self) -> bool {

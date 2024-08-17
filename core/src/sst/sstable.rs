@@ -166,8 +166,8 @@ impl SSTable {
         Ok(block)
     }
 
-    pub fn get(&self, key: &Key) -> Option<bytes::Bytes> {
-        if self.first_key.gt(key) || self.last_key.lt(key) {
+    pub fn get(&self, key: &str) -> Option<bytes::Bytes> {
+        if self.first_key.as_str().gt(key) || self.last_key.as_str().lt(key) {
             return None;
         }
         if !self.bloom_filter.may_contain(utils::hash(key.as_bytes())) {
@@ -184,7 +184,7 @@ impl SSTable {
         }
     }
 
-    pub(crate) fn get_block_metadata(&self, key: &Key) -> Option<(usize, &BlockMetadata)> {
+    pub(crate) fn get_block_metadata(&self, key: &str) -> Option<(usize, &BlockMetadata)> {
         let mut right = self.block_metadata.len() - 1;
         let mut left = 0;
 
@@ -198,10 +198,10 @@ impl SSTable {
             if current_block_metadata.contains(key) {
                 return Some((current_index, current_block_metadata));
             }
-            if current_block_metadata.first_key.gt(key) {
+            if current_block_metadata.first_key.as_str().gt(key) {
                 right = current_index;
             }
-            if current_block_metadata.last_key.lt(key) {
+            if current_block_metadata.last_key.as_str().lt(key) {
                 left = current_index;
             }
         }

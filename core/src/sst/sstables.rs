@@ -13,19 +13,25 @@ use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
 use crate::lsm_error::LsmError;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
+use crate::transactions::transaction_manager::{Transaction, TransactionManager};
 
 pub struct SSTables {
+    transaction_manager: Arc<TransactionManager>,
     //For each level one index entry
     sstables: Vec<RwLock<Vec<Arc<SSTable>>>>,
-    manifest: Arc<Manifest>,
     next_sstable_id: AtomicUsize,
     lsm_options: Arc<LsmOptions>,
+    manifest: Arc<Manifest>,
     n_current_levels: usize,
     path_buff: PathBuf
 }
 
 impl SSTables {
-    pub fn open(lsm_options: Arc<LsmOptions>, manifest: Arc<Manifest>) -> Result<SSTables, usize> {
+    pub fn open(
+        transaction_manager: Arc<TransactionManager>,
+        lsm_options: Arc<LsmOptions>,
+        manifest: Arc<Manifest>
+    ) -> Result<SSTables, usize> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
@@ -35,6 +41,7 @@ impl SSTables {
         Ok(SSTables {
             next_sstable_id: AtomicUsize::new(max_ssatble_id + 1),
             path_buff: PathBuf::new(),
+            transaction_manager,
             n_current_levels: 0,
             lsm_options,
             sstables,
@@ -100,7 +107,7 @@ impl SSTables {
         MergeIterator::new(iterators)
     }
 
-    pub fn scan(&self) -> MergeIterator<SSTableIterator> {
+    pub fn iterator(&self, transaction: &Transaction) -> MergeIterator<SSTableIterator> {
         let mut iterators: Vec<Box<SSTableIterator>> = Vec::with_capacity(self.sstables.len());
 
         for sstables_in_level_lock in self.sstables.iter() {
@@ -115,7 +122,7 @@ impl SSTables {
         MergeIterator::new(iterators)
     }
 
-    pub fn get(&self, key: &Key) -> Option<bytes::Bytes> {
+    pub fn get(&self, key: &str, transaction: &Transaction) -> Option<bytes::Bytes> {
         for sstables_in_level_lock in self.sstables.iter() {
             let lock_result = sstables_in_level_lock.read();
             let sstable_in_level = lock_result.as_ref().unwrap();

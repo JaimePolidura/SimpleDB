@@ -29,6 +29,10 @@ impl Key {
         self.string.as_bytes()
     }
 
+    pub fn as_str(&self) -> &str {
+        self.string.as_str()
+    }
+
     pub fn txn_id(&self) -> u64 {
         self.txn_id
     }

@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use crate::key::Key;
 use crate::utils::storage_iterator::StorageIterator;
 
@@ -25,6 +24,10 @@ impl<I: StorageIterator> MergeIterator<I> {
             current_iterator: None,
             iterators: iterators_options,
         }
+    }
+
+    pub fn position(&mut self, key: &str) {
+        unimplemented!();
     }
 
     fn advance_iterators(

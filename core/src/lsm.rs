@@ -13,10 +13,10 @@ use std::sync::Arc;
 use bytes::Bytes;
 use crate::key;
 use crate::lsm_error::LsmError;
-use crate::transactions::transaction_manager::TransactionManager;
+use crate::transactions::transaction_manager::{IsolationLevel, Transaction, TransactionManager};
 
 pub struct Lsm {
-    transacion_manager: TransactionManager,
+    transacion_manager: Arc<TransactionManager>,
     compaction: Arc<Compaction>,
     sstables: Arc<SSTables>,
     memtables: Memtables,
@@ -30,18 +30,22 @@ pub enum WriteBatch {
     Delete(String)
 }
 
+type LsmIterator = TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>;
+
 pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
     println!("Starting mini lsm engine!");
 
+    let transaction_manager = Arc::new(TransactionManager::new(1));
     let manifest = Arc::new(Manifest::new(lsm_options.clone())
         .expect("Cannot open/create Manifest file"));
-    let sstables = Arc::new(SSTables::open(lsm_options.clone(), manifest.clone())
+    let sstables = Arc::new(SSTables::open(transaction_manager.clone(), lsm_options.clone(), manifest.clone())
         .expect("Failed to read SSTable"));
 
     let mut lsm = Lsm {
         compaction: Compaction::new(lsm_options.clone(), sstables.clone(), manifest.clone()),
-        memtables: Memtables::new(lsm_options.clone()).expect("Failed to create Memtables"),
-        transacion_manager: TransactionManager::new(0), //TODO
+        memtables: Memtables::new(transaction_manager.clone(), lsm_options.clone())
+            .expect("Failed to create Memtables"),
+        transacion_manager: Arc::new(TransactionManager::new(0)), //TODO
         options: lsm_options.clone(),
         sstables: sstables.clone(),
         manifest,
@@ -57,46 +61,78 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
 }
 
 impl Lsm {
-    pub fn scan(&self) -> TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>> {
+    pub fn scan_from(&self, key_start: &str) -> LsmIterator {
+        let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
+        let mut memtables_iterator = self.memtables.iterator(&transaction);
+        memtables_iterator.position(key_start);
+        let mut ssttables_iterator = self.sstables.iterator(&transaction);
+        ssttables_iterator.position(key_start);
+
+        TwoMergeIterator::new(memtables_iterator, ssttables_iterator)
+    }
+
+    pub fn scan_all(&self) -> LsmIterator {
+        let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
+        self.scan_all_transaction(transaction)
+    }
+
+    pub fn scan_all_transaction(&self, transaction: &Transaction) -> LsmIterator {
         TwoMergeIterator::new(
-            self.memtables.scan(),
-            self.sstables.scan(),
+            self.memtables.iterator(&transaction),
+            self.sstables.iterator(&transaction),
         )
     }
 
     pub fn get(&self, key: &str) -> Option<bytes::Bytes> {
-        let key = key::new(key, self.transacion_manager.next_txn_id());
-        match self.memtables.get(&key) {
+        let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
+        self.get_transaction(key, &transaction)
+    }
+
+    pub fn get_transaction(&self, key: &str, transaction: &Transaction) -> Option<bytes::Bytes> {
+        match self.memtables.get(&key, transaction) {
             Some(value_from_memtable) => Some(value_from_memtable),
-            None => self.sstables.get(&key),
+            None => self.sstables.get(&key, &transaction),
         }
     }
 
     pub fn set(&mut self, key: &str, value: &[u8]) -> Result<(), LsmError> {
-        let key = key::new(key, self.transacion_manager.next_txn_id());
-        match self.memtables.set(&key, value) {
+        let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
+        self.set_transaction(key, value, &transaction)
+    }
+
+    pub fn set_transaction(&mut self, key: &str, value: &[u8], transaction: &Transaction) -> Result<(), LsmError> {
+        match self.memtables.set(&key, value, transaction) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(())
         }
     }
-    
+
     pub fn delete(&mut self, key: &str) -> Result<(), LsmError> {
-        let key = key::new(key, self.transacion_manager.next_txn_id());
-        match self.memtables.delete(&key) {
+        let transaction = self.transacion_manager.start_transaction(IsolationLevel::ReadUncommited);
+        self.delete_transaction(key, &transaction)
+    }
+
+    pub fn delete_transaction(&mut self, key: &str, transaction: &Transaction) -> Result<(), LsmError> {
+        match self.memtables.delete(&key, transaction) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(()),
         }
     }
 
     pub fn write_batch(&mut self, batch: &[WriteBatch]) -> Result<(), LsmError> {
+        let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         for write_batch_record in batch {
             match write_batch_record {
-                WriteBatch::Put(key, value) => self.set(key.as_str(), value)?,
-                WriteBatch::Delete(key) => self.delete(key.as_str())?
+                WriteBatch::Put(key, value) => self.set_transaction(key.as_str(), value, &transaction)?,
+                WriteBatch::Delete(key) => self.delete_transaction(key.as_str(), &transaction)?
             };
         }
 
         Ok(())
+    }
+
+    pub fn start_transaction(&self) -> Transaction {
+        self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation)
     }
 
     fn flush_memtable(&mut self, memtable: Arc<MemTable>) -> Result<(), LsmError> {

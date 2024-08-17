@@ -96,8 +96,8 @@ impl BlockMetadata {
         metadata_encoded
     }
 
-    pub fn contains(&self, key: &Key) -> bool {
-        self.first_key.le(key) && self.last_key.ge(key)
+    pub fn contains(&self, key: &str) -> bool {
+        self.first_key.as_str().le(key) && self.last_key.as_str().ge(key)
     }
 }
 
