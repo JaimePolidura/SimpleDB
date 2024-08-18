@@ -4,9 +4,11 @@ use crate::sst::block::block_iterator::BlockIterator;
 use crate::key::Key;
 use crate::sst::block_metadata::BlockMetadata;
 use crate::sst::sstable::SSTable;
+use crate::transactions::transaction::Transaction;
 use crate::utils::storage_iterator::StorageIterator;
 
 pub struct SSTableIterator {
+    transaction: Transaction,
     sstable: Arc<SSTable>,
 
     pending_blocks: Vec<BlockMetadata>,
@@ -16,23 +18,14 @@ pub struct SSTableIterator {
 }
 
 impl SSTableIterator {
-    pub fn new(sstable: Arc<SSTable>) -> SSTableIterator {
+    pub fn new(sstable: Arc<SSTable>, transaction: &Transaction) -> SSTableIterator {
         SSTableIterator {
             pending_blocks: sstable.block_metadata.clone(),
-            current_block_id: -1,
+            transaction: transaction.clone(),
             current_block_iterator: None,
             current_block_metadata: None,
+            current_block_id: -1,
             sstable,
-        }
-    }
-
-    pub fn seek_to_key(&mut self, key: &Key) {
-        match self.sstable.get_block_metadata(key) {
-            Some((index, block_metadata)) => {
-                self.current_block_id = index as i32;
-                self.set_iterating_block(block_metadata.clone());
-            },
-            None => self.set_iterator_as_empty()
         }
     }
 
@@ -40,6 +33,32 @@ impl SSTableIterator {
         self.pending_blocks.clear();
         self.current_block_iterator = None;
         self.current_block_metadata = None;
+    }
+
+    fn next_key_iterator(&mut self) -> bool {
+        let mut advanced = false;
+
+        if self.pending_blocks.len() > 0 && self.current_block_iterator.is_none() {
+            self.next_block();
+            advanced = self.next_key_iterator();
+        } else if self.current_block_iterator.is_some() && self.pending_blocks.len() > 0 {
+            advanced = self.current_block_iterator
+                .as_mut()
+                .unwrap()
+                .next();
+
+            if !advanced {
+                self.next_block();
+                advanced = self.next_key_iterator();
+            }
+        } else if self.current_block_iterator.is_some() && self.pending_blocks.is_empty() {
+            advanced = self.current_block_iterator
+                .as_mut()
+                .unwrap()
+                .next();
+        }
+
+        advanced
     }
 
     fn next_block(&mut self) {
@@ -67,27 +86,14 @@ impl SSTableIterator {
 
 impl StorageIterator for SSTableIterator {
     fn next(&mut self) -> bool {
-        if self.pending_blocks.len() > 0 && self.current_block_iterator.is_none() {
-            self.next_block();
-            self.next();
-        } else if self.current_block_iterator.is_some() && self.pending_blocks.len() > 0 {
-            let advanded = self.current_block_iterator
-                .as_mut()
-                .unwrap()
-                .next();
-
-            if !advanded {
-                self.next_block();
-                self.next();
+        loop {
+            let mut advanced = self.next_key_iterator();
+            if advanced && self.transaction.can_read(self.key()) {
+                return true
+            } else if !advanced {
+                return false;
             }
-        } else if self.current_block_iterator.is_some() && self.pending_blocks.is_empty() {
-            return self.current_block_iterator
-                .as_mut()
-                .unwrap()
-                .next();
         }
-
-        false
     }
 
     fn has_next(&self) -> bool {
@@ -116,6 +122,7 @@ mod test {
     use std::sync::{Arc, Mutex};
     use std::sync::atomic::AtomicU8;
     use bytes::Bytes;
+    use serde_json::ser::CharEscape::Tab;
     use crate::sst::block::block_builder::BlockBuilder;
     use crate::key;
     use crate::key::Key;
@@ -124,6 +131,7 @@ mod test {
     use crate::sst::block_metadata::BlockMetadata;
     use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
     use crate::sst::ssttable_iterator::SSTableIterator;
+    use crate::transactions::transaction::Transaction;
     use crate::utils::bloom_filter::BloomFilter;
     use crate::utils::lsm_file::LsmFile;
     use crate::utils::storage_iterator::StorageIterator;
@@ -189,7 +197,7 @@ mod test {
         let sstable = Arc::new(SSTable{
             id: 1,
             bloom_filter: BloomFilter::new(&Vec::new(), 8),
-            file: LsmFile::empty(),
+            file: LsmFile::mock(),
             block_cache: Mutex::new(block_cache),
             block_metadata: vec![
                 BlockMetadata{offset: 0, first_key: key::new("Alberto", 1), last_key: key::new("Berto", 1)},
@@ -203,6 +211,6 @@ mod test {
             last_key: key::new("Zi", 1),
         });
 
-        SSTableIterator::new(sstable)
+        SSTableIterator::new(sstable, &Transaction::none())
     }
 }

@@ -11,9 +11,9 @@ use crate::utils::storage_iterator::StorageIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use std::sync::Arc;
 use bytes::Bytes;
-use crate::key;
 use crate::lsm_error::LsmError;
-use crate::transactions::transaction_manager::{IsolationLevel, Transaction, TransactionManager};
+use crate::transactions::transaction::Transaction;
+use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
 
 pub struct Lsm {
     transacion_manager: Arc<TransactionManager>,
@@ -63,7 +63,7 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
 impl Lsm {
     pub fn scan_all(&self) -> LsmIterator {
         let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
-        self.scan_all_with_transaction(transaction)
+        self.scan_all_with_transaction(&transaction)
     }
 
     pub fn scan_all_with_transaction(
@@ -139,8 +139,8 @@ impl Lsm {
         let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         for write_batch_record in batch {
             match write_batch_record {
-                WriteBatch::Put(key, value) => self.set_with_transaction(key.as_str(), value, &transaction)?,
-                WriteBatch::Delete(key) => self.delete_with_transaction(key.as_str(), &transaction)?
+                WriteBatch::Put(key, value) => self.set_with_transaction(&transaction, key.as_str(), value)?,
+                WriteBatch::Delete(key) => self.delete_with_transaction(&transaction, key.as_str())?
             };
         }
 
@@ -150,7 +150,7 @@ impl Lsm {
     pub fn start_transaction(&self) -> Transaction {
         self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation)
     }
-    
+
     pub fn commit_transaction(&self, transaction: Transaction) {
         self.transacion_manager.commit(transaction);
     }

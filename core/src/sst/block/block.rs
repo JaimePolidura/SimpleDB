@@ -30,7 +30,7 @@ impl Block {
         decode_block(encoded, options)
     }
 
-    pub fn get_value(&self, key_lookup: &Key) -> Option<bytes::Bytes> {
+    pub fn get_value(&self, key_lookup: &str) -> Option<bytes::Bytes> {
         let mut left = 0;
         let mut right = self.offsets.len() / 2;
 
@@ -41,13 +41,13 @@ impl Block {
             if left == right {
                 return None;
             }
-            if current_key.eq(key_lookup) {
+            if current_key.as_str().eq(key_lookup) {
                 return Some(self.get_value_by_index(current_index));
             }
-            if current_key.gt(key_lookup) {
+            if current_key.as_str().gt(key_lookup) {
                 right = current_index;
             }
-            if current_key.lt(key_lookup) {
+            if current_key.as_str().lt(key_lookup) {
                 left = current_index;
             }
         }
@@ -59,7 +59,7 @@ impl Block {
         let key_length = utils::u8_vec_to_u16_le(&self.entries, entry_index) as usize;
         let key_txn_id = utils::u8_vec_to_u64_le(&self.entries, entry_index + 2);
 
-        let key_slice: &[u8] = &self.entries[entry_index + 2..(key_length + entry_index + 2)];
+        let key_slice: &[u8] = &self.entries[entry_index + 10..(key_length + entry_index + 10)];
         let key = String::from_utf8(key_slice.to_vec())
             .expect("Error while parsing with UTF-8");
 

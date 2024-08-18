@@ -72,6 +72,7 @@ fn decode_entries_prefix_compressed(
         };
         current_index = current_index + rest_key_size as usize;
         entries_decoded.put_u16_le(current_key.len() as u16);
+        entries_decoded.put_u64_le(current_key.txn_id());
         entries_decoded.extend(current_key.as_bytes());
         prev_key = Some(current_key);
 

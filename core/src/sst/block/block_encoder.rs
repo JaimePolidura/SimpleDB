@@ -66,7 +66,7 @@ fn encode_prefix_compressed_entries(
                 }
                 //Value
                 encoded.put_u16_le(current_value.len() as u16);
-                encoded.put_slice(current_value.as_ref());
+                encoded.extend(current_value.as_ref());
             },
             None => {
                 //Key
@@ -76,7 +76,7 @@ fn encode_prefix_compressed_entries(
                 encoded.extend(current_key.as_bytes());
                 //Value
                 encoded.put_u16_le(current_value.len() as u16);
-                encoded.put_slice(current_value.as_ref());
+                encoded.extend(current_value.as_ref());
             },
         }
 

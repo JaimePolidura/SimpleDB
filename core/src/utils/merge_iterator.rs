@@ -139,7 +139,7 @@ impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
 }
 
 fn is_iterator_up_to_date<I: StorageIterator>(it: &Box<I>, last_key: &Option<Key>) -> bool {
-    return last_key.is_some() && it.key() > last_key.as_ref().unwrap();
+    last_key.is_some() && it.key() > last_key.as_ref().unwrap()
 }
 
 #[cfg(test)]
@@ -149,55 +149,56 @@ mod test {
     use crate::key::Key;
     use crate::lsm_options::LsmOptions;
     use crate::memtables::memtable::{MemTable, MemtableIterator};
+    use crate::transactions::transaction::Transaction;
     use crate::utils::merge_iterator::MergeIterator;
     use crate::utils::storage_iterator::StorageIterator;
 
     #[test]
     fn iterator() {
-        let memtable1 = Arc::new(MemTable::create_new(&LsmOptions::default(), 0));
-        memtable1.set(&key::new("a"), &vec![1]);
-        memtable1.set(&key::new("b"), &vec![1]);
-        memtable1.set(&key::new("d"), &vec![1]);
+        let memtable1 = Arc::new(MemTable::create_mock(Arc::new(LsmOptions::default()), 0).unwrap());
+        memtable1.set(&Transaction::none(), "a", &vec![1]);
+        memtable1.set(&Transaction::none(), "b", &vec![1]);
+        memtable1.set(&Transaction::none(), "d", &vec![1]);
 
-        let memtable2 = Arc::new(MemTable::create_new(&LsmOptions::default(), 0));
-        memtable2.set(&key::new("b"), &vec![2]);
-        memtable2.set(&key::new("e"), &vec![2]);
+        let memtable2 = Arc::new(MemTable::create_mock(Arc::new(LsmOptions::default()), 0).unwrap());
+        memtable2.set(&Transaction::none(), "b", &vec![2]);
+        memtable2.set(&Transaction::none(), "e", &vec![2]);
 
-        let memtable3 = Arc::new(MemTable::create_new(&LsmOptions::default(), 0));
-        memtable3.set(&key::new("c"), &vec![3]);
-        memtable3.set(&key::new("d"), &vec![3]);
-        memtable3.set(&key::new("e"), &vec![3]);
+        let memtable3 = Arc::new(MemTable::create_mock(Arc::new(LsmOptions::default()), 0).unwrap());
+        memtable3.set(&Transaction::none(), "c", &vec![3]);
+        memtable3.set(&Transaction::none(), "d", &vec![3]);
+        memtable3.set(&Transaction::none(), "e", &vec![3]);
 
         let mut merge_iterator: MergeIterator<MemtableIterator> = MergeIterator::new(vec![
-            Box::new(MemtableIterator::new(&memtable1)),
-            Box::new(MemtableIterator::new(&memtable2)),
-            Box::new(MemtableIterator::new(&memtable3))
+            Box::new(MemtableIterator::new(&memtable1, &Transaction::none())),
+            Box::new(MemtableIterator::new(&memtable2, &Transaction::none())),
+            Box::new(MemtableIterator::new(&memtable3, &Transaction::none()))
         ]);
 
         assert!(merge_iterator.has_next());
         merge_iterator.next();
 
-        assert!(merge_iterator.key().eq(&key::new("a")));
+        assert!(merge_iterator.key().eq(&key::new("a", 0)));
         assert!(merge_iterator.value().eq(&vec![1]));
 
         assert!(merge_iterator.has_next());
         merge_iterator.next();
-        assert!(merge_iterator.key().eq(&key::new("b")));
+        assert!(merge_iterator.key().eq(&key::new("b", 0)));
         assert!(merge_iterator.value().eq(&vec![1]));
 
         assert!(merge_iterator.has_next());
         merge_iterator.next();
-        assert!(merge_iterator.key().eq(&key::new("c")));
+        assert!(merge_iterator.key().eq(&key::new("c", 0)));
         assert!(merge_iterator.value().eq(&vec![3]));
 
         assert!(merge_iterator.has_next());
         merge_iterator.next();
-        assert!(merge_iterator.key().eq(&key::new("d")));
+        assert!(merge_iterator.key().eq(&key::new("d", 0)));
         assert!(merge_iterator.value().eq(&vec![1]));
 
         assert!(merge_iterator.has_next());
         merge_iterator.next();
-        assert!(merge_iterator.key().eq(&key::new("e")));
+        assert!(merge_iterator.key().eq(&key::new("e", 0)));
         assert!(merge_iterator.value().eq(&vec![2]));
 
         assert!(!merge_iterator.has_next());

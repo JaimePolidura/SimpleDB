@@ -33,12 +33,12 @@ impl BlockBuilder {
             let offset = entries.len();
 
             //Key
-            utils::u16_to_u8_le(entry.key.len() as u16, entries.len(), &mut entries);
-            utils::u64_to_u8_le(entry.key.txn_id(), entries.len(), &mut entries);
-            entries.put_slice(entry.key.as_bytes());
+            entries.put_u16_le(entry.key.len() as u16);
+            entries.put_u64_le(entry.key.txn_id());
+            entries.extend(entry.key.as_bytes());
             //Value
-            utils::u16_to_u8_le(entry.value.len() as u16, entries.len(), &mut entries);
-            entries.put_slice(entry.value.as_ref());
+            entries.put_u16_le(entry.value.len() as u16);
+            entries.extend(entry.value.as_ref());
 
             offsets.push(offset as u16);
         }

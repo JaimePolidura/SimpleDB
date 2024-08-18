@@ -5,7 +5,8 @@ use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::{MemTable, MemtableIterator};
 use crate::memtables::wal::Wal;
-use crate::transactions::transaction_manager::{Transaction, TransactionManager};
+use crate::transactions::transaction::Transaction;
+use crate::transactions::transaction_manager::{TransactionManager};
 use crate::utils::merge_iterator::MergeIterator;
 
 pub struct Memtables {
@@ -36,7 +37,7 @@ impl Memtables {
         unsafe {
             let mut memtable_iterators: Vec<Box<MemtableIterator>> = Vec::new();
 
-            memtable_iterators.push(Box::from(MemtableIterator::new(&(*self.current_memtable.load(Acquire)), transaction.clone())));
+            memtable_iterators.push(Box::from(MemtableIterator::new(&(*self.current_memtable.load(Acquire)), transaction)));
 
             let inactive_memtables_rw_lock = &*self.inactive_memtables.load(Acquire);
             let inactive_memtables_rw_result = inactive_memtables_rw_lock.read().unwrap();
@@ -65,7 +66,7 @@ impl Memtables {
     pub fn set(&self, key: &str, value: &[u8], transaction: &Transaction) -> Option<Arc<MemTable>> {
         unsafe {
             let memtable_ref = (*self.current_memtable.load(Acquire)).clone();
-            let set_result = memtable_ref.set(key, value);
+            let set_result = memtable_ref.set(transaction, key, value);
 
             match set_result {
                 Err(_) => self.set_current_memtable_as_inactive(),
@@ -77,7 +78,7 @@ impl Memtables {
     pub fn delete(&self, key: &str, transaction: &Transaction) -> Option<Arc<MemTable>> {
         unsafe {
             let memtable_ref = (*self.current_memtable.load(Acquire)).clone();
-            let delete_result = memtable_ref.delete(key);
+            let delete_result = memtable_ref.delete(transaction, key);
 
             match delete_result {
                 Err(_) => self.set_current_memtable_as_inactive(),
@@ -161,10 +162,10 @@ impl Memtables {
     }
 
     fn recover_memtables_from_wal(
+        transaction_manager: Arc<TransactionManager>,
         options: Arc<LsmOptions>,
         max_memtable_id: usize,
         wals: Vec<Wal>,
-        transaction_manager: Arc<TransactionManager>
     ) -> Result<Memtables, LsmError> {
         let current_memtable = MemTable::create_new(options.clone(), max_memtable_id + 1)?;
         let mut memtables: Vec<Arc<MemTable>> = Vec::new();

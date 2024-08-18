@@ -1,8 +1,10 @@
+use std::collections::HashSet;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use crossbeam_skiplist::SkipSet;
 use crate::transactions::transaction::Transaction;
 
+#[derive(Clone)]
 pub enum IsolationLevel {
     ReadUncommited,
     SnapshotIsolation //MVCC
@@ -22,11 +24,11 @@ impl TransactionManager {
     }
 
     pub fn commit(&self, transaction: Transaction) {
-        self.active_transactions.remove(transaction.txn_id);
+        self.active_transactions.remove(&transaction.txn_id);
     }
 
     pub fn start_transaction(&self, isolation_level: IsolationLevel) -> Transaction {
-        let active_transactions = self.active_transactions.iter().collect();
+        let active_transactions = self.copy_active_transactions();
         let txn_id = self.next_txn_id.fetch_add(1, Relaxed);
         self.active_transactions.insert(txn_id);
 
@@ -35,5 +37,9 @@ impl TransactionManager {
             isolation_level,
             txn_id
         }
+    }
+
+    fn copy_active_transactions(&self) -> HashSet<u64> {
+        unimplemented!();
     }
 }

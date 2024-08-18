@@ -24,10 +24,18 @@ pub(crate) struct WalEntry {
 }
 
 impl Wal {
-    pub fn new(lsm_options: Arc<LsmOptions>, memtable_id: usize) -> Result<Wal, LsmError> {
+    pub fn create(lsm_options: Arc<LsmOptions>, memtable_id: usize) -> Result<Wal, LsmError> {
         Ok(Wal {
             file: LsmFile::open(Self::to_wal_file_name(&lsm_options, memtable_id).as_path(), LsmFileMode::AppendOnly)
                 .map_err(|e| CannotCreateWal(memtable_id, e))?,
+            lsm_options,
+            memtable_id,
+        })
+    }
+
+    pub fn create_mock(lsm_options: Arc<LsmOptions>, memtable_id: usize) -> Result<Wal, LsmError> {
+        Ok(Wal {
+            file: LsmFile::mock(),
             lsm_options,
             memtable_id,
         })

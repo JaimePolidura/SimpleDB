@@ -1,4 +1,4 @@
-use crate::utils::lsm_file::LsmFileMode::RandomWrites;
+use crate::utils::lsm_file::LsmFileMode::{Mock, RandomWrites};
 use std::fs::{File, OpenOptions};
 use std::hash::Hash;
 use std::io::{Read, Write};
@@ -8,7 +8,8 @@ use std::path::{Path, PathBuf};
 pub enum LsmFileMode {
     RandomWrites,
     AppendOnly,
-    ReadOnly
+    ReadOnly,
+    Mock //Only used for testing
 }
 
 pub struct LsmFile {
@@ -20,9 +21,10 @@ pub struct LsmFile {
 }
 
 impl LsmFile {
-    pub fn empty() -> LsmFile {
+    //Only used for testing purposes
+    pub fn mock() -> LsmFile {
         LsmFile {
-            mode: RandomWrites,
+            mode: Mock,
             size_bytes: 0,
             path: None,
             file: None,
@@ -67,24 +69,34 @@ impl LsmFile {
     }
 
     pub fn read_all(&self) -> Result<Vec<u8>, std::io::Error> {
-        let mut buff: Vec<u8> = Vec::with_capacity(self.size_bytes);
-        self.file
-            .as_ref()
-            .unwrap()
-            .read_to_end(&mut buff)?;
+        match self.mode {
+            LsmFileMode::Mock => Ok(Vec::new()),
+            _ => {
+                let mut buff: Vec<u8> = Vec::with_capacity(self.size_bytes);
+                self.file
+                    .as_ref()
+                    .unwrap()
+                    .read_to_end(&mut buff)?;
 
-        Ok(buff)
+                Ok(buff)
+            }
+        }
     }
 
     pub fn clear(&mut self) -> Result<(), std::io::Error> {
-        self.size_bytes = 0;
-        self.file.as_mut().unwrap().set_len(0)
+        match self.mode {
+            LsmFileMode::Mock => Ok(()),
+            _ => {
+                self.size_bytes = 0;
+                self.file.as_mut().unwrap().set_len(0)
+            }
+        }
     }
 
     pub fn delete(&self)  -> Result<(), std::io::Error> {
-        match &self.file {
-            Some(_) => std::fs::remove_file(self.path.as_ref().unwrap().as_path()),
-            None => Ok(()),
+        match self.mode {
+            LsmFileMode::Mock => Ok(()),
+            _ => std::fs::remove_file(self.path.as_ref().unwrap().as_path()),
         }
     }
 
@@ -93,15 +105,19 @@ impl LsmFile {
     }
 
     pub fn fsync(&self) -> Result<(), std::io::Error> {
-        self.file
-            .as_ref()
-            .unwrap()
-            .sync_all()
+        match self.mode {
+            LsmFileMode::Mock => Ok(()),
+            _ => self.file
+                    .as_ref()
+                    .unwrap()
+                    .sync_all()
+        }
     }
 
     pub fn write(&mut self, bytes: &[u8]) -> Result<(), std::io::Error> {
         match self.mode {
             LsmFileMode::AppendOnly => self.size_bytes = self.size_bytes + bytes.len(),
+            LsmFileMode::Mock => return Ok(()),
             _ => self.size_bytes = bytes.len()
         };
 
@@ -112,12 +128,20 @@ impl LsmFile {
     }
 
     pub fn read(&self, offset: usize, length: usize) -> Result<Vec<u8>, std::io::Error> {
-        let mut result: Vec<u8> = vec![0; length];
-        self.file.as_ref().unwrap().seek_read(&mut result, offset as u64)?;
-        Ok(result)
+        match self.mode {
+            LsmFileMode::Mock => Ok(Vec::new()),
+            _ => {
+                let mut result: Vec<u8> = vec![0; length];
+                self.file.as_ref().unwrap().seek_read(&mut result, offset as u64)?;
+                Ok(result)
+            }
+        }
     }
 
     pub fn path(&self) -> PathBuf {
-        self.path.as_ref().unwrap().clone()
+        match self.mode {
+            LsmFileMode::Mock => PathBuf::new(),
+            _ => self.path.as_ref().unwrap().clone()
+        }
     }
 }

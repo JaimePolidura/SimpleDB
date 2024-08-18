@@ -13,7 +13,8 @@ use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
 use crate::lsm_error::LsmError;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
-use crate::transactions::transaction_manager::{Transaction, TransactionManager};
+use crate::transactions::transaction::Transaction;
+use crate::transactions::transaction_manager::{TransactionManager};
 
 pub struct SSTables {
     transaction_manager: Arc<TransactionManager>,
@@ -100,7 +101,7 @@ impl SSTables {
             let sstables_in_level = lock.as_ref().unwrap();
 
             for sstable in sstables_in_level.iter() {
-                iterators.push(Box::new(SSTableIterator::new(sstable.clone())))
+                iterators.push(Box::new(SSTableIterator::new(sstable.clone(), &Transaction::none())))
             }
         }
 
@@ -115,7 +116,7 @@ impl SSTables {
             let sstable_in_level = lock_result.as_ref().unwrap();
 
             for sstable in sstable_in_level.iter() {
-                iterators.push(Box::new(SSTableIterator::new(sstable.clone())));
+                iterators.push(Box::new(SSTableIterator::new(sstable.clone(), transaction)));
             }
         }
 

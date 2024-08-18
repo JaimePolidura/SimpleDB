@@ -12,7 +12,7 @@ use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::MemtableState::{Active, Flushed, Flusing, Inactive, RecoveringFromWal};
 use crate::memtables::wal::Wal;
 use crate::sst::sstable_builder::SSTableBuilder;
-use crate::transactions::transaction_manager::Transaction;
+use crate::transactions::transaction::Transaction;
 use crate::utils::storage_iterator::{StorageIterator};
 
 const TOMBSTONE: Bytes = Bytes::new();
@@ -45,7 +45,21 @@ impl MemTable {
             current_size_bytes: AtomicUsize::new(0),
             state: UnsafeCell::new(MemtableState::New),
             data: Arc::new(SkipMap::new()),
-            wal: UnsafeCell::new(Wal::new(options, memtable_id)?),
+            wal: UnsafeCell::new(Wal::create(options, memtable_id)?),
+            memtable_id
+        })
+    }
+
+    pub fn create_mock(
+        options: Arc<LsmOptions>,
+        memtable_id: usize
+    ) -> Result<MemTable, LsmError> {
+        Ok(MemTable {
+            max_size_bytes: options.memtable_max_size_bytes,
+            current_size_bytes: AtomicUsize::new(0),
+            state: UnsafeCell::new(MemtableState::New),
+            data: Arc::new(SkipMap::new()),
+            wal: UnsafeCell::new(Wal::create_mock(options, memtable_id)?),
             memtable_id
         })
     }
@@ -101,29 +115,29 @@ impl MemTable {
         loop {
             if let Some(entry) = self.data.lower_bound(Included(&current_key)) {
                 if !entry.key().as_str().eq(key_lookup) {
-                    None
+                    return None;
                 }
                 if transaction.can_read(entry.key()) {
-                    Some(entry.value().clone())
+                    return Some(entry.value().clone());
                 }
 
                 current_key = entry.key().clone();
             }
 
-            None
+            return None;
         }
     }
 
-    pub fn set(&self, key: &Key, value: &[u8]) -> Result<(), LsmError> {
+    pub fn set(&self, transaction: &Transaction, key: &str, value: &[u8]) -> Result<(), LsmError> {
         self.write_into_skip_list(
-            key,
+            &key::new(key, transaction.txn_id),
             Bytes::copy_from_slice(value)
         )
     }
 
-    pub fn delete(&self, key: &Key) -> Result<(), LsmError> {
+    pub fn delete(&self, transaction: &Transaction, key: &str) -> Result<(), LsmError> {
         self.write_into_skip_list(
-            key,
+            &key::new(key, transaction.txn_id),
             TOMBSTONE
         )
     }
@@ -161,7 +175,7 @@ impl MemTable {
     }
 
     pub fn to_sst(options: Arc<LsmOptions>, memtable: Arc<MemTable>) -> SSTableBuilder {
-        let mut memtable_iterator = MemtableIterator::new(&memtable, Transaction::create_empty_read_uncommited());
+        let mut memtable_iterator = MemtableIterator::new(&memtable, &Transaction::none());
         let mut sstable_builder = SSTableBuilder::new(options, 0);
         sstable_builder.set_memtable_id(memtable.memtable_id);
 
@@ -258,7 +272,7 @@ impl<'a> StorageIterator for MemtableIterator {
                 }
             }
 
-            has_advanced
+            return has_advanced;
         }
     }
 
@@ -285,37 +299,38 @@ mod test {
     use crate::key;
     use crate::lsm_options::LsmOptions;
     use crate::memtables::memtable::{MemTable, MemtableIterator};
+    use crate::transactions::transaction::Transaction;
     use crate::utils::storage_iterator::StorageIterator;
 
     #[test]
     fn get_set_delete() {
-        let memtable = MemTable::create_new(&LsmOptions::default(), 0)
+        let memtable = MemTable::create_new(Arc::new(LsmOptions::default()), 0)
             .unwrap();
         let value: Vec<u8> = vec![10, 12];
 
-        assert!(memtable.get(&key::new("nombre", 1)).is_none());
+        assert!(memtable.get("nombre", &Transaction::none()).is_none());
 
-        memtable.set(&key::new("nombre", 1), &value);
-        memtable.set(&key::new("edad", 1), &value);
+        memtable.set(&Transaction::none(), "nombre", &value);
+        memtable.set(&Transaction::none(), "edad", &value);
 
-        assert!(memtable.get(&key::new("nombre", 1)).is_some());
-        assert!(memtable.get(&key::new("edad", 1)).is_some());
+        assert!(memtable.get("nombre", &Transaction::none()).is_some());
+        assert!(memtable.get("edad", &Transaction::none()).is_some());
 
-        memtable.delete(&key::new("nombre", 1));
+        memtable.delete(&Transaction::none(), "nombre");
 
-        assert!(memtable.get(&key::new("nombre", 1)).is_none());
+        assert!(memtable.get("nombre", &Transaction::none()).is_some());
     }
 
     #[test]
     fn iterators() {
-        let memtable = Arc::new(MemTable::create_new(&LsmOptions::default(), 0).unwrap());
+        let memtable = Arc::new(MemTable::create_new(Arc::new(LsmOptions::default()), 0).unwrap());
         let value: Vec<u8> = vec![10, 12];
-        memtable.set(&key::new("alberto", 1), &value);
-        memtable.set(&key::new("jaime", 1), &value);
-        memtable.set(&key::new("gonchi", 1), &value);
-        memtable.set(&key::new("wili", 1), &value);
+        memtable.set(&Transaction::none(), "alberto", &value);
+        memtable.set(&Transaction::none(), "jaime", &value);
+        memtable.set(&Transaction::none(), "gonchi", &value);
+        memtable.set(&Transaction::none(), "wili", &value);
 
-        let mut iterator = MemtableIterator::new(&memtable);
+        let mut iterator = MemtableIterator::new(&memtable, &Transaction::none());
 
         assert!(iterator.has_next());
         iterator.next();
