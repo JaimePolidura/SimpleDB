@@ -16,7 +16,7 @@ pub struct SharedRef<T> {
 
 impl<T> AtomicSharedRef<T> {
     pub fn new(ptr: T) -> AtomicSharedRef<T> {
-        return AtomicSharedRef {
+        AtomicSharedRef {
             state: AtomicI8::new(ACTIVE),
             shared: AtomicPtr::new(Box::into_raw(Box::new(SharedRef::new(ptr))))
         }

@@ -47,7 +47,7 @@ impl Memtables {
                 memtable_iterators.push(Box::new(MemtableIterator::new(&cloned, transaction)));
             }
 
-            MergeIterator::new(memtable_iterators)
+            MergeIterator::create(memtable_iterators)
         }
     }
 

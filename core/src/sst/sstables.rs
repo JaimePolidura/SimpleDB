@@ -105,7 +105,7 @@ impl SSTables {
             }
         }
 
-        MergeIterator::new(iterators)
+        MergeIterator::create(iterators)
     }
 
     pub fn iterator(&self, transaction: &Transaction) -> MergeIterator<SSTableIterator> {
@@ -120,7 +120,7 @@ impl SSTables {
             }
         }
 
-        MergeIterator::new(iterators)
+        MergeIterator::create(iterators)
     }
 
     pub fn get(&self, key: &str, transaction: &Transaction) -> Option<bytes::Bytes> {

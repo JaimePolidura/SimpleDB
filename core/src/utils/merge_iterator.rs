@@ -10,7 +10,7 @@ pub struct MergeIterator<I: StorageIterator> {
 }
 
 impl<I: StorageIterator> MergeIterator<I> {
-    pub fn new(mut iterators: Vec<Box<I>>) -> MergeIterator<I> {
+    pub fn create(mut iterators: Vec<Box<I>>) -> MergeIterator<I> {
         call_next_on_every_iterator(&mut iterators);
 
         let mut iterators_options: Vec<Option<Box<I>>> = Vec::new();
@@ -156,20 +156,23 @@ mod test {
     #[test]
     fn iterator() {
         let memtable1 = Arc::new(MemTable::create_mock(Arc::new(LsmOptions::default()), 0).unwrap());
+        memtable1.set_active();
         memtable1.set(&Transaction::none(), "a", &vec![1]);
         memtable1.set(&Transaction::none(), "b", &vec![1]);
         memtable1.set(&Transaction::none(), "d", &vec![1]);
 
         let memtable2 = Arc::new(MemTable::create_mock(Arc::new(LsmOptions::default()), 0).unwrap());
+        memtable2.set_active();
         memtable2.set(&Transaction::none(), "b", &vec![2]);
         memtable2.set(&Transaction::none(), "e", &vec![2]);
 
         let memtable3 = Arc::new(MemTable::create_mock(Arc::new(LsmOptions::default()), 0).unwrap());
+        memtable3.set_active();
         memtable3.set(&Transaction::none(), "c", &vec![3]);
         memtable3.set(&Transaction::none(), "d", &vec![3]);
         memtable3.set(&Transaction::none(), "e", &vec![3]);
 
-        let mut merge_iterator: MergeIterator<MemtableIterator> = MergeIterator::new(vec![
+        let mut merge_iterator: MergeIterator<MemtableIterator> = MergeIterator::create(vec![
             Box::new(MemtableIterator::new(&memtable1, &Transaction::none())),
             Box::new(MemtableIterator::new(&memtable2, &Transaction::none())),
             Box::new(MemtableIterator::new(&memtable3, &Transaction::none()))
