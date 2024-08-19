@@ -26,7 +26,7 @@ pub(crate) struct WalEntry {
 impl Wal {
     pub fn create(lsm_options: Arc<LsmOptions>, memtable_id: usize) -> Result<Wal, LsmError> {
         Ok(Wal {
-            file: LsmFile::open(Self::to_wal_file_name(&lsm_options, memtable_id).as_path(), LsmFileMode::AppendOnly)
+            file: LsmFile::open(Self::to_wal_file_path(&lsm_options, memtable_id).as_path(), LsmFileMode::AppendOnly)
                 .map_err(|e| CannotCreateWal(memtable_id, e))?,
             lsm_options,
             memtable_id,
@@ -41,10 +41,10 @@ impl Wal {
         })
     }
 
-    pub fn write(&mut self, key: &Key, value: &[u8]) -> Result<(), LsmError> {
+    pub fn add_entry(&mut self, key: &Key, value: &[u8]) -> Result<(), LsmError> {
         let encoded = self.encode(key, value);
         self.file.write(&encoded)
-            .map_err(|e| CannotWriteWalEntry(self.memtable_id, e));
+            .map_err(|e| CannotWriteWalEntry(self.memtable_id, e))?;
 
         if matches!(self.lsm_options.durability_level, DurabilityLevel::Strong) {
             self.file.fsync();
@@ -169,7 +169,7 @@ impl Wal {
         file.file_name().to_str().unwrap().starts_with("wal-")
     }
 
-    fn to_wal_file_name(lsm_options: &Arc<LsmOptions>, memtable_id: usize) -> PathBuf {
+    fn to_wal_file_path(lsm_options: &Arc<LsmOptions>, memtable_id: usize) -> PathBuf {
         let mut path_buff = PathBuf::from(&lsm_options.base_path);
         let wal_file_name = format!("wal-{}", memtable_id);
         path_buff.push(wal_file_name);

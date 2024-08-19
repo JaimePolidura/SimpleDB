@@ -169,7 +169,7 @@ impl MemTable {
         let wal: &mut Wal = unsafe { &mut *self.wal.get() };
 
         if self.can_memtable_wal_be_written() {
-            wal.write(key, value)
+            wal.add_entry(key, value)
         } else {
             Ok(())
         }

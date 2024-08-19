@@ -47,6 +47,10 @@ pub enum LsmError {
     CannotDeleteSSTable(usize, std::io::Error),
     CannotCreateSSTableFile(usize, std::io::Error),
 
+    //Transaction log errors
+    CannotCreateTransactionLog(std::io::Error),
+    CannotWriteTransactionLogEntry(std::io::Error),
+
     //This error cannot be returned to the final user,
     //It will only be used internally in the lsm engine code
     Internal
@@ -99,6 +103,12 @@ impl Debug for LsmError {
             }
             LsmError::CannotCreateSSTableFile(sstable_id, io_error) => {
                 write!(f, "Cannot create SSTable file. SSTable ID: {} Error: {}", sstable_id, io_error)
+            }
+            LsmError::CannotCreateTransactionLog(io_error) => {
+                write!(f, "Cannot create transaction log file. Error: {}", io_error)
+            }
+            LsmError::CannotWriteTransactionLogEntry(io_error) => {
+                write!(f, "Cannot write transaction log entry. IO Error: {}", io_error)
             }
             LsmError::Internal => {
                 panic!("This error shoudnt be returned to the final user!! Invalid code path");

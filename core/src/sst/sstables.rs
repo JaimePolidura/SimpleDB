@@ -244,7 +244,7 @@ impl SSTables {
     fn do_flush_to_disk(&self, sstable_builder: SSTableBuilder, sstable_id: usize) -> Result<usize, LsmError> {
         let sstable_build_result = sstable_builder.build(
             sstable_id,
-            self.get_sstable_path(sstable_id).as_path(),
+            self.to_sstable_file_path(sstable_id).as_path(),
         );
 
         match sstable_build_result {
@@ -259,7 +259,7 @@ impl SSTables {
         }
     }
 
-    fn get_sstable_path(&self, sstable_id: usize) -> PathBuf {
+    fn to_sstable_file_path(&self, sstable_id: usize) -> PathBuf {
         //SSTable file path
         let mut path_buff = PathBuf::from(self.lsm_options.base_path.to_string());
         path_buff.push(to_sstable_file_name(sstable_id));
