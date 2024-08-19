@@ -35,19 +35,20 @@ type LsmIterator = TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterat
 pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
     println!("Starting mini lsm engine!");
 
-    let transaction_manager = Arc::new(TransactionManager::new(1));
     let manifest = Arc::new(Manifest::new(lsm_options.clone())
         .expect("Cannot open/create Manifest file"));
-    let sstables = Arc::new(SSTables::open(transaction_manager.clone(), lsm_options.clone(), manifest.clone())
+    let sstables = Arc::new(SSTables::open(lsm_options.clone(), manifest.clone())
         .expect("Failed to read SSTable"));
+    let memtables = Memtables::new(lsm_options.clone())
+        .expect("Failed to create Memtables");
+    let transaction_manager = Arc::new(TransactionManager::new(1));
 
     let mut lsm = Lsm {
         compaction: Compaction::new(lsm_options.clone(), sstables.clone(), manifest.clone()),
-        memtables: Memtables::new(transaction_manager.clone(), lsm_options.clone())
-            .expect("Failed to create Memtables"),
-        transacion_manager: Arc::new(TransactionManager::new(0)), //TODO
+        transacion_manager: Arc::new(transaction_manager), //TODO
         options: lsm_options.clone(),
         sstables: sstables.clone(),
+        memtables,
         manifest,
     };
 

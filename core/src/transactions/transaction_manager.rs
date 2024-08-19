@@ -3,6 +3,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use crossbeam_skiplist::SkipSet;
 use crate::transactions::transaction::Transaction;
+use crate::transactions::transaction_log::TransactionLog;
 
 #[derive(Clone)]
 pub enum IsolationLevel {
@@ -11,6 +12,8 @@ pub enum IsolationLevel {
 }
 
 pub struct TransactionManager {
+    log: TransactionLog,
+
     active_transactions: SkipSet<u64>,
     next_txn_id: AtomicU64,
 }

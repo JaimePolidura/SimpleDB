@@ -6,14 +6,11 @@ use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::{MemTable, MemtableIterator};
 use crate::memtables::wal::Wal;
 use crate::transactions::transaction::Transaction;
-use crate::transactions::transaction_manager::{TransactionManager};
 use crate::utils::merge_iterator::MergeIterator;
 
 pub struct Memtables {
     inactive_memtables: AtomicPtr<RwLock<Vec<Arc<MemTable>>>>,
     current_memtable: AtomicPtr<Arc<MemTable>>,
-
-    transaction_manager: Arc<TransactionManager>,
 
     next_memtable_id: AtomicUsize,
     options: Arc<LsmOptions>,
@@ -21,15 +18,14 @@ pub struct Memtables {
 
 impl Memtables {
     pub fn new(
-        transaction_manager: Arc<TransactionManager>,
         options: Arc<LsmOptions>
     ) -> Result<Memtables, LsmError> {
         let (wals, max_memtable_id) = Wal::get_persisted_wal_id(&options)?;
 
         if !wals.is_empty() {
-            Self::recover_memtables_from_wal(transaction_manager, options, max_memtable_id, wals)
+            Self::recover_memtables_from_wal(options, max_memtable_id, wals)
         } else {
-            Self::create_memtables_no_wal(transaction_manager, options)
+            Self::create_memtables_no_wal(options)
         }
     }
 
@@ -162,7 +158,6 @@ impl Memtables {
     }
 
     fn recover_memtables_from_wal(
-        transaction_manager: Arc<TransactionManager>,
         options: Arc<LsmOptions>,
         max_memtable_id: usize,
         wals: Vec<Wal>,
@@ -173,32 +168,31 @@ impl Memtables {
 
         for wal in wals {
             let memtable_id = wal.get_memtable_id();
-            let mut memtable = MemTable::create_and_recover_from_wal(options.clone(), memtable_id, wal)?;
-            memtable.set_inactive();
-            memtables.push(Arc::new(memtable));
+            let mut memtable_created = MemTable::create_and_recover_from_wal(options.clone(), memtable_id, wal)?;
+
+            let memtable_created = memtable_created.memtable;
+            memtable_created.set_inactive();
+            memtables.push(Arc::new(memtable_created));
         }
 
         Ok(Memtables {
-            current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(current_memtable)))),
             inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(memtables)))),
+            current_memtable: AtomicPtr::new(Box::new(Arc::new(current_memtable))),
             next_memtable_id: AtomicUsize::new(next_memtable_id),
-            transaction_manager,
             options
         })
     }
 
     fn create_memtables_no_wal(
-        transaction_manager: Arc<TransactionManager>,
         options: Arc<LsmOptions>
     ) -> Result<Memtables, LsmError> {
         let current_memtable = MemTable::create_new(options.clone(), 0)?;
         current_memtable.set_active();
 
         Ok(Memtables {
-            inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(Vec::with_capacity(options.max_memtables_inactive))))),
+            inactive_memtables: AtomicPtr::new(Box::new(RwLock::new(Vec::with_capacity(options.max_memtables_inactive)))),
             current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(current_memtable)))),
             next_memtable_id: AtomicUsize::new(1),
-            transaction_manager,
             options
         })
     }

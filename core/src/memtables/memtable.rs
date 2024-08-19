@@ -79,6 +79,7 @@ impl MemTable {
         };
 
         memtable.recover_from_wal();
+
         Ok(memtable)
     }
 

@@ -1,5 +1,4 @@
 use std::cmp::max;
-use crate::key::Key;
 use crate::lsm_options::LsmOptions;
 use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
 use crate::sst::sstable_builder::SSTableBuilder;
@@ -14,10 +13,8 @@ use std::sync::{Arc, RwLock};
 use crate::lsm_error::LsmError;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::transactions::transaction::Transaction;
-use crate::transactions::transaction_manager::{TransactionManager};
 
 pub struct SSTables {
-    transaction_manager: Arc<TransactionManager>,
     //For each level one index entry
     sstables: Vec<RwLock<Vec<Arc<SSTable>>>>,
     next_sstable_id: AtomicUsize,
@@ -29,7 +26,6 @@ pub struct SSTables {
 
 impl SSTables {
     pub fn open(
-        transaction_manager: Arc<TransactionManager>,
         lsm_options: Arc<LsmOptions>,
         manifest: Arc<Manifest>
     ) -> Result<SSTables, usize> {
@@ -37,12 +33,11 @@ impl SSTables {
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
         }
-        let (sstables, max_ssatble_id) = Self::load_sstables(&lsm_options)?;
+        let (sstables, max_ssatble_id, largest_txn_id_loaded) = Self::load_sstables(&lsm_options)?;
 
-        Ok(SSTables {
+        Ok(SSTables{
             next_sstable_id: AtomicUsize::new(max_ssatble_id + 1),
             path_buff: PathBuf::new(),
-            transaction_manager,
             n_current_levels: 0,
             lsm_options,
             sstables,
