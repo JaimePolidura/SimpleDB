@@ -1,9 +1,12 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use crossbeam_skiplist::SkipSet;
+use crate::lsm_error::LsmError;
+use crate::lsm_options::LsmOptions;
 use crate::transactions::transaction::Transaction;
-use crate::transactions::transaction_log::TransactionLog;
+use crate::transactions::transaction_log::{TransactionLog, TransactionLogEntry};
 
 #[derive(Clone)]
 pub enum IsolationLevel {
@@ -19,11 +22,19 @@ pub struct TransactionManager {
 }
 
 impl TransactionManager {
-    pub fn new(next_txn_id: u64) -> TransactionManager {
-        TransactionManager {
-            next_txn_id: AtomicU64::new(next_txn_id),
-            active_transactions: SkipSet::new(),
-        }
+    pub fn create_recover_from_log(&self, options: Arc<LsmOptions>) -> Result<TransactionManager, LsmError> {
+        let mut transaction_log = TransactionLog::create(options)?;
+        let transaction_log_entries = transaction_log.read_entries()?;
+        let (open_transactions, max_txn_id) = Self::get_active_transactions(&transaction_log_entries);
+
+        transaction_log.replace_entries(&open_transactions)?;
+
+        Ok(TransactionManager{
+            active_transactions: SkipSet::from_iter(open_transactions.iter()
+                .map(|i| i.txn_id())),
+            next_txn_id: max_txn_id + 1,
+            log: transaction_log,
+        })
     }
 
     pub fn commit(&self, transaction: Transaction) {
@@ -43,6 +54,10 @@ impl TransactionManager {
     }
 
     fn copy_active_transactions(&self) -> HashSet<u64> {
+        unimplemented!();
+    }
+
+    fn get_active_transactions(entries: &Vec<TransactionLogEntry>) -> (Vec<TransactionLogEntry>, usize) {
         unimplemented!();
     }
 }

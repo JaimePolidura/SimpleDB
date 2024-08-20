@@ -50,6 +50,8 @@ pub enum LsmError {
     //Transaction log errors
     CannotCreateTransactionLog(std::io::Error),
     CannotWriteTransactionLogEntry(std::io::Error),
+    CannotReadTransactionLogEntries(std::io::Error),
+    CannotDecodeTransactionLogEntry(DecodeError),
 
     //This error cannot be returned to the final user,
     //It will only be used internally in the lsm engine code
@@ -110,8 +112,14 @@ impl Debug for LsmError {
             LsmError::CannotWriteTransactionLogEntry(io_error) => {
                 write!(f, "Cannot write transaction log entry. IO Error: {}", io_error)
             }
+            LsmError::CannotReadTransactionLogEntries(io_error) => {
+                write!(f, "Cannot read transactionlog entries entries. IO Error: {}", io_error)
+            },
             LsmError::Internal => {
                 panic!("This error shoudnt be returned to the final user!! Invalid code path");
+            }
+            LsmError::CannotDecodeTransactionLogEntry(decode_error) => {
+                write!(f, "Cannot decode transaction log entry. Error: {}", decode_error_to_message(&decode_error));
             }
         }
     }

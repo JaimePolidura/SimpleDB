@@ -41,7 +41,7 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
         .expect("Failed to read SSTable"));
     let memtables = Memtables::new(lsm_options.clone())
         .expect("Failed to create Memtables");
-    let transaction_manager = Arc::new(TransactionManager::new(1));
+    let transaction_manager = Arc::new(TransactionManager::create_recover_from_log());
 
     let mut lsm = Lsm {
         compaction: Compaction::new(lsm_options.clone(), sstables.clone(), manifest.clone()),
