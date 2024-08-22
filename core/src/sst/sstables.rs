@@ -11,6 +11,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
 use crate::lsm_error::LsmError;
+use crate::lsm_error::LsmError::CannotReadSSTablesFiles;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::transactions::transaction::Transaction;
 
@@ -28,12 +29,12 @@ impl SSTables {
     pub fn open(
         lsm_options: Arc<LsmOptions>,
         manifest: Arc<Manifest>
-    ) -> Result<SSTables, usize> {
+    ) -> Result<SSTables, LsmError> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
         }
-        let (sstables, max_ssatble_id, largest_txn_id_loaded) = Self::load_sstables(&lsm_options)?;
+        let (sstables, max_ssatble_id) = Self::load_sstables(&lsm_options)?;
 
         Ok(SSTables{
             next_sstable_id: AtomicUsize::new(max_ssatble_id + 1),
@@ -45,7 +46,7 @@ impl SSTables {
         })
     }
 
-    fn load_sstables(lsm_options: &Arc<LsmOptions>) -> Result<(Vec<RwLock<Vec<Arc<SSTable>>>>, usize), usize> {
+    fn load_sstables(lsm_options: &Arc<LsmOptions>) -> Result<(Vec<RwLock<Vec<Arc<SSTable>>>>, usize), LsmError> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
@@ -55,7 +56,7 @@ impl SSTables {
         let path = path.as_path();
         let mut max_sstable_id: usize = 0;
 
-        for file in fs::read_dir(path).expect("Failed to read base path") {
+        for file in fs::read_dir(path).map_err(|e| CannotReadSSTablesFiles(e))? {
             let file = file.unwrap();
 
             if !is_sstable_file(&file) {
@@ -65,14 +66,10 @@ impl SSTables {
             if let Ok(sstable_id) = extract_sstable_id_from_file(&file) {
                 println!("Loading SSTable with ID: {}", sstable_id);
 
-                let sstable_read_result = SSTable::from_file(
+                let sstable = SSTable::from_file(
                     sstable_id, file.path().as_path(), lsm_options.clone()
-                );
+                )?;
 
-                if sstable_read_result.is_err() {
-                    return Err(sstable_id);
-                }
-                let sstable = sstable_read_result.unwrap();
                 if sstable.state.load(Acquire) != SSTABLE_ACTIVE {
                     sstable.delete();
                 }

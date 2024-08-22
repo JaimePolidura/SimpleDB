@@ -7,6 +7,7 @@ use crate::key;
 use crate::key::Key;
 use crate::lsm_error::DecodeErrorType;
 use crate::lsm_options::LsmOptions;
+use crate::transactions::transaction::TxnId;
 use crate::utils::utils;
 
 pub(crate) fn decode_block(
@@ -58,7 +59,7 @@ fn decode_entries_prefix_compressed(
         current_index = current_index + 2;
         let rest_key_size = utils::u8_vec_to_u16_le(encoded, current_index);
         current_index = current_index + 2;
-        let key_txn_id = utils::u8_vec_to_u64_le(encoded, current_index);
+        let key_txn_id = utils::u8_vec_to_u64_le(encoded, current_index) as TxnId;
         current_index = current_index + 8;
         let rest_key_u8_vec = encoded[current_index..(current_index + rest_key_size as usize)].to_vec();
 
@@ -72,7 +73,7 @@ fn decode_entries_prefix_compressed(
         };
         current_index = current_index + rest_key_size as usize;
         entries_decoded.put_u16_le(current_key.len() as u16);
-        entries_decoded.put_u64_le(current_key.txn_id());
+        entries_decoded.put_u64_le(current_key.txn_id() as u64);
         entries_decoded.extend(current_key.as_bytes());
         prev_key = Some(current_key);
 

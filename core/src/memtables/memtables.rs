@@ -170,14 +170,13 @@ impl Memtables {
             let memtable_id = wal.get_memtable_id();
             let mut memtable_created = MemTable::create_and_recover_from_wal(options.clone(), memtable_id, wal)?;
 
-            let memtable_created = memtable_created.memtable;
             memtable_created.set_inactive();
             memtables.push(Arc::new(memtable_created));
         }
 
         Ok(Memtables {
             inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(memtables)))),
-            current_memtable: AtomicPtr::new(Box::new(Arc::new(current_memtable))),
+            current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(current_memtable)))),
             next_memtable_id: AtomicUsize::new(next_memtable_id),
             options
         })
@@ -190,7 +189,7 @@ impl Memtables {
         current_memtable.set_active();
 
         Ok(Memtables {
-            inactive_memtables: AtomicPtr::new(Box::new(RwLock::new(Vec::with_capacity(options.max_memtables_inactive)))),
+            inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(Vec::with_capacity(options.max_memtables_inactive))))),
             current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(current_memtable)))),
             next_memtable_id: AtomicUsize::new(1),
             options

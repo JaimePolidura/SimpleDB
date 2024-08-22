@@ -3,6 +3,7 @@ use crate::key::Key;
 use crate::lsm_error::DecodeErrorType;
 use crate::utils::utils;
 use bytes::BufMut;
+use crate::transactions::transaction::TxnId;
 
 #[derive(Eq, PartialEq)]
 pub struct BlockMetadata {
@@ -56,7 +57,7 @@ impl BlockMetadata {
 
         let first_key_length = utils::u8_vec_to_u32_le(&bytes, current_index) as usize;
         current_index = current_index + 4;
-        let first_key_txn_id = utils::u8_vec_to_u64_le(&bytes, current_index);
+        let first_key_txn_id = utils::u8_vec_to_u64_le(&bytes, current_index) as TxnId;
         current_index = current_index + 8;
         let first_key = String::from_utf8(bytes[current_index..(current_index + first_key_length)].to_vec())
             .map_err(|e| DecodeErrorType::Utf8Decode(e))?;
@@ -64,7 +65,7 @@ impl BlockMetadata {
 
         let last_key_length = utils::u8_vec_to_u32_le(&bytes, current_index) as usize;
         current_index = current_index + 4;
-        let last_key_txn_id = utils::u8_vec_to_u64_le(&bytes, current_index);
+        let last_key_txn_id = utils::u8_vec_to_u64_le(&bytes, current_index) as TxnId;
         current_index = current_index + 8;
         let last_key = String::from_utf8(bytes[current_index..(current_index + last_key_length)].to_vec())
             .map_err(|e| DecodeErrorType::Utf8Decode(e))?;
@@ -85,12 +86,12 @@ impl BlockMetadata {
         let mut metadata_encoded: Vec<u8> = Vec::new();
         //First key
         metadata_encoded.put_u32_le(self.first_key.len() as u32);
-        metadata_encoded.put_u64_le(self.first_key.txn_id());
+        metadata_encoded.put_u64_le(self.first_key.txn_id() as u64);
         metadata_encoded.extend(self.first_key.as_bytes());
 
         //Las key
         metadata_encoded.put_u32_le(self.last_key.len() as u32);
-        metadata_encoded.put_u64_le(self.last_key.txn_id());
+        metadata_encoded.put_u64_le(self.last_key.txn_id() as u64);
         metadata_encoded.extend(self.last_key.as_bytes());
         metadata_encoded.put_u32_le(self.offset as u32);
         metadata_encoded

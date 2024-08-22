@@ -2,11 +2,13 @@ use std::collections::HashSet;
 use crate::key::Key;
 use crate::transactions::transaction_manager::IsolationLevel;
 
+pub type TxnId = usize;
+
 #[derive(Clone)]
 pub struct Transaction {
-    pub(crate) active_transactions: HashSet<u64>,
+    pub(crate) active_transactions: HashSet<TxnId>,
     pub(crate) isolation_level: IsolationLevel,
-    pub(crate) txn_id: u64,
+    pub(crate) txn_id: TxnId,
 }
 
 impl Transaction {

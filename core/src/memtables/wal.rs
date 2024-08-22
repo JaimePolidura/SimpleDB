@@ -9,6 +9,7 @@ use crate::key::Key;
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
 use crate::lsm_error::LsmError::{CannotCreateWal, CannotDecodeWal, CannotReadWalEntries, CannotReadWalFiles, CannotWriteWalEntry};
 use crate::lsm_options::{DurabilityLevel, LsmOptions};
+use crate::transactions::transaction::TxnId;
 use crate::utils::lsm_file::{LsmFile, LsmFileMode};
 use crate::utils::utils;
 
@@ -65,7 +66,7 @@ impl Wal {
             let mut entry_bytes_size = 0;
 
             let key_len = current_ptr.get_u32_le() as usize;
-            let key_timestmap = current_ptr.get_u64_le();
+            let key_timestmap = current_ptr.get_u64_le() as TxnId;
             entry_bytes_size = entry_bytes_size + 12;
 
             let key_bytes = &current_ptr[..key_len];
@@ -150,7 +151,7 @@ impl Wal {
         let mut encoded: Vec<u8> = Vec::new();
         //Key
         encoded.put_u32_le(key.len() as u32);
-        encoded.put_u64_le(key.txn_id());
+        encoded.put_u64_le(key.txn_id() as u64);
         encoded.extend(key.as_bytes());
         //Value
         encoded.put_u32_le(value.len() as u32);

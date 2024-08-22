@@ -34,7 +34,7 @@ impl BlockBuilder {
 
             //Key
             entries.put_u16_le(entry.key.len() as u16);
-            entries.put_u64_le(entry.key.txn_id());
+            entries.put_u64_le(entry.key.txn_id() as u64);
             entries.extend(entry.key.as_bytes());
             //Value
             entries.put_u16_le(entry.value.len() as u16);

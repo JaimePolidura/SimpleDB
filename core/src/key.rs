@@ -2,14 +2,15 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::Formatter;
 use crate::key;
+use crate::transactions::transaction::TxnId;
 
 #[derive(Debug)]
 pub struct Key {
     string: String,
-    txn_id: u64,
+    txn_id: TxnId,
 }
 
-pub fn new(string: &str, txn_id: u64) -> Key {
+pub fn new(string: &str, txn_id: TxnId) -> Key {
     Key {
         string: string.to_string(),
         txn_id
@@ -33,7 +34,7 @@ impl Key {
         self.string.as_str()
     }
 
-    pub fn txn_id(&self) -> u64 {
+    pub fn txn_id(&self) -> TxnId {
         self.txn_id
     }
 
@@ -63,7 +64,7 @@ impl Key {
         (key::new(h1, self.txn_id), key::new(h2, self.txn_id))
     }
 
-    pub fn merge(a: &Key, b: &Key, txn_id: u64) -> Key {
+    pub fn merge(a: &Key, b: &Key, txn_id: TxnId) -> Key {
         let mut result = String::from(&a.string);
         result.extend(b.string.chars());
         Key {string: result, txn_id }

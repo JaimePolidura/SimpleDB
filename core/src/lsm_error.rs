@@ -43,6 +43,7 @@ pub enum LsmError {
     //SSTable errors
     CannotOpenSSTableFile(usize, std::io::Error),
     CannotReadSSTableFile(usize, std::io::Error),
+    CannotReadSSTablesFiles(std::io::Error),
     CannotDecodeSSTable(usize, SSTableCorruptedPart, DecodeError),
     CannotDeleteSSTable(usize, std::io::Error),
     CannotCreateSSTableFile(usize, std::io::Error),
@@ -52,6 +53,7 @@ pub enum LsmError {
     CannotWriteTransactionLogEntry(std::io::Error),
     CannotReadTransactionLogEntries(std::io::Error),
     CannotDecodeTransactionLogEntry(DecodeError),
+    CannotResetTransacionLog(std::io::Error),
 
     //This error cannot be returned to the final user,
     //It will only be used internally in the lsm engine code
@@ -115,11 +117,17 @@ impl Debug for LsmError {
             LsmError::CannotReadTransactionLogEntries(io_error) => {
                 write!(f, "Cannot read transactionlog entries entries. IO Error: {}", io_error)
             },
-            LsmError::Internal => {
-                panic!("This error shoudnt be returned to the final user!! Invalid code path");
+            LsmError::CannotReadSSTablesFiles(io_error) => {
+                write!(f, "Cannot list SSTables files in base path. IO Error: {}", io_error)
             }
             LsmError::CannotDecodeTransactionLogEntry(decode_error) => {
-                write!(f, "Cannot decode transaction log entry. Error: {}", decode_error_to_message(&decode_error));
+                write!(f, "Cannot decode transaction log entry. Error: {}", decode_error_to_message(&decode_error))
+            }
+            LsmError::CannotResetTransacionLog(io_error) => {
+                write!(f, "Cannot reset transaction log. Error: {}", io_error)
+            }
+            LsmError::Internal => {
+                panic!("This error shoudnt be returned to the final user!! Invalid code path");
             }
         }
     }

@@ -1,19 +1,18 @@
-use crate::compaction::compaction::{Compaction, CompactionTask};
-use crate::lsm_options::LsmOptions;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
+use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
+use crate::compaction::compaction::{Compaction, CompactionTask};
 use crate::memtables::memtable::{MemTable, MemtableIterator};
-use crate::memtables::memtables::Memtables;
-use crate::sst::sstable_builder::SSTableBuilder;
-use crate::sst::sstables::SSTables;
-use crate::sst::ssttable_iterator::SSTableIterator;
-use crate::utils::merge_iterator::MergeIterator;
-use crate::utils::storage_iterator::StorageIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
+use crate::sst::ssttable_iterator::SSTableIterator;
+use crate::sst::sstable_builder::SSTableBuilder;
+use crate::utils::merge_iterator::MergeIterator;
+use crate::transactions::transaction::Transaction;
+use crate::memtables::memtables::Memtables;
+use crate::lsm_options::LsmOptions;
+use crate::sst::sstables::SSTables;
+use crate::lsm_error::LsmError;
 use std::sync::Arc;
 use bytes::Bytes;
-use crate::lsm_error::LsmError;
-use crate::transactions::transaction::Transaction;
-use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
 
 pub struct Lsm {
     transacion_manager: Arc<TransactionManager>,
@@ -32,16 +31,13 @@ pub enum WriteBatch {
 
 type LsmIterator = TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>;
 
-pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
+pub fn new(lsm_options: Arc<LsmOptions>) -> Result<Lsm, LsmError> {
     println!("Starting mini lsm engine!");
 
-    let manifest = Arc::new(Manifest::new(lsm_options.clone())
-        .expect("Cannot open/create Manifest file"));
-    let sstables = Arc::new(SSTables::open(lsm_options.clone(), manifest.clone())
-        .expect("Failed to read SSTable"));
-    let memtables = Memtables::new(lsm_options.clone())
-        .expect("Failed to create Memtables");
-    let transaction_manager = Arc::new(TransactionManager::create_recover_from_log());
+    let manifest = Arc::new(Manifest::new(lsm_options.clone())?);
+    let sstables = Arc::new(SSTables::open(lsm_options.clone(), manifest.clone())?);
+    let memtables = Memtables::new(lsm_options.clone())?;
+    let transaction_manager = TransactionManager::create_recover_from_log(lsm_options.clone())?;
 
     let mut lsm = Lsm {
         compaction: Compaction::new(lsm_options.clone(), sstables.clone(), manifest.clone()),
@@ -58,7 +54,7 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Lsm {
 
     println!("Mini lsm engine started!");
 
-    lsm
+    Ok(lsm)
 }
 
 impl Lsm {
