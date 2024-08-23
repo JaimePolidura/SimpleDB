@@ -13,6 +13,7 @@ use crate::memtables::memtable::MemtableState::{Active, Flushed, Flusing, Inacti
 use crate::memtables::wal::Wal;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::transactions::transaction::Transaction;
+use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_iterator::{StorageIterator};
 
 const TOMBSTONE: Bytes = Bytes::new();
@@ -24,6 +25,7 @@ pub struct MemTable {
     memtable_id: usize,
     state: UnsafeCell<MemtableState>,
     wal: UnsafeCell<Wal>,
+    options: Arc<LsmOptions>
 }
 
 enum MemtableState {
@@ -45,8 +47,9 @@ impl MemTable {
             current_size_bytes: AtomicUsize::new(0),
             state: UnsafeCell::new(MemtableState::New),
             data: Arc::new(SkipMap::new()),
-            wal: UnsafeCell::new(Wal::create(options, memtable_id)?),
-            memtable_id
+            wal: UnsafeCell::new(Wal::create(options.clone(), memtable_id)?),
+            memtable_id,
+            options,
         })
     }
 
@@ -59,8 +62,9 @@ impl MemTable {
             current_size_bytes: AtomicUsize::new(0),
             state: UnsafeCell::new(MemtableState::New),
             data: Arc::new(SkipMap::new()),
-            wal: UnsafeCell::new(Wal::create_mock(options, memtable_id)?),
-            memtable_id
+            wal: UnsafeCell::new(Wal::create_mock(options.clone(), memtable_id)?),
+            memtable_id,
+            options,
         })
     }
 
@@ -75,7 +79,8 @@ impl MemTable {
             state: UnsafeCell::new(MemtableState::New),
             data: Arc::new(SkipMap::new()),
             wal: UnsafeCell::new(wal),
-            memtable_id
+            memtable_id,
+            options
         };
 
         memtable.recover_from_wal();
@@ -175,15 +180,19 @@ impl MemTable {
         }
     }
 
-    pub fn to_sst(options: Arc<LsmOptions>, memtable: Arc<MemTable>) -> SSTableBuilder {
-        let mut memtable_iterator = MemtableIterator::new(&memtable, &Transaction::none());
-        let mut sstable_builder = SSTableBuilder::new(options, 0);
-        sstable_builder.set_memtable_id(memtable.memtable_id);
+    pub fn to_sst(self: &Arc<MemTable>, transaction_manager: &Arc<TransactionManager>) -> SSTableBuilder {
+        let mut memtable_iterator = MemtableIterator::new(&self, &Transaction::none());
+        let mut sstable_builder = SSTableBuilder::new(self.options.clone(), 0);
+        sstable_builder.set_memtable_id(self.memtable_id);
 
         while memtable_iterator.next() {
             let value = memtable_iterator.value();
             let key = memtable_iterator.key();
-            sstable_builder.add_entry(key.clone(), Bytes::copy_from_slice(value));
+
+            match transaction_manager.check_key_not_rolledback(key) {
+                Ok(_) => sstable_builder.add_entry(key.clone(), Bytes::copy_from_slice(value)),
+                Err(_) => {}
+            };
         }
 
         sstable_builder

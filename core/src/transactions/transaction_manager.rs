@@ -2,12 +2,14 @@ use crate::transactions::transaction_log::{TransactionLog, TransactionLogEntry};
 use crate::transactions::transaction::{Transaction, TxnId};
 use std::sync::atomic::Ordering::Relaxed;
 use crate::lsm_options::LsmOptions;
-use std::sync::atomic::AtomicU64;
-use crossbeam_skiplist::SkipSet;
+use std::sync::atomic::{AtomicU64, AtomicUsize};
+use crossbeam_skiplist::{SkipMap, SkipSet};
 use crate::lsm_error::LsmError;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::cmp::max;
+use crate::key::Key;
+use crate::utils::utils;
 
 #[derive(Clone)]
 pub enum IsolationLevel {
@@ -16,10 +18,10 @@ pub enum IsolationLevel {
 }
 
 pub struct TransactionManager {
-    log: TransactionLog,
-
+    rolledback_transactions: SkipMap<TxnId, Arc<Transaction>>,
     active_transactions: SkipSet<TxnId>,
     next_txn_id: AtomicU64,
+    log: TransactionLog,
 }
 
 impl TransactionManager {
@@ -27,18 +29,51 @@ impl TransactionManager {
         let mut transaction_log = TransactionLog::create(options)?;
         let transaction_log_entries = transaction_log.read_entries()?;
         let (open_transactions, max_txn_id) = Self::get_active_transactions(&transaction_log_entries);
+        let rolledback_transactions = Self::get_rolledback_transactions(&transaction_log_entries);
 
-        transaction_log.replace_entries(&open_transactions)?;
+        transaction_log.replace_entries(&utils::merge_vectors(&open_transactions, &rolledback_transactions))?;
 
         Ok(TransactionManager {
             active_transactions: SkipSet::from_iter(open_transactions.iter().map(|i| *i)),
             next_txn_id: AtomicU64::new((max_txn_id + 1) as u64),
+            rolledback_transactions: SkipMap::new(),
             log: transaction_log,
         })
     }
 
+    pub fn create_mock(options: Arc<LsmOptions>) -> TransactionManager {
+        TransactionManager{
+            log: TransactionLog::create_mock(options),
+            rolledback_transactions: SkipMap::new(),
+            active_transactions: SkipSet::new(),
+            next_txn_id: AtomicU64::new(0),
+        }
+    }
+
     pub fn commit(&self, transaction: Transaction) {
         self.active_transactions.remove(&transaction.txn_id);
+        self.log.add_entry(TransactionLogEntry::COMMIT(transaction.txn_id));
+    }
+
+    pub fn rollback(&self, transaction: Transaction) {
+        self.log.add_entry(TransactionLogEntry::ROLLBACK(transaction.txn_id));
+        self.rolledback_transactions.insert(transaction.txn_id, Arc::new(transaction));
+    }
+
+    pub fn check_key_not_rolledback(&self, key: &Key) -> Result<(), ()> {
+        match self.rolledback_transactions.get(&key.txn_id())
+            .map(|entry| entry.value().clone()) {
+
+            Some(rolledback_transaction) => {
+                rolledback_transaction.increase_n_not_compacted_writes();
+
+                if rolledback_transaction.all_writes_have_been_discarded() {
+                    self.rolledback_transactions.remove(&rolledback_transaction.txn_id);
+                }
+                Err(())
+            }
+            None => Ok(())
+        }
     }
 
     pub fn start_transaction(&self, isolation_level: IsolationLevel) -> Transaction {
@@ -47,6 +82,8 @@ impl TransactionManager {
         self.active_transactions.insert(txn_id);
 
         Transaction {
+            n_not_compacted_writes: AtomicUsize::new(0),
+            n_writes: AtomicUsize::new(0),
             active_transactions,
             isolation_level,
             txn_id
@@ -61,6 +98,19 @@ impl TransactionManager {
         }
 
         active_transactions
+    }
+
+    fn get_rolledback_transactions(entries: &Vec<TransactionLogEntry>) -> Vec<TxnId> {
+        let mut rolledback_transactions: Vec<TxnId> = Vec::new();
+
+        for entry in entries.iter() {
+            match entry {
+                TransactionLogEntry::ROLLBACK(txn_id) => rolledback_transactions.push(*txn_id),
+                _ => {  },
+            };
+        }
+
+        rolledback_transactions
     }
 
     fn get_active_transactions(entries: &Vec<TransactionLogEntry>) -> (Vec<TxnId>, TxnId) {

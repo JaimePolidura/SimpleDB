@@ -1,9 +1,9 @@
+use crate::lsm_error::LsmError::{CannotCreateTransactionLog, CannotDecodeTransactionLogEntry, CannotReadTransactionLogEntries, CannotResetTransacionLog, CannotWriteTransactionLogEntry};
 use std::cell::UnsafeCell;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use bytes::{Buf, BufMut};
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
-use crate::lsm_error::LsmError::{CannotCreateTransactionLog, CannotDecodeTransactionLogEntry, CannotReadTransactionLogEntries, CannotResetTransacionLog, CannotWriteTransactionLogEntry};
 use crate::lsm_options::{DurabilityLevel, LsmOptions};
 use crate::transactions::transaction::TxnId;
 use crate::utils::lsm_file::{LsmFile, LsmFileMode};
@@ -19,24 +19,35 @@ pub enum TransactionLogEntry {
 }
 
 pub struct TransactionLog {
-    log_file: UnsafeCell<LsmFile>, //As log file is append only. Concurrency is resolved by OS
+    //As log file is append only. Concurrency is resolved by OS
+    //Wrapped with RwLock Becase TransactionLog needs to be passed to threads. UnsafeCell doest implement Sync
+    log_file: RwLock<UnsafeCell<LsmFile>>,
     lsm_options: Arc<LsmOptions>
 }
 
 impl TransactionLog {
     pub fn create(lsm_options: Arc<LsmOptions>) -> Result<TransactionLog, LsmError> {
         Ok(TransactionLog {
-            log_file: UnsafeCell::new(LsmFile::open(Self::to_transaction_log_file_path(&lsm_options).as_path(),
-                LsmFileMode::AppendOnly).map_err(|e| CannotCreateTransactionLog(e))?),
+            log_file: RwLock::new(UnsafeCell::new(LsmFile::open(Self::to_transaction_log_file_path(&lsm_options).as_path(),
+                LsmFileMode::AppendOnly).map_err(|e| CannotCreateTransactionLog(e))?)),
             lsm_options
         })
     }
 
+    pub fn create_mock(lsm_options: Arc<LsmOptions>) -> TransactionLog {
+        TransactionLog {
+            log_file: RwLock::new(UnsafeCell::new(LsmFile::mock())),
+            lsm_options
+        }
+    }
+
     pub fn add_entry(&self, entry: TransactionLogEntry) -> Result<(), LsmError> {
+        let lock_result = self.log_file.read();
+        let file = lock_result.unwrap().get();
         //Multiple threads can write to the WAL concurrently, since the kernel already makes sure
         //that there won't be race conditions when multiple threads are writing to an append only file
         //https://nullprogram.com/blog/2016/08/03/
-        let log_file = unsafe { &mut *self.log_file.get() };
+        let log_file = unsafe { &mut *file };
 
         log_file.write(&self.encode(entry))
             .map_err(|e| CannotWriteTransactionLogEntry(e))?;
@@ -49,23 +60,27 @@ impl TransactionLog {
     }
 
     pub fn replace_entries(&self, new_active_txn_id: &Vec<TxnId>) -> Result<(), LsmError> {
-        let log_file = unsafe { &mut *self.log_file.get() };
+        let lock_result = self.log_file.read();
+        let file = lock_result.unwrap().get();
+        let log_file = unsafe { &mut *file };
         let new_entries_encoded: Vec<u8> = new_active_txn_id.iter()
-            .map(|txn_id| TransactionLogEntry::START(txn_id))
+            .map(|txn_id| TransactionLogEntry::START(*txn_id))
             .map(|entry| entry.encode())
             .flatten()
             .collect();
 
         //TODO Unsafe operation. If failure occurs in these instructions, we will lose data
         log_file.clear().map_err(|e| CannotResetTransacionLog(e))?;
-        log_file.write(new_entries_encoded).map_err(|e| CannotResetTransacionLog(e))?;
+        log_file.write(&new_entries_encoded).map_err(|e| CannotResetTransacionLog(e))?;
 
         Ok(())
     }
 
     pub fn read_entries(&self) -> Result<Vec<TransactionLogEntry>, LsmError> {
+        let lock_result = self.log_file.read();
+        let file = lock_result.unwrap().get();
         let mut entries: Vec<TransactionLogEntry> = Vec::new();
-        let log_file = unsafe { &*self.log_file.get() };
+        let log_file = unsafe { &*file };
         let entries_bytes = log_file.read_all()
             .map_err(|e| CannotReadTransactionLogEntries(e))?;
         let mut current_ptr = entries_bytes.as_slice();

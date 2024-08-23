@@ -5,6 +5,7 @@ use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
+use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_iterator::StorageIterator;
 
 #[derive(Clone, Copy)]
@@ -32,6 +33,7 @@ impl Default for SimpleLeveledCompactionOptions {
 
 pub(crate) fn start_simple_leveled_compaction(
     compaction_task: SimpleLeveledCompactionTask,
+    transaction_manager: &Arc<TransactionManager>,
     options: &Arc<LsmOptions>,
     sstables: &Arc<SSTables>
 ) -> Result<(), LsmError> {
@@ -53,19 +55,25 @@ pub(crate) fn start_simple_leveled_compaction(
     while iterator.has_next() {
         iterator.next();
 
-        new_sstable_builder.as_mut().unwrap().add_entry(
-            iterator.key().clone(),
-            Bytes::copy_from_slice(iterator.value())
-        );
+        let key = iterator.key().clone();
 
-        if new_sstable_builder.as_ref().unwrap().estimated_size_bytes() > options.sst_size_bytes {
-            let new_sstable_id: usize = sstables.flush_to_disk(new_sstable_builder.take().unwrap())?;
-            new_sstables_id.push(new_sstable_id);
+        match transaction_manager.check_key_not_rolledback(&key) {
+            Ok(_) => {
+                new_sstable_builder.as_mut().unwrap().add_entry(
+                    key, Bytes::copy_from_slice(iterator.value())
+                );
 
-            new_sstable_builder = Some(SSTableBuilder::new(
-                options.clone(), (level_to_compact + 1) as u32
-            ));
-        }
+                if new_sstable_builder.as_ref().unwrap().estimated_size_bytes() > options.sst_size_bytes {
+                    let new_sstable_id: usize = sstables.flush_to_disk(new_sstable_builder.take().unwrap())?;
+                    new_sstables_id.push(new_sstable_id);
+
+                    new_sstable_builder = Some(SSTableBuilder::new(
+                        options.clone(), (level_to_compact + 1) as u32
+                    ));
+                }
+            },
+            Err(_) => {}
+        };
     }
 
     if new_sstable_builder.as_ref().unwrap().n_entries() > 0 {

@@ -7,14 +7,17 @@ use std::time::Duration;
 use std::sync::Arc;
 use crate::lsm_error::LsmError;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent};
+use crate::transactions::transaction_manager::TransactionManager;
 
 pub struct Compaction {
+    transaction_manager: Arc<TransactionManager>,
     lsm_options: Arc<LsmOptions>,
     sstables: Arc<SSTables>,
     manifest: Arc<Manifest>,
 }
 
 struct CompactionThread {
+    transaction_manager: Arc<TransactionManager>,
     lsm_options: Arc<LsmOptions>,
     sstables: Arc<SSTables>,
     manifest: Arc<Manifest>
@@ -28,11 +31,13 @@ pub enum CompactionTask {
 
 impl Compaction {
     pub fn new(
+        transaction_manager: Arc<TransactionManager>,
         lsm_options: Arc<LsmOptions>,
         sstables: Arc<SSTables>,
         manifest: Arc<Manifest>,
     ) -> Arc<Compaction> {
         Arc::new(Compaction {
+            transaction_manager: transaction_manager.clone(),
             lsm_options: lsm_options.clone(),
             sstables: sstables.clone(),
             manifest: manifest.clone(),
@@ -42,7 +47,8 @@ impl Compaction {
     pub fn start_compaction_thread(&self) {
         println!("Starting compaction thread");
 
-        let compaction_thread = CompactionThread{
+        let compaction_thread = CompactionThread {
+            transaction_manager: self.transaction_manager.clone(),
             lsm_options: self.lsm_options.clone(),
             sstables: self.sstables.clone(),
             manifest: self.manifest.clone(),
@@ -56,10 +62,10 @@ impl Compaction {
     pub fn compact(&self, compaction_task: CompactionTask) -> Result<(), LsmError> {
         match compaction_task {
             CompactionTask::SimpleLeveled(simpleLeveledTask) => start_simple_leveled_compaction(
-                simpleLeveledTask, &self.lsm_options, &self.sstables
+                simpleLeveledTask, &self.transaction_manager, &self.lsm_options, &self.sstables
             ),
             CompactionTask::Tiered(tieredTask) => start_tiered_compaction(
-                tieredTask, &self.lsm_options, &self.sstables
+                tieredTask, &self.transaction_manager, &self.lsm_options, &self.sstables
             ),
         }
     }
@@ -109,10 +115,10 @@ impl CompactionThread {
     fn compact(&self, compaction_task: CompactionTask) -> Result<(), LsmError> {
         match compaction_task {
             CompactionTask::SimpleLeveled(simpleLeveledTask) => start_simple_leveled_compaction(
-                simpleLeveledTask, &self.lsm_options, &self.sstables
+                simpleLeveledTask, &self.transaction_manager, &self.lsm_options, &self.sstables
             ),
             CompactionTask::Tiered(tieredTask) => start_tiered_compaction(
-                tieredTask, &self.lsm_options, &self.sstables
+                tieredTask, &self.transaction_manager, &self.lsm_options, &self.sstables
             ),
         }
     }

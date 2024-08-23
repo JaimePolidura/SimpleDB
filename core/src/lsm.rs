@@ -15,7 +15,7 @@ use std::sync::Arc;
 use bytes::Bytes;
 
 pub struct Lsm {
-    transacion_manager: Arc<TransactionManager>,
+    transaction_manager: Arc<TransactionManager>,
     compaction: Arc<Compaction>,
     sstables: Arc<SSTables>,
     memtables: Memtables,
@@ -37,13 +37,14 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Result<Lsm, LsmError> {
     let manifest = Arc::new(Manifest::new(lsm_options.clone())?);
     let sstables = Arc::new(SSTables::open(lsm_options.clone(), manifest.clone())?);
     let memtables = Memtables::new(lsm_options.clone())?;
-    let transaction_manager = TransactionManager::create_recover_from_log(lsm_options.clone())?;
+    let transaction_manager = Arc::new(TransactionManager::create_recover_from_log(lsm_options.clone())?);
 
     let mut lsm = Lsm {
-        compaction: Compaction::new(lsm_options.clone(), sstables.clone(), manifest.clone()),
-        transacion_manager: Arc::new(transaction_manager), //TODO
+        compaction: Compaction::new(transaction_manager.clone(), lsm_options.clone(), sstables.clone(),
+                                    manifest.clone()),
         options: lsm_options.clone(),
         sstables: sstables.clone(),
+        transaction_manager,
         memtables,
         manifest,
     };
@@ -59,7 +60,7 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Result<Lsm, LsmError> {
 
 impl Lsm {
     pub fn scan_all(&self) -> LsmIterator {
-        let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
+        let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         self.scan_all_with_transaction(&transaction)
     }
 
@@ -77,7 +78,7 @@ impl Lsm {
         &self,
         key: &str
     ) -> Option<bytes::Bytes> {
-        let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
+        let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         self.get_with_transaction(&transaction, key)
     }
 
@@ -97,7 +98,7 @@ impl Lsm {
         key: &str,
         value: &[u8]
     ) -> Result<(), LsmError> {
-        let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
+        let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         self.set_with_transaction(&transaction, key, value)
     }
 
@@ -107,6 +108,8 @@ impl Lsm {
         key: &str,
         value: &[u8],
     ) -> Result<(), LsmError> {
+        transaction.increase_nwrites();
+
         match self.memtables.set(&key, value, transaction) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(())
@@ -117,7 +120,7 @@ impl Lsm {
         &self,
         key: &str
     ) -> Result<(), LsmError> {
-        let transaction = self.transacion_manager.start_transaction(IsolationLevel::ReadUncommited);
+        let transaction = self.transaction_manager.start_transaction(IsolationLevel::ReadUncommited);
         self.delete_with_transaction(&transaction, key)
     }
 
@@ -126,6 +129,7 @@ impl Lsm {
         transaction: &Transaction,
         key: &str,
     ) -> Result<(), LsmError> {
+        transaction.increase_nwrites();
         match self.memtables.delete(&key, transaction) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(()),
@@ -133,8 +137,9 @@ impl Lsm {
     }
 
     pub fn write_batch(&self, batch: &[WriteBatch]) -> Result<(), LsmError> {
-        let transaction = self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation);
+        let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         for write_batch_record in batch {
+            transaction.increase_nwrites();
             match write_batch_record {
                 WriteBatch::Put(key, value) => self.set_with_transaction(&transaction, key.as_str(), value)?,
                 WriteBatch::Delete(key) => self.delete_with_transaction(&transaction, key.as_str())?
@@ -144,16 +149,24 @@ impl Lsm {
         Ok(())
     }
 
+    pub fn start_transaction_with_isolation(&self, isolation_level: IsolationLevel) -> Transaction {
+        self.transaction_manager.start_transaction(isolation_level)
+    }
+
     pub fn start_transaction(&self) -> Transaction {
-        self.transacion_manager.start_transaction(IsolationLevel::SnapshotIsolation)
+        self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation)
     }
 
     pub fn commit_transaction(&self, transaction: Transaction) {
-        self.transacion_manager.commit(transaction);
+        self.transaction_manager.commit(transaction);
+    }
+
+    pub fn rollback_transaction(&self, transaction: Transaction) {
+        self.transaction_manager.rollback(transaction);
     }
 
     fn flush_memtable(&self, memtable: Arc<MemTable>) -> Result<(), LsmError> {
-        let sstable_builder_ready: SSTableBuilder = MemTable::to_sst(self.options.clone(), memtable.clone());
+        let sstable_builder_ready: SSTableBuilder = memtable.to_sst(&self.transaction_manager);
         let sstable_id = self.sstables.flush_memtable_to_disk(sstable_builder_ready)?;
         memtable.set_flushed();
         println!("Flushed memtable with ID: {} to SSTable with ID: {}", memtable.get_id(), sstable_id);

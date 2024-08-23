@@ -5,6 +5,7 @@ use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
+use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_iterator::StorageIterator;
 
 #[derive(Clone, Copy)]
@@ -32,19 +33,21 @@ impl Default for TieredCompactionOptions {
 
 pub(crate) fn start_tiered_compaction(
     task: TieredCompactionTask,
+    transaction_manager: &Arc<TransactionManager>,
     options: &Arc<LsmOptions>,
     sstables: &Arc<SSTables>
 ) -> Result<(), LsmError> {
     match task {
-        TieredCompactionTask::AmplificationRatioTrigger => do_tiered_compaction(options, sstables, sstables.get_n_levels() - 1),
-        TieredCompactionTask::SizeRatioTrigger(level_id) => do_tiered_compaction(options, sstables, level_id),
+        TieredCompactionTask::AmplificationRatioTrigger => do_tiered_compaction(options, sstables, sstables.get_n_levels() - 1, transaction_manager),
+        TieredCompactionTask::SizeRatioTrigger(level_id) => do_tiered_compaction(options, sstables, level_id, transaction_manager),
     }
 }
 
 fn do_tiered_compaction(
     options: &Arc<LsmOptions>,
     sstables: &Arc<SSTables>,
-    max_level_id_to_compact: usize //Well compact from level 0 to max_level_id_to_compact (inclusive, inclusive)
+    max_level_id_to_compact: usize, //Compact from level 0 to max_level_id_to_compact (inclusive, inclusive)
+    transaction_manager: &Arc<TransactionManager>
 ) -> Result<(), LsmError> {
     let new_level = max_level_id_to_compact + 1;
     let levels_id_to_compact: Vec<usize> = (0..max_level_id_to_compact).into_iter().collect();
@@ -56,15 +59,20 @@ fn do_tiered_compaction(
     while iterator.has_next() {
         iterator.next();
 
-        new_sstable_builder.as_mut().unwrap().add_entry(
-            iterator.key().clone(),
-            Bytes::copy_from_slice(iterator.value())
-        );
+        let key = iterator.key().clone();
+        match transaction_manager.check_key_not_rolledback(&key) {
+            Ok(_) => {
+                new_sstable_builder.as_mut().unwrap().add_entry(
+                    key, Bytes::copy_from_slice(iterator.value())
+                );
 
-        if new_sstable_builder.as_ref().unwrap().estimated_size_bytes() > options.sst_size_bytes {
-            sstables.flush_to_disk(new_sstable_builder.take().unwrap())?;
+                if new_sstable_builder.as_ref().unwrap().estimated_size_bytes() > options.sst_size_bytes {
+                    sstables.flush_to_disk(new_sstable_builder.take().unwrap())?;
 
-            new_sstable_builder = Some(SSTableBuilder::new(options.clone(), new_level as u32));
+                    new_sstable_builder = Some(SSTableBuilder::new(options.clone(), new_level as u32));
+                }
+            },
+            Err(_) => {}
         }
     }
 
