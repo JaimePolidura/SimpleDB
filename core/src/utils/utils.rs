@@ -119,12 +119,6 @@ where
     }
 }
 
-pub fn hashmap_values_to_vec<K, V>(map: HashMap<K, V>) -> Vec<V> {
-
-    for key in &map.keys() {
-    }
-}
-
 pub fn merge_vectors<T>(a : &Vec<T>, b: &Vec<T>) -> Vec<T> {
     unimplemented!();
 }

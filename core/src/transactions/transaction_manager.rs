@@ -6,7 +6,6 @@ use std::sync::atomic::Ordering::Relaxed;
 use crate::lsm_options::LsmOptions;
 use crate::lsm_error::LsmError;
 use std::collections::{HashMap, HashSet};
-use crate::utils::utils;
 use std::sync::Arc;
 use crate::key::Key;
 use std::cmp::max;
@@ -31,7 +30,7 @@ impl TransactionManager {
         let (open_transactions, max_txn_id) = Self::get_active_transactions(&transaction_log_entries);
         let rolledback_transactions = Self::get_pending_transactions_to_rollback(&transaction_log_entries);
 
-        transaction_log.replace_entries(&utils::merge_vectors(&open_transactions, &rolledback_transactions))?;
+        //transaction_log.replace_entries(&utils::merge_vectors(&open_transactions, &rolledback_transactions))?;
 
         Ok(TransactionManager {
             active_transactions: SkipSet::from_iter(open_transactions.iter().map(|i| *i)),
@@ -106,12 +105,12 @@ impl TransactionManager {
         for entry in entries.iter() {
             match entry {
                 TransactionLogEntry::StartRollback(txn_id, n_writes) => {
-                    rolledback_transactions.insert(txn_id, Transaction{
+                    rolledback_transactions.insert(*txn_id, Transaction{
                         isolation_level: IsolationLevel::SnapshotIsolation, //These two fields doest matter
                         active_transactions: HashSet::new(),
                         n_writes_rolled_back: AtomicUsize::new(0),
-                        n_writes: AtomicUsize::new(n_writes),
-                        txn_id
+                        n_writes: AtomicUsize::new(*n_writes),
+                        txn_id: *txn_id
                     });
                 },
                 TransactionLogEntry::RolledbackWrite(txn_id) => {
@@ -135,11 +134,11 @@ impl TransactionManager {
         for entry in entries.iter() {
             max_txn_id = max(max_txn_id as usize, entry.txn_id());
 
-            match entry {
-                TransactionLogEntry::Start(txn_id) => active_transactions.insert(*txn_id),
-                TransactionLogEntry::Commit(txn_id) => active_transactions.remove(txn_id),
-                TransactionLogEntry::StartRollback(txn_id, _) => active_transactions.remove(txn_id),
-                TransactionLogEntry::RolledbackWrite(txn_id) => {}
+            match *entry {
+                TransactionLogEntry::Start(txn_id) => active_transactions.insert(txn_id),
+                TransactionLogEntry::Commit(txn_id) => active_transactions.remove(&txn_id),
+                TransactionLogEntry::StartRollback(txn_id, _) => active_transactions.remove(&txn_id),
+                TransactionLogEntry::RolledbackWrite(_) => true
             };
         }
 

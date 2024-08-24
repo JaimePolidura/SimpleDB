@@ -39,7 +39,7 @@ pub struct TransactionLog {
 impl TransactionLog {
     pub fn create(lsm_options: Arc<LsmOptions>) -> Result<TransactionLog, LsmError> {
         Ok(TransactionLog {
-            log_file: LsmFileWrapper {file: UnsafeCell::new(LsmFile::open(Self::to_transaction_log_file_path(&lsm_options).as_path(),
+            log_file: LsmFileWrapper {file: UnsafeCell::new(LsmFile::open(to_transaction_log_file_path(&lsm_options).as_path(),
                                                                           LsmFileMode::AppendOnly).map_err(|e| CannotCreateTransactionLog(e))?) },
             lsm_options
         })
@@ -93,7 +93,7 @@ impl TransactionLog {
 
         while current_ptr.has_remaining() {
             let (decoded_entry, decoded_size) = TransactionLogEntry::decode(
-                current_ptr,
+                &mut current_ptr,
                 current_offset,
                 entries.len(),
                 &self.lsm_options
@@ -105,17 +105,11 @@ impl TransactionLog {
 
         Ok(entries)
     }
-
-    fn to_transaction_log_file_path(lsm_options: &Arc<LsmOptions>) -> PathBuf {
-        let mut path = PathBuf::from(&lsm_options.base_path);
-        path.push("transaction-log");
-        path
-    }
 }
 
 impl TransactionLogEntry {
     pub fn decode(
-        current_ptr: &mut [u8],
+        current_ptr: &mut &[u8],
         current_offset: usize,
         n_entry_to_decode: usize,
         lsm_options: &Arc<LsmOptions>,
@@ -123,7 +117,7 @@ impl TransactionLogEntry {
         let expected_crc = current_ptr.get_u32_le();
         let encoded_size = Self::encoded_size(current_ptr[0])
             .map_err(|_| CannotDecodeTransactionLogEntry(DecodeError {
-                path: Self::to_transaction_log_file_path(lsm_options),
+                path: to_transaction_log_file_path(lsm_options),
                 offset: current_offset,
                 index: n_entry_to_decode,
                 error_type: DecodeErrorType::UnknownFlag(current_ptr[0] as usize)
@@ -132,7 +126,7 @@ impl TransactionLogEntry {
 
         if actual_crc != expected_crc {
             return Err(CannotDecodeTransactionLogEntry(DecodeError{
-                path: Self::to_transaction_log_file_path(lsm_options),
+                path: to_transaction_log_file_path(lsm_options),
                 offset: current_offset,
                 index: n_entry_to_decode,
                 error_type: DecodeErrorType::CorruptedCrc(expected_crc, actual_crc)
@@ -146,12 +140,12 @@ impl TransactionLogEntry {
             ROLLEDBACK_WRITE_BINARY_CODE => TransactionLogEntry::RolledbackWrite(txn_id),
             START_ROLLBACK_BINARY_CODE => {
                 let n_writes = current_ptr.get_u64_le();
-                TransactionLogEntry::StartRollback(txn_id, n_writes)
+                TransactionLogEntry::StartRollback(txn_id, n_writes as usize)
             },
             COMMIT_BINARY_CODE => TransactionLogEntry::Commit(txn_id),
             START_BINARY_CODE => TransactionLogEntry::Start(txn_id),
             _ => return Err(CannotDecodeTransactionLogEntry(DecodeError {
-                path: Self::to_transaction_log_file_path(lsm_options),
+                path: to_transaction_log_file_path(lsm_options),
                 offset: current_offset,
                 index: n_entry_to_decode,
                 error_type: DecodeErrorType::UnknownFlag(current_ptr[0] as usize)
@@ -163,10 +157,10 @@ impl TransactionLogEntry {
 
     pub fn encoded_size(binary_code: u8) -> Result<usize, ()> {
         match binary_code {
-            ROLLEDBACK_WRITE_BINARY_CODE => 1 + 8,
-            START_ROLLBACK_BINARY_CODE => 1 + 8 + 8,
-            COMMIT_BINARY_CODE => 1 + 8,
-            START_BINARY_CODE => 1 + 8,
+            ROLLEDBACK_WRITE_BINARY_CODE => Ok(1 + 8),
+            START_ROLLBACK_BINARY_CODE => Ok(1 + 8 + 8),
+            COMMIT_BINARY_CODE => Ok(1 + 8),
+            START_BINARY_CODE => Ok(1 + 8),
             _ => Err(())
         }
     }
@@ -179,7 +173,7 @@ impl TransactionLogEntry {
                 entry_encoded.put_u64_le(txn_id as u64);
                 entry_encoded.put_u64_le(n_writes as u64);
             },
-            _ => entry_encoded.put_u64_le(self.txn_id()),
+            _ => entry_encoded.put_u64_le(self.txn_id() as u64),
         }
 
         let crc_entry = crc32fast::hash(&entry_encoded);
@@ -207,4 +201,10 @@ impl TransactionLogEntry {
             TransactionLogEntry::Start(_txn_id) => START_BINARY_CODE,
         }
     }
+}
+
+fn to_transaction_log_file_path(lsm_options: &Arc<LsmOptions>) -> PathBuf {
+    let mut path = PathBuf::from(&lsm_options.base_path);
+    path.push("transaction-log");
+    path
 }
