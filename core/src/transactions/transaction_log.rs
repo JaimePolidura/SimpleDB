@@ -1,16 +1,16 @@
 use crate::lsm_error::LsmError::{CannotCreateTransactionLog, CannotDecodeTransactionLogEntry, CannotReadTransactionLogEntries, CannotResetTransacionLog, CannotWriteTransactionLogEntry};
-use std::cell::UnsafeCell;
-use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
-use bytes::{Buf, BufMut};
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
 use crate::lsm_options::{DurabilityLevel, LsmOptions};
-use crate::transactions::transaction::TxnId;
 use crate::utils::lsm_file::{LsmFile, LsmFileMode};
+use crate::transactions::transaction::TxnId;
+use std::sync::{Arc, Mutex, RwLock};
+use std::cell::UnsafeCell;
+use bytes::{Buf, BufMut};
+use std::path::PathBuf;
 
-const START_BINARY_CODE: u8 = 0x01;
-const COMMIT_BINARY_CODE: u8 = 0x02;
 const ROLLBACK_BINARY_CODE: u8 = 0x03;
+const COMMIT_BINARY_CODE: u8 = 0x02;
+const START_BINARY_CODE: u8 = 0x01;
 
 pub enum TransactionLogEntry {
     START(TxnId), //1
@@ -18,36 +18,43 @@ pub enum TransactionLogEntry {
     ROLLBACK(TxnId) //3
 }
 
+//UnsafeCell does not implement Sync, so it cannot be passed to threads
+//We need to wrap it in a struct that implements Sync
+pub struct LsmFileWrapper {
+    file: UnsafeCell<LsmFile>,
+}
+
+unsafe impl Send for LsmFileWrapper {}
+unsafe impl Sync for LsmFileWrapper {}
+
 pub struct TransactionLog {
     //As log file is append only. Concurrency is resolved by OS
     //Wrapped with RwLock Becase TransactionLog needs to be passed to threads. UnsafeCell doest implement Sync
-    log_file: RwLock<UnsafeCell<LsmFile>>,
+    log_file: LsmFileWrapper,
     lsm_options: Arc<LsmOptions>
 }
 
 impl TransactionLog {
     pub fn create(lsm_options: Arc<LsmOptions>) -> Result<TransactionLog, LsmError> {
         Ok(TransactionLog {
-            log_file: RwLock::new(UnsafeCell::new(LsmFile::open(Self::to_transaction_log_file_path(&lsm_options).as_path(),
-                LsmFileMode::AppendOnly).map_err(|e| CannotCreateTransactionLog(e))?)),
+            log_file: LsmFileWrapper {file: UnsafeCell::new(LsmFile::open(Self::to_transaction_log_file_path(&lsm_options).as_path(),
+                                                                          LsmFileMode::AppendOnly).map_err(|e| CannotCreateTransactionLog(e))?) },
             lsm_options
         })
     }
 
     pub fn create_mock(lsm_options: Arc<LsmOptions>) -> TransactionLog {
         TransactionLog {
-            log_file: RwLock::new(UnsafeCell::new(LsmFile::mock())),
+            log_file: LsmFileWrapper {file: UnsafeCell::new(LsmFile::mock())},
             lsm_options
         }
     }
 
     pub fn add_entry(&self, entry: TransactionLogEntry) -> Result<(), LsmError> {
-        let lock_result = self.log_file.read();
-        let file = lock_result.unwrap().get();
         //Multiple threads can write to the WAL concurrently, since the kernel already makes sure
         //that there won't be race conditions when multiple threads are writing to an append only file
         //https://nullprogram.com/blog/2016/08/03/
-        let log_file = unsafe { &mut *file };
+        let log_file = unsafe { &mut *self.log_file.file.get() };
 
         log_file.write(&self.encode(entry))
             .map_err(|e| CannotWriteTransactionLogEntry(e))?;
@@ -60,9 +67,7 @@ impl TransactionLog {
     }
 
     pub fn replace_entries(&self, new_active_txn_id: &Vec<TxnId>) -> Result<(), LsmError> {
-        let lock_result = self.log_file.read();
-        let file = lock_result.unwrap().get();
-        let log_file = unsafe { &mut *file };
+        let log_file = unsafe { &mut *self.log_file.file.get() };
         let new_entries_encoded: Vec<u8> = new_active_txn_id.iter()
             .map(|txn_id| TransactionLogEntry::START(*txn_id))
             .map(|entry| entry.encode())
@@ -77,10 +82,8 @@ impl TransactionLog {
     }
 
     pub fn read_entries(&self) -> Result<Vec<TransactionLogEntry>, LsmError> {
-        let lock_result = self.log_file.read();
-        let file = lock_result.unwrap().get();
         let mut entries: Vec<TransactionLogEntry> = Vec::new();
-        let log_file = unsafe { &*file };
+        let log_file = unsafe { &*self.log_file.file.get() };
         let entries_bytes = log_file.read_all()
             .map_err(|e| CannotReadTransactionLogEntries(e))?;
         let mut current_ptr = entries_bytes.as_slice();

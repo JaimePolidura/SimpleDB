@@ -8,6 +8,7 @@ use crate::lsm_error::LsmError;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::cmp::max;
+use std::ptr::addr_of;
 use crate::key::Key;
 use crate::utils::utils;
 
