@@ -1,21 +1,23 @@
 use crate::lsm_error::LsmError::{CannotCreateTransactionLog, CannotDecodeTransactionLogEntry, CannotReadTransactionLogEntries, CannotResetTransacionLog, CannotWriteTransactionLogEntry};
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
 use crate::lsm_options::{DurabilityLevel, LsmOptions};
-use crate::utils::lsm_file::{LsmFile, LsmFileMode};
 use crate::transactions::transaction::TxnId;
-use std::sync::{Arc, Mutex, RwLock};
-use std::cell::UnsafeCell;
+use crate::utils::lsm_file::{LsmFile, LsmFileMode};
 use bytes::{Buf, BufMut};
+use std::cell::UnsafeCell;
 use std::path::PathBuf;
+use std::sync::Arc;
 
-const ROLLBACK_BINARY_CODE: u8 = 0x03;
+const ROLLEDBACK_WRITE_BINARY_CODE: u8 = 0x04;
+const START_ROLLBACK_BINARY_CODE: u8 = 0x03;
 const COMMIT_BINARY_CODE: u8 = 0x02;
 const START_BINARY_CODE: u8 = 0x01;
 
 pub enum TransactionLogEntry {
-    START(TxnId), //1
-    COMMIT(TxnId), //2
-    ROLLBACK(TxnId) //3
+    Start(TxnId),
+    Commit(TxnId),
+    StartRollback(TxnId, usize), //Nº Total writes
+    RolledbackWrite(TxnId),
 }
 
 //UnsafeCell does not implement Sync, so it cannot be passed to threads
@@ -56,7 +58,7 @@ impl TransactionLog {
         //https://nullprogram.com/blog/2016/08/03/
         let log_file = unsafe { &mut *self.log_file.file.get() };
 
-        log_file.write(&self.encode(entry))
+        log_file.write(&entry.encode())
             .map_err(|e| CannotWriteTransactionLogEntry(e))?;
 
         if matches!(self.lsm_options.durability_level, DurabilityLevel::Strong) {
@@ -69,7 +71,7 @@ impl TransactionLog {
     pub fn replace_entries(&self, new_active_txn_id: &Vec<TxnId>) -> Result<(), LsmError> {
         let log_file = unsafe { &mut *self.log_file.file.get() };
         let new_entries_encoded: Vec<u8> = new_active_txn_id.iter()
-            .map(|txn_id| TransactionLogEntry::START(*txn_id))
+            .map(|txn_id| TransactionLogEntry::Start(*txn_id))
             .map(|entry| entry.encode())
             .flatten()
             .collect();
@@ -90,47 +92,18 @@ impl TransactionLog {
         let mut current_offset = 0;
 
         while current_ptr.has_remaining() {
-            let entry_start_offset = current_offset;
-            let expected_crc = current_ptr.get_u32_le();
-            let binary_code = current_ptr.get_u8();
-            let txn_id = current_ptr.get_u64_le() as TxnId;
-            current_offset = current_offset + 13;
+            let (decoded_entry, decoded_size) = TransactionLogEntry::decode(
+                current_ptr,
+                current_offset,
+                entries.len(),
+                &self.lsm_options
+            )?;
 
-            let actual_crc = crc32fast::hash(&entries_bytes[entry_start_offset+4..entry_start_offset+13]);
-
-            if actual_crc != expected_crc {
-                return Err(CannotDecodeTransactionLogEntry(DecodeError{
-                    path: Self::to_transaction_log_file_path(&self.lsm_options),
-                    offset: current_offset,
-                    index: entries.len(),
-                    error_type: DecodeErrorType::CorruptedCrc(expected_crc, actual_crc)
-                }));
-            }
-
-            match binary_code {
-                ROLLBACK_BINARY_CODE => entries.push(TransactionLogEntry::ROLLBACK(txn_id)),
-                COMMIT_BINARY_CODE => entries.push(TransactionLogEntry::COMMIT(txn_id)),
-                START_BINARY_CODE => entries.push(TransactionLogEntry::START(txn_id)),
-                _ => return Err(CannotDecodeTransactionLogEntry(DecodeError {
-                    path: Self::to_transaction_log_file_path(&self.lsm_options),
-                    offset: current_offset,
-                    index: entries.len(),
-                    error_type: DecodeErrorType::UnknownFlag(binary_code as usize)
-                }))
-            };
+            current_offset = current_offset + decoded_size;
+            entries.push(decoded_entry);
         }
 
         Ok(entries)
-    }
-
-    fn encode(&self, entry: TransactionLogEntry) -> Vec<u8> {
-        let entry_encoded = entry.encode();
-        let crc_entry = crc32fast::hash(&entry_encoded);
-        let mut encoded_to_return: Vec<u8> = Vec::new();
-        encoded_to_return.put_u32_le(crc_entry);
-        encoded_to_return.extend(entry_encoded);
-
-        encoded_to_return
     }
 
     fn to_transaction_log_file_path(lsm_options: &Arc<LsmOptions>) -> PathBuf {
@@ -141,31 +114,97 @@ impl TransactionLog {
 }
 
 impl TransactionLogEntry {
-    pub fn encode(&self) -> Vec<u8> {
-        let mut entry_encoded = Vec::new();
-        match *self {
-            TransactionLogEntry::ROLLBACK(txn_id) => {
-                entry_encoded.put_u8(ROLLBACK_BINARY_CODE);
-                entry_encoded.put_u64_le(txn_id as u64);
-            },
-            TransactionLogEntry::COMMIT(txn_id) => {
-                entry_encoded.put_u8(COMMIT_BINARY_CODE);
-                entry_encoded.put_u64_le(txn_id as u64);
-            } ,
-            TransactionLogEntry::START(txn_id) => {
-                entry_encoded.put_u8(START_BINARY_CODE);
-                entry_encoded.put_u64_le(txn_id as u64);
-            },
+    pub fn decode(
+        current_ptr: &mut [u8],
+        current_offset: usize,
+        n_entry_to_decode: usize,
+        lsm_options: &Arc<LsmOptions>,
+    ) -> Result<(TransactionLogEntry, usize), LsmError> {
+        let expected_crc = current_ptr.get_u32_le();
+        let encoded_size = Self::encoded_size(current_ptr[0])
+            .map_err(|_| CannotDecodeTransactionLogEntry(DecodeError {
+                path: Self::to_transaction_log_file_path(lsm_options),
+                offset: current_offset,
+                index: n_entry_to_decode,
+                error_type: DecodeErrorType::UnknownFlag(current_ptr[0] as usize)
+            }))?;
+        let actual_crc = crc32fast::hash(&current_ptr[0..encoded_size]);
+
+        if actual_crc != expected_crc {
+            return Err(CannotDecodeTransactionLogEntry(DecodeError{
+                path: Self::to_transaction_log_file_path(lsm_options),
+                offset: current_offset,
+                index: n_entry_to_decode,
+                error_type: DecodeErrorType::CorruptedCrc(expected_crc, actual_crc)
+            }));
         }
 
-        entry_encoded
+        let binary_code = current_ptr.get_u8();
+        let txn_id = current_ptr.get_u64_le() as TxnId;
+
+        let decoded_entry = match binary_code {
+            ROLLEDBACK_WRITE_BINARY_CODE => TransactionLogEntry::RolledbackWrite(txn_id),
+            START_ROLLBACK_BINARY_CODE => {
+                let n_writes = current_ptr.get_u64_le();
+                TransactionLogEntry::StartRollback(txn_id, n_writes)
+            },
+            COMMIT_BINARY_CODE => TransactionLogEntry::Commit(txn_id),
+            START_BINARY_CODE => TransactionLogEntry::Start(txn_id),
+            _ => return Err(CannotDecodeTransactionLogEntry(DecodeError {
+                path: Self::to_transaction_log_file_path(lsm_options),
+                offset: current_offset,
+                index: n_entry_to_decode,
+                error_type: DecodeErrorType::UnknownFlag(current_ptr[0] as usize)
+            }))
+        };
+
+        Ok((decoded_entry, encoded_size))
+    }
+
+    pub fn encoded_size(binary_code: u8) -> Result<usize, ()> {
+        match binary_code {
+            ROLLEDBACK_WRITE_BINARY_CODE => 1 + 8,
+            START_ROLLBACK_BINARY_CODE => 1 + 8 + 8,
+            COMMIT_BINARY_CODE => 1 + 8,
+            START_BINARY_CODE => 1 + 8,
+            _ => Err(())
+        }
+    }
+
+    pub fn encode(&self) -> Vec<u8> {
+        let mut entry_encoded = Vec::new();
+        entry_encoded.put_u8(self.get_binary_code());
+        match *self {
+            TransactionLogEntry::StartRollback(txn_id, n_writes) => {
+                entry_encoded.put_u64_le(txn_id as u64);
+                entry_encoded.put_u64_le(n_writes as u64);
+            },
+            _ => entry_encoded.put_u64_le(self.txn_id()),
+        }
+
+        let crc_entry = crc32fast::hash(&entry_encoded);
+        let mut encoded_to_return: Vec<u8> = Vec::new();
+        encoded_to_return.put_u32_le(crc_entry);
+        encoded_to_return.extend(entry_encoded);
+
+        encoded_to_return
     }
 
     pub fn txn_id(&self) -> TxnId {
         match *self {
-            TransactionLogEntry::ROLLBACK(txn_id) => txn_id,
-            TransactionLogEntry::COMMIT(txn_id) => txn_id,
-            TransactionLogEntry::START(txn_id) => txn_id
+            TransactionLogEntry::StartRollback(txn_id, _) => txn_id,
+            TransactionLogEntry::Commit(txn_id) => txn_id,
+            TransactionLogEntry::Start(txn_id) => txn_id,
+            TransactionLogEntry::RolledbackWrite(txn_id) => txn_id
+        }
+    }
+
+    pub fn get_binary_code(&self) -> u8 {
+        match *self {
+            TransactionLogEntry::RolledbackWrite(_) => ROLLEDBACK_WRITE_BINARY_CODE,
+            TransactionLogEntry::StartRollback(_, _) => START_ROLLBACK_BINARY_CODE,
+            TransactionLogEntry::Commit(_txn_id) => COMMIT_BINARY_CODE,
+            TransactionLogEntry::Start(_txn_id) => START_BINARY_CODE,
         }
     }
 }

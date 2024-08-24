@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs::DirEntry;
 
 pub fn u16_vec_to_u8_vec(u16_vec: &Vec<u16>) -> Vec<u8> {
@@ -115,6 +116,12 @@ where
         for i in 0..index - vec.len() + 1 {
             vec.push(value);
         }
+    }
+}
+
+pub fn hashmap_values_to_vec<K, V>(map: HashMap<K, V>) -> Vec<V> {
+
+    for key in &map.keys() {
     }
 }
 
