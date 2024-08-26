@@ -68,10 +68,9 @@ impl TransactionLog {
         Ok(())
     }
 
-    pub fn replace_entries(&self, new_active_txn_id: &Vec<TxnId>) -> Result<(), LsmError> {
+    pub fn replace_entries(&self, new_active_txn_id: &Vec<TransactionLogEntry>) -> Result<(), LsmError> {
         let log_file = unsafe { &mut *self.log_file.file.get() };
         let new_entries_encoded: Vec<u8> = new_active_txn_id.iter()
-            .map(|txn_id| TransactionLogEntry::Start(*txn_id))
             .map(|entry| entry.encode())
             .flatten()
             .collect();

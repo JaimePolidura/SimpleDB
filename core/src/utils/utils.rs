@@ -118,7 +118,3 @@ where
         }
     }
 }
-
-pub fn merge_vectors<T>(a : &Vec<T>, b: &Vec<T>) -> Vec<T> {
-    unimplemented!();
-}

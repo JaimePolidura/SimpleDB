@@ -1,14 +1,14 @@
-use crate::transactions::transaction_log::{TransactionLog, TransactionLogEntry};
-use crate::transactions::transaction::{Transaction, TxnId};
-use std::sync::atomic::{AtomicU64, AtomicUsize};
-use crossbeam_skiplist::{SkipMap, SkipSet};
-use std::sync::atomic::Ordering::Relaxed;
-use crate::lsm_options::LsmOptions;
-use crate::lsm_error::LsmError;
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use crate::key::Key;
+use crate::lsm_error::LsmError;
+use crate::lsm_options::LsmOptions;
+use crate::transactions::transaction::{Transaction, TxnId};
+use crate::transactions::transaction_log::{TransactionLog, TransactionLogEntry};
+use crossbeam_skiplist::{SkipMap, SkipSet};
 use std::cmp::max;
+use std::collections::HashSet;
+use std::sync::atomic::Ordering::Relaxed;
+use std::sync::atomic::{AtomicU64, AtomicUsize};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub enum IsolationLevel {
@@ -29,6 +29,8 @@ impl TransactionManager {
         let transaction_log_entries = log.read_entries()?;
         let (active_transactions, max_txn_id) = Self::get_active_transactions(&transaction_log_entries);
         let rolledback_transactions = Self::get_pending_transactions_to_rollback(&transaction_log_entries);
+
+        log.replace_entries(&Self::create_new_transaction_log_entries(&rolledback_transactions, &active_transactions))?;
 
         Ok(TransactionManager {
             next_txn_id: AtomicU64::new((max_txn_id + 1) as u64),
@@ -62,6 +64,7 @@ impl TransactionManager {
             .map(|entry| entry.value().clone()) {
 
             Some(rolledback_transaction) => {
+                self.log.add_entry(TransactionLogEntry::RolledbackWrite(rolledback_transaction.txn_id));
                 rolledback_transaction.increase_n_writes_rolledback();
 
                 if rolledback_transaction.all_writes_have_been_rolledback() {
@@ -142,5 +145,28 @@ impl TransactionManager {
         }
 
         (active_transactions, max_txn_id)
+    }
+
+
+    fn create_new_transaction_log_entries(
+        rolledback_transactions: &SkipMap<TxnId, Arc<Transaction>>,
+        active_transactions: &SkipSet<TxnId>,
+    ) -> Vec<TransactionLogEntry> {
+        let mut entries: Vec<TransactionLogEntry> = Vec::new();
+
+        for active_txn_id in active_transactions {
+            entries.push(TransactionLogEntry::Start(*active_txn_id.value()));
+        }
+
+        for rolledback_transaction in rolledback_transactions.iter() {
+            let rolledback_transaction = rolledback_transaction.value();
+            let pending_writes_to_rollback = rolledback_transaction.get_pending_writes_to_rollback();
+
+            if pending_writes_to_rollback > 0 {
+                entries.push(TransactionLogEntry::StartRollback(rolledback_transaction.txn_id, pending_writes_to_rollback));
+            }
+        }
+
+        entries
     }
 }

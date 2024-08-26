@@ -1,10 +1,12 @@
-use crate::utils::lsm_file::LsmFileMode::{Mock, RandomWrites};
+use crate::utils::lsm_file::LsmFileMode::Mock;
+use std::fs;
 use std::fs::{File, OpenOptions};
 use std::hash::Hash;
 use std::io::{Read, Write};
 use std::os::windows::fs::FileExt;
 use std::path::{Path, PathBuf};
 
+#[derive(Clone)]
 pub enum LsmFileMode {
     RandomWrites,
     AppendOnly,
@@ -34,6 +36,7 @@ impl LsmFile {
     pub fn open(path: &Path, mode: LsmFileMode) -> Result<LsmFile, std::io::Error> {
         let is_append_only = matches!(mode, LsmFileMode::AppendOnly);
         let is_read_only = matches!(mode, LsmFileMode::ReadOnly);
+        let is_backup = Self::is_backup_path(path);
         let file: File = OpenOptions::new()
             .create(true)
             .append(is_append_only)
@@ -42,15 +45,25 @@ impl LsmFile {
             .open(path)?;
         let metadata = file.metadata()?;
 
-        Ok(LsmFile{
+        let file = LsmFile {
             size_bytes: metadata.len() as usize,
             path: Some(path.to_path_buf()),
             file: Some(file),
             mode,
-        })
+        };
+
+        if !is_backup {
+            Self::recover_from_backup(&file)?;
+        }
+
+        Ok(file)
     }
 
-    pub fn create(
+    fn recover_from_backup(orignal_file: &LsmFile) -> Result<(), std::io::Error> {
+
+    }
+
+    pub fn create (
         path: &Path,
         data: &Vec<u8>,
         mode: LsmFileMode
@@ -127,6 +140,25 @@ impl LsmFile {
             .write_all(bytes)
     }
 
+    pub fn save_write(&mut self, bytes: &[u8]) -> Result<(), std::io::Error> {
+        match self.mode {
+            LsmFileMode::RandomWrites => {
+                let file_path = self.path.as_ref().unwrap();
+                let backup_file = self.copy(Self::create_file_backup_path(file_path), self.mode.clone())?;
+                self.clear()?;
+                self.write(bytes)?;
+                self.fsync()?;
+                backup_file.delete()?;
+            },
+            _ => self.write(bytes),
+        }
+    }
+
+    pub fn copy(&self, new_path: &Path, mode: LsmFileMode) -> Result<LsmFile, std::io::Error> {
+        fs::copy(self.path.as_ref().unwrap().as_path(), new_path)?;
+        LsmFile::open(new_path, mode)
+    }
+
     pub fn read(&self, offset: usize, length: usize) -> Result<Vec<u8>, std::io::Error> {
         match self.mode {
             LsmFileMode::Mock => Ok(Vec::new()),
@@ -143,5 +175,16 @@ impl LsmFile {
             LsmFileMode::Mock => PathBuf::new(),
             _ => self.path.as_ref().unwrap().clone()
         }
+    }
+
+    fn is_backup_path(path: &PathBuf) -> bool {
+        let path_as_string = path.to_str().unwrap();
+        path_as_string.ends_with(".safe")
+    }
+
+    fn create_file_backup_path(path: &Path) -> PathBuf {
+        let path_as_string = path.to_str().unwrap();
+        let new_path = format!("{}.safe", path_as_string);
+        PathBuf::from(new_path)
     }
 }

@@ -32,6 +32,10 @@ impl Transaction {
         self.n_writes.fetch_add(1, Relaxed);
     }
 
+    pub(crate) fn get_pending_writes_to_rollback(&self) -> usize {
+        self.n_writes.load(Relaxed) - self.n_writes_rolled_back.load(Relaxed)
+    }
+
     pub(crate) fn all_writes_have_been_rolledback(&self) -> bool {
         self.n_writes.load(Relaxed) == self.n_writes_rolled_back.load(Relaxed)
     }
