@@ -76,7 +76,6 @@ mod test {
     use std::time::Duration;
     use crate::utils::atomic_shared_ref::AtomicSharedRef;
 
-    //TODO Improve test
     #[test]
     fn load_unload() {
         let mut vector_ref: Arc<AtomicSharedRef<Vec<u8>>> = Arc::new(AtomicSharedRef::new(Vec::new()));

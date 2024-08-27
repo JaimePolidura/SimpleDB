@@ -1,7 +1,6 @@
-use std::arch::x86_64::_mm256_loadu2_m128;
+use storage::lsm_options;
+use storage::lsm;
 use rand::Rng;
-use core::lsm;
-use core::lsm_options;
 
 fn main() {
     let mut lsm = lsm::new(lsm_options::builder()
@@ -11,7 +10,8 @@ fn main() {
         .memtable_max_size_bytes(8192)
         .compaction_task_frequency_ms(10)
         .sst_size_bytes(65536)
-        .build());
+        .build())
+        .unwrap();
 
     write(&mut lsm);
     // read(&mut lsm);

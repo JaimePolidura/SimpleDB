@@ -75,9 +75,8 @@ impl TransactionLog {
             .flatten()
             .collect();
 
-        //TODO Unsafe operation. If failure occurs in these instructions, we will lose data
-        log_file.clear().map_err(|e| CannotResetTransacionLog(e))?;
-        log_file.write(&new_entries_encoded).map_err(|e| CannotResetTransacionLog(e))?;
+        log_file.save_write(&new_entries_encoded)
+            .map_err(|e| CannotResetTransacionLog(e));
 
         Ok(())
     }

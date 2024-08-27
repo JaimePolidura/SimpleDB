@@ -45,7 +45,7 @@ impl LsmFile {
             .open(path)?;
         let metadata = file.metadata()?;
 
-        let file = LsmFile {
+        let mut file = LsmFile {
             size_bytes: metadata.len() as usize,
             path: Some(path.to_path_buf()),
             file: Some(file),
@@ -53,14 +53,27 @@ impl LsmFile {
         };
 
         if !is_backup {
-            Self::recover_from_backup(&file)?;
+            Self::recover_from_backup(&mut file)?;
         }
 
         Ok(file)
     }
 
-    fn recover_from_backup(orignal_file: &LsmFile) -> Result<(), std::io::Error> {
+    fn recover_from_backup(orignal_file: &mut LsmFile) -> Result<(), std::io::Error> {
+        let backup_path = Self::create_file_backup_path(orignal_file.path().as_path());
+        let backup_path = backup_path.as_path();
 
+        if backup_path.exists() {
+            let backup_file = LsmFile::open(backup_path, LsmFileMode::ReadOnly)?;
+            let backup_contents = backup_file.read_all()?;
+
+            orignal_file.clear()?;
+            orignal_file.write(&backup_contents)?;
+
+            backup_file.delete()?;
+        }
+
+        Ok(())
     }
 
     pub fn create (
@@ -144,11 +157,12 @@ impl LsmFile {
         match self.mode {
             LsmFileMode::RandomWrites => {
                 let file_path = self.path.as_ref().unwrap();
-                let backup_file = self.copy(Self::create_file_backup_path(file_path), self.mode.clone())?;
+                let backup_file = self.copy(Self::create_file_backup_path(file_path).as_path(), self.mode.clone())?;
                 self.clear()?;
                 self.write(bytes)?;
                 self.fsync()?;
                 backup_file.delete()?;
+                Ok(())
             },
             _ => self.write(bytes),
         }
@@ -177,7 +191,7 @@ impl LsmFile {
         }
     }
 
-    fn is_backup_path(path: &PathBuf) -> bool {
+    fn is_backup_path(path: &Path) -> bool {
         let path_as_string = path.to_str().unwrap();
         path_as_string.ends_with(".safe")
     }
