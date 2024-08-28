@@ -16,11 +16,13 @@ use crate::lsm_error::LsmError::{CannotDecodeSSTable, CannotDeleteSSTable, Canno
 use crate::sst::block_metadata::BlockMetadata;
 use crate::transactions::transaction::Transaction;
 
+pub type SSTableId = usize;
+
 pub const SSTABLE_DELETED: u8 = 2;
 pub const SSTABLE_ACTIVE: u8 = 1;
 
 pub struct SSTable {
-    pub(crate) id: usize,
+    pub(crate) id: SSTableId,
     pub(crate) bloom_filter: BloomFilter,
     pub(crate) file: LsmFile,
     pub(crate) block_cache: Mutex<BlockCache>,
@@ -41,7 +43,7 @@ impl SSTable {
         last_key: Key,
         file: LsmFile,
         level: u32,
-        id: usize,
+        id: SSTableId,
         state: u8,
     ) -> SSTable {
         SSTable {
@@ -59,7 +61,7 @@ impl SSTable {
     }
 
     pub fn from_file(
-        id: usize,
+        id: SSTableId,
         path: &Path,
         lsm_options: Arc<LsmOptions>
     ) -> Result<Arc<SSTable>, LsmError> {
@@ -73,7 +75,7 @@ impl SSTable {
 
     fn decode(
         bytes: &Vec<u8>,
-        id: usize,
+        id: SSTableId,
         lsm_options: Arc<LsmOptions>,
         file: LsmFile,
     ) -> Result<Arc<SSTable>, LsmError> {
@@ -127,11 +129,11 @@ impl SSTable {
         self.file.delete().map_err(|e| CannotDeleteSSTable(self.id, e))
     }
 
-    pub fn size(&self) -> usize {
+    pub fn size(&self) -> SSTableId {
         self.file.size()
     }
 
-    pub fn load_block(&self, block_id: usize) -> Result<Arc<Block>, LsmError> {
+    pub fn load_block(&self, block_id: SSTableId) -> Result<Arc<Block>, LsmError> {
         {
             //Try read from cache
             let mut block_cache = self.block_cache.lock()

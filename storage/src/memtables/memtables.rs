@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
-use crate::memtables::memtable::{MemTable, MemtableIterator};
+use crate::memtables::memtable::{MemTable, MemtableId, MemtableIterator};
 use crate::memtables::wal::Wal;
 use crate::transactions::transaction::Transaction;
 use crate::utils::merge_iterator::MergeIterator;
@@ -122,7 +122,7 @@ impl Memtables {
     //Returns a memtable to flush
     //This might be called by concurrently, it might fail returing None
     fn set_current_memtable_as_inactive(&self) -> Option<Arc<MemTable>> {
-        let new_memtable_id = self.next_memtable_id.fetch_add(1, Relaxed);
+        let new_memtable_id = self.next_memtable_id.fetch_add(1, Relaxed) as MemtableId;
         let new_memtable = MemTable::create_new(self.options.clone(), new_memtable_id).expect("Failed to create memtable");
         new_memtable.set_active();
         let new_memtable = Box::into_raw(Box::new(Arc::new(new_memtable)));

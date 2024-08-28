@@ -9,13 +9,14 @@ use crate::key::Key;
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
 use crate::lsm_error::LsmError::{CannotCreateWal, CannotDecodeWal, CannotReadWalEntries, CannotReadWalFiles, CannotWriteWalEntry};
 use crate::lsm_options::{DurabilityLevel, LsmOptions};
+use crate::memtables::memtable::MemtableId;
 use crate::transactions::transaction::TxnId;
 use crate::utils::lsm_file::{LsmFile, LsmFileMode};
 use crate::utils::utils;
 
 pub struct Wal {
     lsm_options: Arc<LsmOptions>,
-    memtable_id: usize,
+    memtable_id: MemtableId,
     file: LsmFile
 }
 
@@ -25,7 +26,7 @@ pub(crate) struct WalEntry {
 }
 
 impl Wal {
-    pub fn create(lsm_options: Arc<LsmOptions>, memtable_id: usize) -> Result<Wal, LsmError> {
+    pub fn create(lsm_options: Arc<LsmOptions>, memtable_id: MemtableId) -> Result<Wal, LsmError> {
         Ok(Wal {
             file: LsmFile::open(Self::to_wal_file_path(&lsm_options, memtable_id).as_path(), LsmFileMode::AppendOnly)
                 .map_err(|e| CannotCreateWal(memtable_id, e))?,
@@ -34,7 +35,7 @@ impl Wal {
         })
     }
 
-    pub fn create_mock(lsm_options: Arc<LsmOptions>, memtable_id: usize) -> Result<Wal, LsmError> {
+    pub fn create_mock(lsm_options: Arc<LsmOptions>, memtable_id: MemtableId) -> Result<Wal, LsmError> {
         Ok(Wal {
             file: LsmFile::mock(),
             lsm_options,
@@ -116,11 +117,11 @@ impl Wal {
         self.file.delete()
     }
 
-    pub fn get_memtable_id(&self) -> usize {
+    pub fn get_memtable_id(&self) -> MemtableId {
         self.memtable_id
     }
 
-    pub fn get_persisted_wal_id(lsm_options: &Arc<LsmOptions>) -> Result<(Vec<Wal>, usize), LsmError> {
+    pub fn get_persisted_wal_id(lsm_options: &Arc<LsmOptions>) -> Result<(Vec<Wal>, MemtableId), LsmError> {
         let path = PathBuf::from(&lsm_options.base_path);
         let path = path.as_path();
         let mut max_memtable_id: usize = 0;
@@ -162,7 +163,7 @@ impl Wal {
         encoded
     }
 
-    fn extract_memtable_id_from_file(file: &DirEntry) -> Result<usize, ()> {
+    fn extract_memtable_id_from_file(file: &DirEntry) -> Result<MemtableId, ()> {
         utils::extract_number_from_file_name(file, "-")
     }
 
@@ -170,7 +171,7 @@ impl Wal {
         file.file_name().to_str().unwrap().starts_with("wal-")
     }
 
-    fn to_wal_file_path(lsm_options: &Arc<LsmOptions>, memtable_id: usize) -> PathBuf {
+    fn to_wal_file_path(lsm_options: &Arc<LsmOptions>, memtable_id: MemtableId) -> PathBuf {
         let mut path_buff = PathBuf::from(&lsm_options.base_path);
         let wal_file_name = format!("wal-{}", memtable_id);
         path_buff.push(wal_file_name);

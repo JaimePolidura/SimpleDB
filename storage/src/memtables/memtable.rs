@@ -18,11 +18,13 @@ use crate::utils::storage_iterator::{StorageIterator};
 
 const TOMBSTONE: Bytes = Bytes::new();
 
+pub type MemtableId = usize;
+
 pub struct MemTable {
     data: Arc<SkipMap<Key, Bytes>>,
     current_size_bytes: AtomicUsize,
     max_size_bytes: usize,
-    memtable_id: usize,
+    memtable_id: MemtableId,
     state: UnsafeCell<MemtableState>,
     wal: UnsafeCell<Wal>,
     options: Arc<LsmOptions>
@@ -40,7 +42,7 @@ enum MemtableState {
 impl MemTable {
     pub fn create_new(
         options: Arc<LsmOptions>,
-        memtable_id: usize
+        memtable_id: MemtableId
     ) -> Result<MemTable, LsmError> {
         Ok(MemTable {
             max_size_bytes: options.memtable_max_size_bytes,
@@ -55,7 +57,7 @@ impl MemTable {
 
     pub fn create_mock(
         options: Arc<LsmOptions>,
-        memtable_id: usize
+        memtable_id: MemtableId
     ) -> Result<MemTable, LsmError> {
         Ok(MemTable {
             max_size_bytes: options.memtable_max_size_bytes,
@@ -70,7 +72,7 @@ impl MemTable {
 
     pub fn create_and_recover_from_wal(
         options: Arc<LsmOptions>,
-        memtable_id: usize,
+        memtable_id: MemtableId,
         wal: Wal
     ) -> Result<MemTable, LsmError> {
         let mut memtable = MemTable {
@@ -111,7 +113,7 @@ impl MemTable {
         }
     }
 
-    pub fn get_id(&self) -> usize {
+    pub fn get_id(&self) -> MemtableId {
         self.memtable_id
     }
 

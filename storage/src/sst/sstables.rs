@@ -1,6 +1,6 @@
 use std::cmp::max;
 use crate::lsm_options::LsmOptions;
-use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
+use crate::sst::sstable::{SSTable, SSTableId, SSTABLE_ACTIVE};
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables_files::{extract_sstable_id_from_file, is_sstable_file, to_sstable_file_name};
 use crate::sst::ssttable_iterator::SSTableIterator;
@@ -46,7 +46,7 @@ impl SSTables {
         })
     }
 
-    fn load_sstables(lsm_options: &Arc<LsmOptions>) -> Result<(Vec<RwLock<Vec<Arc<SSTable>>>>, usize), LsmError> {
+    fn load_sstables(lsm_options: &Arc<LsmOptions>) -> Result<(Vec<RwLock<Vec<Arc<SSTable>>>>, SSTableId), LsmError> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
@@ -54,7 +54,7 @@ impl SSTables {
 
         let path = PathBuf::from(&lsm_options.base_path);
         let path = path.as_path();
-        let mut max_sstable_id: usize = 0;
+        let mut max_sstable_id: SSTableId = 0;
 
         for file in fs::read_dir(path).map_err(|e| CannotReadSSTablesFiles(e))? {
             let file = file.unwrap();
@@ -142,7 +142,7 @@ impl SSTables {
         };
     }
 
-    pub fn contains_sstable_id(&self, sstable_id: usize) -> bool {
+    pub fn contains_sstable_id(&self, sstable_id: SSTableId) -> bool {
         for lock_sstables_level in &self.sstables {
             let read_lock_result = lock_sstables_level.read().unwrap();
             for sstable_in_level in read_lock_result.iter() {
@@ -155,7 +155,7 @@ impl SSTables {
         false
     }
 
-    pub fn delete_sstables(&self, level: usize, sstables_id: Vec<usize>) -> Result<(), LsmError> {
+    pub fn delete_sstables(&self, level: usize, sstables_id: Vec<SSTableId>) -> Result<(), LsmError> {
         match self.sstables.get(level) {
             Some(sstables_lock) => {
                 let mut lock_result = sstables_lock.write();
@@ -198,7 +198,7 @@ impl SSTables {
         }
     }
 
-    pub fn get_sstables_id(&self, level: usize) -> Vec<usize> {
+    pub fn get_sstables_id(&self, level: usize) -> Vec<SSTableId> {
         match self.sstables.get(level) {
             Some(sstables) => sstables.read().unwrap()
                 .iter()
@@ -238,7 +238,7 @@ impl SSTables {
         self.do_flush_to_disk(sstable_builder, sstable_id)
     }
 
-    fn do_flush_to_disk(&self, sstable_builder: SSTableBuilder, sstable_id: usize) -> Result<usize, LsmError> {
+    fn do_flush_to_disk(&self, sstable_builder: SSTableBuilder, sstable_id: SSTableId) -> Result<usize, LsmError> {
         let sstable_build_result = sstable_builder.build(
             sstable_id,
             self.to_sstable_file_path(sstable_id).as_path(),
@@ -256,7 +256,7 @@ impl SSTables {
         }
     }
 
-    fn to_sstable_file_path(&self, sstable_id: usize) -> PathBuf {
+    fn to_sstable_file_path(&self, sstable_id: SSTableId) -> PathBuf {
         //SSTable file path
         let mut path_buff = PathBuf::from(self.lsm_options.base_path.to_string());
         path_buff.push(to_sstable_file_name(sstable_id));
