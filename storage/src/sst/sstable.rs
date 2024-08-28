@@ -10,9 +10,11 @@ use std::path::Path;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering::Release;
 use std::sync::{Arc, Mutex};
+use crate::key;
 use crate::lsm_error::{DecodeError, LsmError, SSTableCorruptedPart};
 use crate::lsm_error::LsmError::{CannotDecodeSSTable, CannotDeleteSSTable, CannotOpenSSTableFile, CannotReadSSTableFile};
 use crate::sst::block_metadata::BlockMetadata;
+use crate::transactions::transaction::Transaction;
 
 pub const SSTABLE_DELETED: u8 = 2;
 pub const SSTABLE_ACTIVE: u8 = 1;
@@ -165,43 +167,43 @@ impl SSTable {
 
         Ok(block)
     }
-
-    pub fn get(&self, key: &str) -> Option<bytes::Bytes> {
+    
+    pub fn get(&self, key: &str, transaction: &Transaction) -> Result<Option<bytes::Bytes>, LsmError> {
         if self.first_key.as_str().gt(key) || self.last_key.as_str().lt(key) {
-            return None;
+            return Ok(None);
         }
         if !self.bloom_filter.may_contain(utils::hash(key.as_bytes())) {
-            return None;
+            return Ok(None);
         }
 
-        match self.get_block_metadata(key) {
-            Some((index, _)) => {
-                self.load_block(index)
-                    .expect("Error whiile reading block")
-                    .get_value(key)
+        match self.get_blocks_metadata(key, transaction) {
+            Some(block_metadata_index) => {
+                let block = self.load_block(block_metadata_index)?;
+                Ok(block.get_value(key, transaction))
             },
-            None => None
+            None => Ok(None)
         }
     }
 
-    pub(crate) fn get_block_metadata(&self, key: &str) -> Option<(usize, &BlockMetadata)> {
+    fn get_blocks_metadata(&self, key: &str, transaction: &Transaction) -> Option<usize> {
+        let lookup_key = key::new(key, transaction.txn_id);
         let mut right = self.block_metadata.len() - 1;
         let mut left = 0;
 
         loop {
-            let current_index = (left + right) / 2;
-            let current_block_metadata = &self.block_metadata[current_index];
+            let mut current_index = (left + right) / 2;
+            let mut current_block_metadata = &self.block_metadata[current_index];
 
             if left == right {
                 return None;
             }
-            if current_block_metadata.contains(key) {
-                return Some((current_index, current_block_metadata));
+            if current_block_metadata.contains(key, &transaction) {
+                return Some(current_index);
             }
-            if current_block_metadata.first_key.as_str().gt(key) {
+            if current_block_metadata.first_key.gt(&lookup_key) {
                 right = current_index;
             }
-            if current_block_metadata.last_key.as_str().lt(key) {
+            if current_block_metadata.last_key.lt(&lookup_key) {
                 left = current_index;
             }
         }

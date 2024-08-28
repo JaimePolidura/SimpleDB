@@ -3,7 +3,7 @@ use crate::key::Key;
 use crate::lsm_error::DecodeErrorType;
 use crate::utils::utils;
 use bytes::BufMut;
-use crate::transactions::transaction::TxnId;
+use crate::transactions::transaction::{Transaction, TxnId};
 
 #[derive(Eq, PartialEq)]
 pub struct BlockMetadata {
@@ -97,8 +97,13 @@ impl BlockMetadata {
         metadata_encoded
     }
 
-    pub fn contains(&self, key: &str) -> bool {
+    pub fn contains_key_str(&self, key: &str) -> bool {
         self.first_key.as_str().le(key) && self.last_key.as_str().ge(key)
+    }
+
+    pub fn contains(&self, key: &str, transaction: &Transaction) -> bool {
+        let key_to_be_checked = key::new(key, transaction.txn_id);
+        self.first_key.le(&key_to_be_checked) && self.last_key.gt(&key_to_be_checked)
     }
 }
 

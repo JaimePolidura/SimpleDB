@@ -115,20 +115,20 @@ impl SSTables {
         MergeIterator::create(iterators)
     }
 
-    pub fn get(&self, key: &str, transaction: &Transaction) -> Option<bytes::Bytes> {
+    pub fn get(&self, key: &str, transaction: &Transaction) -> Result<Option<bytes::Bytes>, LsmError> {
         for sstables_in_level_lock in self.sstables.iter() {
             let lock_result = sstables_in_level_lock.read();
             let sstable_in_level = lock_result.as_ref().unwrap();
 
             for sstable in sstable_in_level.iter() {
-                match sstable.get(key) {
-                    Some(value) => return Some(value),
+                match sstable.get(key, transaction)? {
+                    Some(value) => return Ok(Some(value)),
                     None => continue
                 }
             }
         }
 
-        None
+        Ok(None)
     }
 
     pub fn delete_all_sstables(&self, level_id: usize) {

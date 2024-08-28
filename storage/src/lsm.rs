@@ -77,7 +77,7 @@ impl Lsm {
     pub fn get(
         &self,
         key: &str
-    ) -> Option<bytes::Bytes> {
+    ) -> Result<Option<bytes::Bytes>, LsmError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         self.get_with_transaction(&transaction, key)
     }
@@ -86,9 +86,9 @@ impl Lsm {
         &self,
         transaction: &Transaction,
         key: &str,
-    ) -> Option<bytes::Bytes> {
+    ) -> Result<Option<bytes::Bytes>, LsmError> {
         match self.memtables.get(&key, transaction) {
-            Some(value_from_memtable) => Some(value_from_memtable),
+            Some(value_from_memtable) => Ok(Some(value_from_memtable)),
             None => self.sstables.get(&key, &transaction),
         }
     }

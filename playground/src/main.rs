@@ -13,12 +13,21 @@ fn main() {
         .build())
         .unwrap();
 
-    write(&mut lsm);
-    // read(&mut lsm);
+    //write(&mut lsm);
+    read(&mut lsm);
+}
+
+fn transactions(lsm: &mut lsm::Lsm) {
+    let transaction1 = lsm.start_transaction();
+    let transaction2 = lsm.start_transaction();
+
+    lsm.set_with_transaction(&transaction1, "aaa", &vec![1]);
+
+    let value1 = lsm.get_with_transaction(&transaction2, "aaa");
 }
 
 fn read(lsm: &mut lsm::Lsm) {
-    let value = lsm.get("AAB");
+    let value = lsm.get("AAB").unwrap();
     if value.is_some() {
     }
 }

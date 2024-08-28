@@ -6,7 +6,7 @@ use crate::key;
 use crate::key::Key;
 use crate::lsm_error::DecodeErrorType;
 use crate::lsm_options::LsmOptions;
-use crate::transactions::transaction::TxnId;
+use crate::transactions::transaction::{Transaction, TxnId};
 use crate::utils::utils;
 
 pub const PREFIX_COMPRESSED: u64 = 0x01;
@@ -31,19 +31,19 @@ impl Block {
         decode_block(encoded, options)
     }
 
-    pub fn get_value(&self, key_lookup: &str) -> Option<bytes::Bytes> {
-        let mut left = 0;
+    pub fn get_value(&self, key_lookup: &str, transaction: &Transaction) -> Option<Bytes> {
         let mut right = self.offsets.len() / 2;
+        let mut left = 0;
 
         loop {
             let current_index = (left + right) / 2;
-            let current_key = self.get_key_by_index(current_index);
+            let mut current_key = self.get_key_by_index(current_index);
 
             if left == right {
                 return None;
             }
             if current_key.as_str().eq(key_lookup) {
-                return Some(self.get_value_by_index(current_index));
+                return self.get_value_in_multiple_key_versions(transaction, key_lookup, current_index);
             }
             if current_key.as_str().gt(key_lookup) {
                 right = current_index;
@@ -52,6 +52,31 @@ impl Block {
                 left = current_index;
             }
         }
+    }
+
+    //Different versions exists for the same key
+    fn get_value_in_multiple_key_versions(
+        &self,
+        transaction: &Transaction,
+        key: &str,
+        index: usize
+    ) -> Option<Bytes> {
+        let mut current_index = index;
+        while current_index > 0 && self.get_key_by_index(current_index).as_str().eq(key) {
+            current_index = current_index - 1;
+        }
+
+        while current_index < self.entries.len() {
+            let current_key = self.get_key_by_index(current_index);
+            if current_key.as_str().eq(key) {
+                return None;
+            }
+            if transaction.can_read(&current_key) {
+                return Some(self.get_value_by_index(current_index));
+            }
+        }
+
+        None
     }
 
     //Expect n_entry_index to be an index to block::offsets aray
