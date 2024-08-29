@@ -30,7 +30,6 @@ impl Default for SimpleLeveledCompactionOptions {
     }
 }
 
-
 pub(crate) fn start_simple_leveled_compaction(
     compaction_task: SimpleLeveledCompactionTask,
     transaction_manager: &Arc<TransactionManager>,

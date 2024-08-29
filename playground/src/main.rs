@@ -13,8 +13,9 @@ fn main() {
         .build())
         .unwrap();
 
+    transactions(&mut lsm);
     //write(&mut lsm);
-    read(&mut lsm);
+    //read(&mut lsm);
 }
 
 fn transactions(lsm: &mut lsm::Lsm) {
@@ -23,7 +24,30 @@ fn transactions(lsm: &mut lsm::Lsm) {
 
     lsm.set_with_transaction(&transaction1, "aaa", &vec![1]);
 
-    let value1 = lsm.get_with_transaction(&transaction2, "aaa");
+    let value1 = lsm.get_with_transaction(&transaction1, "aaa")
+        .unwrap();
+    assert!(value1.is_some());
+    assert_eq!(value1.unwrap(), vec![1]);
+
+    let value2 = lsm.get_with_transaction(&transaction2, "aaa")
+        .unwrap();
+    assert!(value2.is_none());
+
+    lsm.commit_transaction(transaction1);
+
+    let value2 = lsm.get_with_transaction(&transaction2, "aaa")
+        .unwrap();
+    assert!(value2.is_some());
+    assert_eq!(value2.unwrap(), vec![1]);
+
+    lsm.delete_with_transaction(&transaction2, "aaa");
+
+    lsm.rollback_transaction(transaction2);
+
+    let value1 = lsm.get("aaa")
+        .unwrap();
+    assert!(value1.is_some());
+    assert_eq!(value1.unwrap(), vec![1]);
 }
 
 fn read(lsm: &mut lsm::Lsm) {
