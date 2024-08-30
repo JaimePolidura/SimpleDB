@@ -37,8 +37,7 @@ fn transactions(lsm: &mut lsm::Lsm) {
 
     let value2 = lsm.get_with_transaction(&transaction2, "aaa")
         .unwrap();
-    assert!(value2.is_some());
-    assert_eq!(value2.unwrap(), vec![1]);
+    assert!(value2.is_none());
 
     lsm.delete_with_transaction(&transaction2, "aaa");
 

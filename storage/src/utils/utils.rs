@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs::DirEntry;
 
 pub fn u16_vec_to_u8_vec(u16_vec: &Vec<u16>) -> Vec<u8> {

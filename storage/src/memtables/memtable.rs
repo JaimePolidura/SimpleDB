@@ -1,4 +1,5 @@
 use std::cell::UnsafeCell;
+use std::collections::HashSet;
 use std::ops::Bound::{Excluded, Included};
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
@@ -12,7 +13,7 @@ use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::MemtableState::{Active, Flushed, Flusing, Inactive, RecoveringFromWal};
 use crate::memtables::wal::Wal;
 use crate::sst::sstable_builder::SSTableBuilder;
-use crate::transactions::transaction::Transaction;
+use crate::transactions::transaction::{Transaction, TxnId};
 use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_iterator::{StorageIterator};
 
@@ -118,10 +119,10 @@ impl MemTable {
     }
 
     pub fn get(&self, key_lookup: &str, transaction: &Transaction) -> Option<Bytes> {
-        let mut current_key = key::new(key_lookup, transaction.txn_id);
+        let mut current_key = key::new(key_lookup, transaction.txn_id + 1);
 
         loop {
-            if let Some(entry) = self.data.lower_bound(Included(&current_key)) {
+            if let Some(entry) = self.data.upper_bound(Excluded(&current_key)) {
                 if !entry.key().as_str().eq(key_lookup) {
                     return None;
                 }
@@ -130,9 +131,9 @@ impl MemTable {
                 }
 
                 current_key = entry.key().clone();
+            } else {
+                return None;
             }
-
-            return None;
         }
     }
 

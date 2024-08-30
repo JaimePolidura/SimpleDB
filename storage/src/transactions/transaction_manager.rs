@@ -54,6 +54,8 @@ impl TransactionManager {
         self.log.add_entry(TransactionLogEntry::Commit(transaction.txn_id));
     }
 
+    //A rolledback transaction wont be removed frmo active transactions, so no other transaction can see its changes
+    //Once all write has been discareded in compaction, it wil be removed
     pub fn rollback(&self, transaction: Transaction) {
         self.log.add_entry(TransactionLogEntry::StartRollback(transaction.txn_id, transaction.n_writes.load(Relaxed)));
         self.rolledback_transactions.insert(transaction.txn_id, Arc::new(transaction));
