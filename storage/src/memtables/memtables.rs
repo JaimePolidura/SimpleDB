@@ -5,7 +5,7 @@ use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::{MemTable, MemtableId, MemtableIterator};
 use crate::memtables::wal::Wal;
-use crate::transactions::transaction::Transaction;
+use crate::transactions::transaction::{Transaction, TxnId};
 use crate::utils::merge_iterator::MergeIterator;
 
 pub struct Memtables {
@@ -26,6 +26,27 @@ impl Memtables {
             Self::recover_memtables_from_wal(options, max_memtable_id, wals)
         } else {
             Self::create_memtables_no_wal(options)
+        }
+    }
+
+    pub fn has_txn_id_been_written(&self, txn_id: TxnId) -> bool {
+        unsafe {
+            let memtable_ref = (*self.current_memtable.load(Acquire)).clone();
+            if memtable_ref.has_txn_id_been_written(txn_id) {
+                return true;
+            }
+
+            let inactive_memtables_rw_lock = &*self.inactive_memtables.load(Acquire);
+            let inactive_memtables = inactive_memtables_rw_lock.read()
+                .unwrap();
+
+            for inactive_memtable in inactive_memtables.iter().rev() {
+                if inactive_memtable.has_txn_id_been_written(txn_id) {
+                    return true;
+                }
+            }
+
+            false
         }
     }
 

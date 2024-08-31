@@ -39,6 +39,8 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Result<Lsm, LsmError> {
     let memtables = Memtables::new(lsm_options.clone())?;
     let transaction_manager = Arc::new(TransactionManager::create_recover_from_log(lsm_options.clone())?);
 
+    transaction_manager.rollback_active_transactions();
+
     let mut lsm = Lsm {
         compaction: Compaction::new(transaction_manager.clone(), lsm_options.clone(), sstables.clone(),
                                     manifest.clone()),
@@ -49,6 +51,8 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Result<Lsm, LsmError> {
         manifest,
     };
 
+    rollback_active_transactions(&mut lsm);
+
     //Memtables are recovered when calling Memtables::create
     lsm.recover_from_manifest();
     lsm.compaction.start_compaction_thread();
@@ -56,6 +60,14 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Result<Lsm, LsmError> {
     println!("Mini lsm engine started!");
 
     Ok(lsm)
+}
+
+fn rollback_active_transactions(lsm: &mut Lsm) {
+    let active_transactions_id = lsm.transaction_manager.rollback_active_transactions();
+
+    for active_transaction_id in active_transactions_id {
+
+    }
 }
 
 impl Lsm {

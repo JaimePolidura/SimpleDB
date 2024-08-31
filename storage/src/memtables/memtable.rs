@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use bytes::Bytes;
-use crossbeam_skiplist::SkipMap;
+use crossbeam_skiplist::{SkipList, SkipMap, SkipSet};
 use crate::key;
 use crate::key::Key;
 use crate::lsm_error::LsmError;
@@ -28,7 +28,8 @@ pub struct MemTable {
     memtable_id: MemtableId,
     state: UnsafeCell<MemtableState>,
     wal: UnsafeCell<Wal>,
-    options: Arc<LsmOptions>
+    options: Arc<LsmOptions>,
+    txn_ids_written: SkipSet<TxnId>,
 }
 
 enum MemtableState {
@@ -46,11 +47,12 @@ impl MemTable {
         memtable_id: MemtableId
     ) -> Result<MemTable, LsmError> {
         Ok(MemTable {
+            wal: UnsafeCell::new(Wal::create(options.clone(), memtable_id)?),
             max_size_bytes: options.memtable_max_size_bytes,
             current_size_bytes: AtomicUsize::new(0),
             state: UnsafeCell::new(MemtableState::New),
             data: Arc::new(SkipMap::new()),
-            wal: UnsafeCell::new(Wal::create(options.clone(), memtable_id)?),
+            txn_ids_written: SkipSet::new(),
             memtable_id,
             options,
         })
@@ -61,11 +63,12 @@ impl MemTable {
         memtable_id: MemtableId
     ) -> Result<MemTable, LsmError> {
         Ok(MemTable {
+            wal: UnsafeCell::new(Wal::create_mock(options.clone(), memtable_id)?),
             max_size_bytes: options.memtable_max_size_bytes,
             current_size_bytes: AtomicUsize::new(0),
             state: UnsafeCell::new(MemtableState::New),
             data: Arc::new(SkipMap::new()),
-            wal: UnsafeCell::new(Wal::create_mock(options.clone(), memtable_id)?),
+            txn_ids_written: SkipSet::new(),
             memtable_id,
             options,
         })
@@ -82,6 +85,7 @@ impl MemTable {
             state: UnsafeCell::new(MemtableState::New),
             data: Arc::new(SkipMap::new()),
             wal: UnsafeCell::new(wal),
+            txn_ids_written: SkipSet::new(),
             memtable_id,
             options
         };
@@ -89,6 +93,10 @@ impl MemTable {
         memtable.recover_from_wal();
 
         Ok(memtable)
+    }
+
+    pub fn has_txn_id_been_written(&self, txn_id: TxnId) -> bool {
+        self.txn_ids_written.contains(&txn_id)
     }
 
     pub fn set_inactive(&self) {
@@ -140,18 +148,20 @@ impl MemTable {
     pub fn set(&self, transaction: &Transaction, key: &str, value: &[u8]) -> Result<(), LsmError> {
         self.write_into_skip_list(
             &key::new(key, transaction.txn_id),
-            Bytes::copy_from_slice(value)
+            Bytes::copy_from_slice(value),
+            transaction.txn_id
         )
     }
 
     pub fn delete(&self, transaction: &Transaction, key: &str) -> Result<(), LsmError> {
         self.write_into_skip_list(
             &key::new(key, transaction.txn_id),
-            TOMBSTONE
+            TOMBSTONE,
+            transaction.txn_id
         )
     }
 
-    fn write_into_skip_list(&self, key: &Key, value: Bytes) -> Result<(), LsmError> {
+    fn write_into_skip_list(&self, key: &Key, value: Bytes, txn_id: TxnId) -> Result<(), LsmError> {
         if !self.can_memtable_be_written() {
             return Ok(());
         }
@@ -160,6 +170,8 @@ impl MemTable {
         }
 
         self.write_wal(&key, &value)?;
+
+        self.txn_ids_written.insert(txn_id);
 
         self.current_size_bytes.fetch_add(key.len() + value.len(), Relaxed);
 
@@ -209,8 +221,9 @@ impl MemTable {
         println!("Applying {} operations from WAL to memtable with ID: {}", entries.len(), wal.get_memtable_id());
 
         while let Some(entry) = entries.pop() {
-            self.write_into_skip_list(&entry.key, entry.value);
+            self.write_into_skip_list(&entry.key, entry.value, entry.key.txn_id());
         }
+
         self.set_active();
 
         Ok(())

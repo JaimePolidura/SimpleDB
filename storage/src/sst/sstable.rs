@@ -1,20 +1,21 @@
-use crate::sst::block::block::Block;
+use crate::key;
 use crate::key::Key;
+use crate::lsm_error::LsmError::{CannotDecodeSSTable, CannotDeleteSSTable, CannotOpenSSTableFile, CannotReadSSTableFile};
+use crate::lsm_error::{DecodeError, LsmError, SSTableCorruptedPart};
 use crate::lsm_options::LsmOptions;
+use crate::sst::block::block::Block;
 use crate::sst::block_cache::BlockCache;
+use crate::sst::block_metadata::BlockMetadata;
+use crate::transactions::transaction::{Transaction, TxnId};
 use crate::utils::bloom_filter::BloomFilter;
 use crate::utils::lsm_file::{LsmFile, LsmFileMode};
 use crate::utils::utils;
-use bytes::BufMut;
+use bytes::{Buf, BufMut};
+use crossbeam_skiplist::SkipSet;
 use std::path::Path;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering::Release;
 use std::sync::{Arc, Mutex};
-use crate::key;
-use crate::lsm_error::{DecodeError, LsmError, SSTableCorruptedPart};
-use crate::lsm_error::LsmError::{CannotDecodeSSTable, CannotDeleteSSTable, CannotOpenSSTableFile, CannotReadSSTableFile};
-use crate::sst::block_metadata::BlockMetadata;
-use crate::transactions::transaction::Transaction;
 
 pub type SSTableId = usize;
 
@@ -32,10 +33,12 @@ pub struct SSTable {
     pub(crate) state: AtomicU8,
     pub(crate) first_key: Key,
     pub(crate) last_key: Key,
+    pub(crate) active_txn_ids_written: SkipSet<TxnId>
 }
 
 impl SSTable {
     pub fn new(
+        active_txn_ids_written: SkipSet<TxnId>,
         block_metadata: Vec<BlockMetadata>,
         lsm_options: Arc<LsmOptions>,
         bloom_filter: BloomFilter,
@@ -49,6 +52,7 @@ impl SSTable {
         SSTable {
             block_cache: Mutex::new(BlockCache::new(lsm_options.clone())),
             state: AtomicU8::new(state),
+            active_txn_ids_written,
             block_metadata,
             bloom_filter,
             lsm_options,
@@ -81,7 +85,8 @@ impl SSTable {
     ) -> Result<Arc<SSTable>, LsmError> {
         let meta_offset = utils::u8_vec_to_u32_le(bytes, bytes.len() - 4);
         let bloom_offset = utils::u8_vec_to_u32_le(bytes, bytes.len() - 8);
-        let level = utils::u8_vec_to_u32_le(bytes, bytes.len() - 12);
+        let active_txn_ids_written_offset = utils::u8_vec_to_u32_le(bytes, bytes.len() - 12);
+        let level = utils::u8_vec_to_u32_le(bytes, bytes.len() - 16);
         let state = bytes[bytes.len() - 13];
 
         let block_metadata = BlockMetadata::decode_all(bytes, meta_offset as usize)
@@ -100,10 +105,13 @@ impl SSTable {
                 index: 0,
             }))?;
 
+        let active_txn_ids_written = Self::decode_active_txn_ids_written(&bytes, active_txn_ids_written_offset);
+
         let first_key = Self::get_first_key(&block_metadata);
         let last_key = Self::get_last_key(&block_metadata);
 
         Ok(Arc::new(SSTable::new(
+            active_txn_ids_written,
             block_metadata,
             lsm_options,
             bloom_filter,
@@ -114,6 +122,19 @@ impl SSTable {
             id,
             state
         )))
+    }
+
+    fn decode_active_txn_ids_written(bytes: &Vec<u8>, offset: u32) -> SkipSet<TxnId> {
+        let mut decoded = SkipSet::new();
+        let mut current_ptr: &[u8] = &bytes[offset];
+
+        let n_entries = current_ptr.get_u32_le();
+        for _ in 0..n_entries {
+            let txn_id = current_ptr.get_u64_le() as TxnId;
+            decoded.insert(txn_id);
+        }
+
+        decoded
     }
 
     fn get_last_key(block_metadata: &Vec<BlockMetadata>) -> Key {

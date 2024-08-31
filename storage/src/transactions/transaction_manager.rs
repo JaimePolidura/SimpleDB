@@ -40,6 +40,18 @@ impl TransactionManager {
         })
     }
 
+    pub fn rollback_active_transactions(&self) -> Vec<TxnId> {
+        let mut active_transactions = Vec::new();
+
+        while self.active_transactions.is_empty() {
+            active_transactions.push(*self.active_transactions.pop_front()
+                .unwrap()
+                .value());
+        }
+
+        active_transactions
+    }
+
     pub fn create_mock(options: Arc<LsmOptions>) -> TransactionManager {
         TransactionManager{
             log: TransactionLog::create_mock(options),

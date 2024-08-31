@@ -47,6 +47,8 @@ fn transactions(lsm: &mut lsm::Lsm) {
         .unwrap();
     assert!(value1.is_some());
     assert_eq!(value1.unwrap(), vec![1]);
+
+    println!("HOla");
 }
 
 fn read(lsm: &mut lsm::Lsm) {
