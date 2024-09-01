@@ -116,7 +116,7 @@ impl SSTableBuilder {
 
         //TxnIds
         let active_txn_ids_offset = encoded.len();
-        let txn_ids_encoded = self.encode_active_txn_ids_written();
+        let txn_ids_encoded = Self::encode_active_txn_ids_written(&self.active_txn_ids_written);
         encoded.extend(txn_ids_encoded);
 
         //Bloom & blocks metadata offsets, state
@@ -135,11 +135,11 @@ impl SSTableBuilder {
         }
     }
 
-    pub fn encode_active_txn_ids_written(&self) -> Vec<u8> {
+    pub fn encode_active_txn_ids_written(active_txn_ids_written: &SkipSet<TxnId>) -> Vec<u8> {
         let mut encoded = Vec::new();
 
-        encoded.put_u32_le(self.active_txn_ids_written.len() as u32);
-        for txn_id_written in self.active_txn_ids_written.iter() {
+        encoded.put_u32_le(active_txn_ids_written.len() as u32);
+        for txn_id_written in active_txn_ids_written.iter() {
             encoded.put_u64_le(*txn_id_written.value() as u64);
         }
 

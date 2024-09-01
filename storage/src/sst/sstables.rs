@@ -13,7 +13,7 @@ use std::sync::{Arc, RwLock};
 use crate::lsm_error::LsmError;
 use crate::lsm_error::LsmError::CannotReadSSTablesFiles;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
-use crate::transactions::transaction::Transaction;
+use crate::transactions::transaction::{Transaction, TxnId};
 
 pub struct SSTables {
     //For each level one index entry
@@ -129,6 +129,21 @@ impl SSTables {
         }
 
         Ok(None)
+    }
+
+    pub fn has_has_txn_id_been_written(&self, txn_id: TxnId) -> bool {
+        for sstables_in_level_lock in self.sstables.iter() {
+            let lock_result = sstables_in_level_lock.read();
+            let sstable_in_level = lock_result.as_ref().unwrap();
+
+            for sstable in sstable_in_level.iter() {
+                if sstable.has_has_txn_id_been_written(txn_id) {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     pub fn delete_all_sstables(&self, level_id: usize) {

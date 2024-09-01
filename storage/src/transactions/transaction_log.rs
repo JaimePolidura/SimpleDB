@@ -2,35 +2,35 @@ use crate::lsm_error::LsmError::{CannotCreateTransactionLog, CannotDecodeTransac
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
 use crate::lsm_options::{DurabilityLevel, LsmOptions};
 use crate::transactions::transaction::TxnId;
-use crate::utils::lsm_file::{LsmFile, LsmFileMode};
+use crate::utils::lsm_file::{LsmFile, LsmFileMode, LsmFileWrapper};
 use bytes::{Buf, BufMut};
 use std::cell::UnsafeCell;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+const ROLLED_BACK_ACTIVE_TRANSACTION_FAILURE_BINARY_CODE: u8 = 0x05;
 const ROLLEDBACK_WRITE_BINARY_CODE: u8 = 0x04;
 const START_ROLLBACK_BINARY_CODE: u8 = 0x03;
 const COMMIT_BINARY_CODE: u8 = 0x02;
 const START_BINARY_CODE: u8 = 0x01;
 
 pub enum TransactionLogEntry {
+    //Transaction has been started
     Start(TxnId),
+    //Transaction has been commited
     Commit(TxnId),
-    StartRollback(TxnId, usize), //Nº Total writes
+    //Rollback has started. Writes done by the transaction will be discarded at memtable flush & SSTable compaction
+    //usize is the number of writes that the transaction has done
+    StartRollback(TxnId, usize),
+    //A write done by a rolledback transaction (marked in the log with StartRollback) has been discarded
     RolledbackWrite(TxnId),
+    //When the Lsm boots, if it finds an active transaction (not commited or rolledback) and there is no present write
+    //in the lsm engine with that transaction ID. It will be marked with RolledbackActiveTransactionFailure
+    //When the LSM reboots again the transaction will be ignored
+    RolledbackActiveTransactionFailure(TxnId)
 }
-
-//UnsafeCell does not implement Sync, so it cannot be passed to threads
-//We need to wrap it in a struct that implements Sync
-pub struct LsmFileWrapper {
-    file: UnsafeCell<LsmFile>,
-}
-
-unsafe impl Send for LsmFileWrapper {}
-unsafe impl Sync for LsmFileWrapper {}
 
 pub struct TransactionLog {
-    //As log file is append only. Concurrency is resolved by OS
     //Wrapped with RwLock Becase TransactionLog needs to be passed to threads. UnsafeCell doest implement Sync
     log_file: LsmFileWrapper,
     lsm_options: Arc<LsmOptions>
@@ -40,7 +40,7 @@ impl TransactionLog {
     pub fn create(lsm_options: Arc<LsmOptions>) -> Result<TransactionLog, LsmError> {
         Ok(TransactionLog {
             log_file: LsmFileWrapper {file: UnsafeCell::new(LsmFile::open(to_transaction_log_file_path(&lsm_options).as_path(),
-                                                                          LsmFileMode::AppendOnly).map_err(|e| CannotCreateTransactionLog(e))?) },
+                        LsmFileMode::AppendOnly).map_err(|e| CannotCreateTransactionLog(e))?) },
             lsm_options
         })
     }
@@ -135,6 +135,7 @@ impl TransactionLogEntry {
         let txn_id = current_ptr.get_u64_le() as TxnId;
 
         let decoded_entry = match binary_code {
+            ROLLED_BACK_ACTIVE_TRANSACTION_FAILURE_BINARY_CODE => TransactionLogEntry::RolledbackActiveTransactionFailure(txn_id),
             ROLLEDBACK_WRITE_BINARY_CODE => TransactionLogEntry::RolledbackWrite(txn_id),
             START_ROLLBACK_BINARY_CODE => {
                 let n_writes = current_ptr.get_u64_le();
@@ -184,15 +185,17 @@ impl TransactionLogEntry {
 
     pub fn txn_id(&self) -> TxnId {
         match *self {
+            TransactionLogEntry::RolledbackActiveTransactionFailure(txn_id) => txn_id,
             TransactionLogEntry::StartRollback(txn_id, _) => txn_id,
             TransactionLogEntry::Commit(txn_id) => txn_id,
             TransactionLogEntry::Start(txn_id) => txn_id,
-            TransactionLogEntry::RolledbackWrite(txn_id) => txn_id
+            TransactionLogEntry::RolledbackWrite(txn_id) => txn_id,
         }
     }
 
     pub fn get_binary_code(&self) -> u8 {
         match *self {
+            TransactionLogEntry::RolledbackActiveTransactionFailure(_) => ROLLED_BACK_ACTIVE_TRANSACTION_FAILURE_BINARY_CODE,
             TransactionLogEntry::RolledbackWrite(_) => ROLLEDBACK_WRITE_BINARY_CODE,
             TransactionLogEntry::StartRollback(_, _) => START_ROLLBACK_BINARY_CODE,
             TransactionLogEntry::Commit(_txn_id) => COMMIT_BINARY_CODE,

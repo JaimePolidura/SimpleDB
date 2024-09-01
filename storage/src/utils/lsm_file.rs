@@ -1,3 +1,4 @@
+use std::cell::UnsafeCell;
 use crate::utils::lsm_file::LsmFileMode::Mock;
 use std::fs;
 use std::fs::{File, OpenOptions};
@@ -21,6 +22,15 @@ pub struct LsmFile {
     size_bytes: usize,
     mode: LsmFileMode,
 }
+
+//As log file is append only. Concurrency is resolved by OS
+//UnsafeCell does not implement Sync, so it cannot be passed to threads
+//We need to wrap it in a struct that implements Sync
+pub struct LsmFileWrapper {
+    pub(crate) file: UnsafeCell<LsmFile>,
+}
+unsafe impl Send for LsmFileWrapper {}
+unsafe impl Sync for LsmFileWrapper {}
 
 impl LsmFile {
     //Only used for testing purposes

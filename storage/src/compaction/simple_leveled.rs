@@ -56,7 +56,7 @@ pub(crate) fn start_simple_leveled_compaction(
 
         let key = iterator.key().clone();
 
-        match transaction_manager.check_key_not_rolledback(&key) {
+        match transaction_manager.on_write_key(&key) {
             Ok(_) => {
                 new_sstable_builder.as_mut().unwrap().add_entry(
                     key, Bytes::copy_from_slice(iterator.value())

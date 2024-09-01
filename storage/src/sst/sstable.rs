@@ -126,7 +126,7 @@ impl SSTable {
 
     fn decode_active_txn_ids_written(bytes: &Vec<u8>, offset: u32) -> SkipSet<TxnId> {
         let mut decoded = SkipSet::new();
-        let mut current_ptr: &[u8] = &bytes[offset];
+        let mut current_ptr = &bytes[offset as usize..];
 
         let n_entries = current_ptr.get_u32_le();
         for _ in 0..n_entries {
@@ -230,5 +230,9 @@ impl SSTable {
                 left = current_index;
             }
         }
+    }
+
+    pub fn has_has_txn_id_been_written(&self, txn_id: TxnId) -> bool {
+        self.active_txn_ids_written.contains(&txn_id)
     }
 }

@@ -204,7 +204,7 @@ impl MemTable {
             let value = memtable_iterator.value();
             let key = memtable_iterator.key();
 
-            match transaction_manager.check_key_not_rolledback(key) {
+            match transaction_manager.on_write_key(key) {
                 Ok(_) => sstable_builder.add_entry(key.clone(), Bytes::copy_from_slice(value)),
                 Err(_) => {}
             };

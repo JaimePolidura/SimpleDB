@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
 use crate::compaction::compaction::{Compaction, CompactionTask};
@@ -6,12 +7,13 @@ use crate::utils::two_merge_iterators::TwoMergeIterator;
 use crate::sst::ssttable_iterator::SSTableIterator;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::utils::merge_iterator::MergeIterator;
-use crate::transactions::transaction::Transaction;
+use crate::transactions::transaction::{Transaction, TxnId};
 use crate::memtables::memtables::Memtables;
 use crate::lsm_options::LsmOptions;
 use crate::sst::sstables::SSTables;
 use crate::lsm_error::LsmError;
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 use bytes::Bytes;
 
 pub struct Lsm {
@@ -39,7 +41,7 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Result<Lsm, LsmError> {
     let memtables = Memtables::new(lsm_options.clone())?;
     let transaction_manager = Arc::new(TransactionManager::create_recover_from_log(lsm_options.clone())?);
 
-    transaction_manager.rollback_active_transactions();
+    transaction_manager.get_active_transactions();
 
     let mut lsm = Lsm {
         compaction: Compaction::new(transaction_manager.clone(), lsm_options.clone(), sstables.clone(),
@@ -63,11 +65,29 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Result<Lsm, LsmError> {
 }
 
 fn rollback_active_transactions(lsm: &mut Lsm) {
-    let active_transactions_id = lsm.transaction_manager.rollback_active_transactions();
+    let active_transactions_id = lsm.transaction_manager.get_active_transactions();
 
     for active_transaction_id in active_transactions_id {
-
+        if has_txn_id_been_written(lsm, active_transaction_id) {
+            lsm.transaction_manager.rollback(Transaction {
+                active_transactions: HashSet::new(),
+                isolation_level: IsolationLevel::SnapshotIsolation,
+                n_writes_rolled_back: AtomicUsize::new(0),
+                n_writes: AtomicUsize::new(usize::MAX),
+                txn_id: active_transaction_id
+            });
+        } else {
+            lsm.transaction_manager.rollback_active_transaction_failure(active_transaction_id);
+        }
     }
+}
+
+fn has_txn_id_been_written(lsm: &Lsm, txn_id: TxnId) -> bool {
+    if lsm.memtables.has_txn_id_been_written(txn_id) {
+        return true;
+    }
+
+    lsm.sstables.has_has_txn_id_been_written(txn_id)
 }
 
 impl Lsm {

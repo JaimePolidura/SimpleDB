@@ -27,8 +27,8 @@ impl TransactionManager {
     pub fn create_recover_from_log(options: Arc<LsmOptions>) -> Result<TransactionManager, LsmError> {
         let mut log = TransactionLog::create(options)?;
         let transaction_log_entries = log.read_entries()?;
-        let (active_transactions, max_txn_id) = Self::get_active_transactions(&transaction_log_entries);
-        let rolledback_transactions = Self::get_pending_transactions_to_rollback(&transaction_log_entries);
+        let rolledback_transactions = Self::get_pending_transactions_to_rollback_from_log_entries(&transaction_log_entries);
+        let (active_transactions, max_txn_id) = Self::get_active_transactions_from_log_entries(&transaction_log_entries);
 
         log.replace_entries(&Self::create_new_transaction_log_entries(&rolledback_transactions, &active_transactions))?;
 
@@ -40,20 +40,18 @@ impl TransactionManager {
         })
     }
 
-    pub fn rollback_active_transactions(&self) -> Vec<TxnId> {
+    pub fn get_active_transactions(&self) -> Vec<TxnId> {
         let mut active_transactions = Vec::new();
 
-        while self.active_transactions.is_empty() {
-            active_transactions.push(*self.active_transactions.pop_front()
-                .unwrap()
-                .value());
+        for active_transaction_id in self.active_transactions {
+            active_transactions.push(active_transaction_id);
         }
 
         active_transactions
     }
 
     pub fn create_mock(options: Arc<LsmOptions>) -> TransactionManager {
-        TransactionManager{
+        TransactionManager {
             log: TransactionLog::create_mock(options),
             rolledback_transactions: SkipMap::new(),
             active_transactions: SkipSet::new(),
@@ -66,14 +64,23 @@ impl TransactionManager {
         self.log.add_entry(TransactionLogEntry::Commit(transaction.txn_id));
     }
 
-    //A rolledback transaction wont be removed frmo active transactions, so no other transaction can see its changes
-    //Once all write has been discareded in compaction, it wil be removed
+    pub fn rollback_active_transaction_failure(&self, txn_id: TxnId) -> Result<(), LsmError> {
+        self.log.add_entry(TransactionLogEntry::RolledbackActiveTransactionFailure(txn_id))?;
+        self.active_transactions.remove(&txn_id);
+        Ok(())
+    }
+
+    //A rolledback transaction won't be removed from active transactions, so no other transaction can see its changes
+    //Once all writes has been discareded in compaction or memtable flush, it wil be removed.
     pub fn rollback(&self, transaction: Transaction) {
         self.log.add_entry(TransactionLogEntry::StartRollback(transaction.txn_id, transaction.n_writes.load(Relaxed)));
         self.rolledback_transactions.insert(transaction.txn_id, Arc::new(transaction));
     }
 
-    pub fn check_key_not_rolledback(&self, key: &Key) -> Result<(), ()> {
+    //This function is called when there is a memtable flush or sstable compaction
+    //Returns Ok if the key with that transaction ID hasn't been rolledback
+    //Returns Err if it has been rolledback
+    pub fn on_write_key(&self, key: &Key) -> Result<(), ()> {
         match self.rolledback_transactions.get(&key.txn_id())
             .map(|entry| entry.value().clone()) {
 
@@ -114,7 +121,7 @@ impl TransactionManager {
         active_transactions
     }
 
-    fn get_pending_transactions_to_rollback(entries: &Vec<TransactionLogEntry>) -> SkipMap<TxnId, Arc<Transaction>> {
+    fn get_pending_transactions_to_rollback_from_log_entries(entries: &Vec<TransactionLogEntry>) -> SkipMap<TxnId, Arc<Transaction>> {
         let mut rolledback_transactions: SkipMap<TxnId, Arc<Transaction>> = SkipMap::new();
 
         for entry in entries.iter() {
@@ -136,6 +143,9 @@ impl TransactionManager {
                         rolledback_transactions.remove(txn_id);
                     }
                 },
+                TransactionLogEntry::RolledbackActiveTransactionFailure(txn_id ) => {
+                    rolledback_transactions.remove(txn_id);
+                },
                 _ => {  },
             };
         }
@@ -143,7 +153,7 @@ impl TransactionManager {
         rolledback_transactions
     }
 
-    fn get_active_transactions(entries: &Vec<TransactionLogEntry>) -> (SkipSet<TxnId>, TxnId) {
+    fn get_active_transactions_from_log_entries(entries: &Vec<TransactionLogEntry>) -> (SkipSet<TxnId>, TxnId) {
         let mut active_transactions: SkipSet<TxnId> = SkipSet::new();
         let mut max_txn_id: TxnId = 0;
 
@@ -151,6 +161,7 @@ impl TransactionManager {
             max_txn_id = max(max_txn_id as usize, entry.txn_id());
 
             match *entry {
+                TransactionLogEntry::RolledbackActiveTransactionFailure(txn_id) => { active_transactions.remove(&txn_id); }
                 TransactionLogEntry::Start(txn_id) => { active_transactions.insert(txn_id); },
                 TransactionLogEntry::Commit(txn_id) => { active_transactions.remove(&txn_id); },
                 TransactionLogEntry::StartRollback(txn_id, _) => { active_transactions.remove(&txn_id); },
