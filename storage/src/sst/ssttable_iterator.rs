@@ -122,6 +122,7 @@ mod test {
     use std::sync::{Arc, Mutex};
     use std::sync::atomic::AtomicU8;
     use bytes::Bytes;
+    use crossbeam_skiplist::SkipSet;
     use serde_json::ser::CharEscape::Tab;
     use crate::sst::block::block_builder::BlockBuilder;
     use crate::key;
@@ -195,6 +196,7 @@ mod test {
         block_cache.put(2, block3);
 
         let sstable = Arc::new(SSTable{
+            active_txn_ids_written: SkipSet::new(),
             id: 1,
             bloom_filter: BloomFilter::new(&Vec::new(), 8),
             file: LsmFile::mock(),

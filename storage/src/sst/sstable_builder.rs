@@ -36,7 +36,7 @@ pub struct SSTableBuilder {
 }
 
 impl SSTableBuilder {
-    pub fn new(lsm_options: Arc<LsmOptions>, level: u32) -> SSTableBuilder {
+    pub fn create(lsm_options: Arc<LsmOptions>, level: u32) -> SSTableBuilder {
         SSTableBuilder {
             current_block_builder: BlockBuilder::new(lsm_options.clone()),
             level,

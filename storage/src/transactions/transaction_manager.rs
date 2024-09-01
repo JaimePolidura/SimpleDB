@@ -43,8 +43,8 @@ impl TransactionManager {
     pub fn get_active_transactions(&self) -> Vec<TxnId> {
         let mut active_transactions = Vec::new();
 
-        for active_transaction_id in self.active_transactions {
-            active_transactions.push(active_transaction_id);
+        for active_transaction_id in &self.active_transactions {
+            active_transactions.push(*active_transaction_id.value());
         }
 
         active_transactions

@@ -173,9 +173,9 @@ mod test {
         memtable3.set(&Transaction::none(), "e", &vec![3]);
 
         let mut merge_iterator: MergeIterator<MemtableIterator> = MergeIterator::create(vec![
-            Box::new(MemtableIterator::new(&memtable1, &Transaction::none())),
-            Box::new(MemtableIterator::new(&memtable2, &Transaction::none())),
-            Box::new(MemtableIterator::new(&memtable3, &Transaction::none()))
+            Box::new(MemtableIterator::create(&memtable1, &Transaction::none())),
+            Box::new(MemtableIterator::create(&memtable2, &Transaction::none())),
+            Box::new(MemtableIterator::create(&memtable3, &Transaction::none()))
         ]);
 
         assert!(merge_iterator.has_next());

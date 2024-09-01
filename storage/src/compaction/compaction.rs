@@ -30,7 +30,7 @@ pub enum CompactionTask {
 }
 
 impl Compaction {
-    pub fn new(
+    pub fn create(
         transaction_manager: Arc<TransactionManager>,
         lsm_options: Arc<LsmOptions>,
         sstables: Arc<SSTables>,

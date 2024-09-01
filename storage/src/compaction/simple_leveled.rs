@@ -46,14 +46,12 @@ pub(crate) fn start_simple_leveled_compaction(
     let sstables_id_in_level = sstables.get_sstables_id(level_to_compact);
 
     let mut iterator = sstables.iter(&vec![level_to_compact, level_to_compact + 1]);
-    let mut new_sstable_builder = Some(SSTableBuilder::new(
+    let mut new_sstable_builder = Some(SSTableBuilder::create(
         options.clone(), (level_to_compact + 1) as u32
     ));
     let mut new_sstables_id = Vec::new();
 
-    while iterator.has_next() {
-        iterator.next();
-
+    while iterator.next() {
         let key = iterator.key().clone();
 
         match transaction_manager.on_write_key(&key) {
@@ -66,7 +64,7 @@ pub(crate) fn start_simple_leveled_compaction(
                     let new_sstable_id: usize = sstables.flush_to_disk(new_sstable_builder.take().unwrap())?;
                     new_sstables_id.push(new_sstable_id);
 
-                    new_sstable_builder = Some(SSTableBuilder::new(
+                    new_sstable_builder = Some(SSTableBuilder::create(
                         options.clone(), (level_to_compact + 1) as u32
                     ));
                 }

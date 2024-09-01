@@ -66,7 +66,7 @@ impl MemTable {
             wal: UnsafeCell::new(Wal::create_mock(options.clone(), memtable_id)?),
             max_size_bytes: options.memtable_max_size_bytes,
             current_size_bytes: AtomicUsize::new(0),
-            state: UnsafeCell::new(MemtableState::New),
+            state: UnsafeCell::new(MemtableState::Active),
             data: Arc::new(SkipMap::new()),
             txn_ids_written: SkipSet::new(),
             memtable_id,
@@ -196,8 +196,8 @@ impl MemTable {
     }
 
     pub fn to_sst(self: &Arc<MemTable>, transaction_manager: &Arc<TransactionManager>) -> SSTableBuilder {
-        let mut memtable_iterator = MemtableIterator::new(&self, &Transaction::none());
-        let mut sstable_builder = SSTableBuilder::new(self.options.clone(), 0);
+        let mut memtable_iterator = MemtableIterator::create(&self, &Transaction::none());
+        let mut sstable_builder = SSTableBuilder::create(self.options.clone(), 0);
         sstable_builder.set_memtable_id(self.memtable_id);
 
         while memtable_iterator.next() {
@@ -259,7 +259,7 @@ pub struct MemtableIterator {
 }
 
 impl MemtableIterator {
-    pub fn new(memtable: &Arc<MemTable>, transaction: &Transaction) -> MemtableIterator {
+    pub fn create(memtable: &Arc<MemTable>, transaction: &Transaction) -> MemtableIterator {
         MemtableIterator {
             transaction: transaction.clone(),
             memtable: memtable.clone(),
@@ -268,38 +268,70 @@ impl MemtableIterator {
             current_key: None,
         }
     }
-}
 
-impl<'a> StorageIterator for MemtableIterator {
-    fn next(&mut self) -> bool {
-        let mut has_advanced = false;
-        if self.memtable.data.is_empty() {
-            return has_advanced;
+    fn move_to_next_key(&mut self) {
+        if self.n_elements_iterated == 0 {
+            return;
         }
+
+        match &self.current_key {
+            Some(last_key) => {
+                while let Some(next_entry) = self.memtable.data.lower_bound(Excluded(last_key)) {
+                    self.n_elements_iterated = self.n_elements_iterated + 1;
+
+                    if !next_entry.key().as_str().eq(last_key.as_str()) {
+                        self.current_value = Some(next_entry.value().clone());
+                        self.current_key = Some(next_entry.key().clone());
+                        break;
+                    }
+                }
+            },
+            None => {}
+        };
+    }
+
+    fn move_to_most_up_to_date_key(&mut self) -> bool {
+        let mut has_advanced = false;
 
         loop {
             match &self.current_key {
-                Some(prev_key) => {
-                    if let Some(next_entry) = self.memtable.data.lower_bound(Excluded(prev_key)) {
-                        self.n_elements_iterated = self.n_elements_iterated + 1;
-                        self.current_value = Some(next_entry.value().clone());
-                        self.current_key = Some(next_entry.key().clone());
+                Some(current_key) => {
+                    if let Some(next_entry) = self.memtable.data.lower_bound(Excluded(current_key)) {
+                        let next_key = next_entry.key();
 
-                        if self.transaction.can_read(next_entry.key()) {
+                        if current_key.as_str().eq(next_key.as_str()) && self.transaction.can_read(next_key) {
+                            self.n_elements_iterated = self.n_elements_iterated + 1;
+                            self.current_value = Some(next_entry.value().clone());
+                            self.current_key = Some(next_entry.key().clone());
                             has_advanced = true;
+                            continue;
                         }
                     }
-                },
+                }
                 None => {
                     self.current_value = Some(self.memtable.data.iter().next().expect("Illegal iterator state").value().clone());
                     self.current_key = Some(self.memtable.data.iter().next().expect("Illegal iterator state").key().clone());
                     self.n_elements_iterated = self.n_elements_iterated + 1;
                     has_advanced = true;
+                    continue;
                 }
             }
 
             return has_advanced;
         }
+    }
+}
+
+impl<'a> StorageIterator for MemtableIterator {
+    fn next(&mut self) -> bool {
+        if self.memtable.data.is_empty() {
+            return false;
+        }
+        if self.n_elements_iterated > 0 {
+            self.move_to_next_key();
+        }
+
+        self.move_to_most_up_to_date_key()
     }
 
     fn has_next(&self) -> bool {
@@ -325,12 +357,12 @@ mod test {
     use crate::key;
     use crate::lsm_options::LsmOptions;
     use crate::memtables::memtable::{MemTable, MemtableIterator};
-    use crate::transactions::transaction::Transaction;
+    use crate::transactions::transaction::{Transaction, TxnId};
     use crate::utils::storage_iterator::StorageIterator;
 
     #[test]
     fn get_set_delete() {
-        let memtable = MemTable::create_new(Arc::new(LsmOptions::default()), 0)
+        let memtable = MemTable::create_mock(Arc::new(LsmOptions::default()), 0)
             .unwrap();
         let value: Vec<u8> = vec![10, 12];
 
@@ -348,20 +380,24 @@ mod test {
     }
 
     #[test]
-    fn iterators() {
-        let memtable = Arc::new(MemTable::create_new(Arc::new(LsmOptions::default()), 0).unwrap());
+    fn iterators_readuncommited() {
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(LsmOptions::default()), 0).unwrap());
+        memtable.set_active();
         let value: Vec<u8> = vec![10, 12];
-        memtable.set(&Transaction::none(), "alberto", &value);
-        memtable.set(&Transaction::none(), "jaime", &value);
-        memtable.set(&Transaction::none(), "gonchi", &value);
-        memtable.set(&Transaction::none(), "wili", &value);
+        memtable.set(&transaction(1), "alberto", &value);
+        memtable.set(&transaction(2), "alberto", &value);
+        memtable.set(&transaction(3), "alberto", &value);
+        memtable.set(&transaction(1), "jaime", &value);
+        memtable.set(&transaction(5), "jaime", &value);
+        memtable.set(&transaction(1), "gonchi", &value);
+        memtable.set(&transaction(0), "wili", &value);
 
-        let mut iterator = MemtableIterator::new(&memtable, &Transaction::none());
+        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
 
         assert!(iterator.has_next());
         iterator.next();
 
-        assert!(iterator.key().eq(&key::new("alberto", 1)));
+        assert!(iterator.key().eq(&key::new("alberto", 3)));
 
         assert!(iterator.has_next());
         iterator.next();
@@ -369,12 +405,18 @@ mod test {
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::new("jaime", 1)));
+        assert!(iterator.key().eq(&key::new("jaime", 5)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::new("wili", 1)));
+        assert!(iterator.key().eq(&key::new("wili", 0)));
 
         assert!(!iterator.has_next());
+    }
+
+    fn transaction(txn_id: TxnId) -> Transaction {
+        let mut transaction = Transaction::none();
+        transaction.txn_id = txn_id;
+        transaction
     }
 }

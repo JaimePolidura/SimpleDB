@@ -38,14 +38,14 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Result<Lsm, LsmError> {
 
     let manifest = Arc::new(Manifest::new(lsm_options.clone())?);
     let sstables = Arc::new(SSTables::open(lsm_options.clone(), manifest.clone())?);
-    let memtables = Memtables::new(lsm_options.clone())?;
+    let memtables = Memtables::create_and_recover_from_wal(lsm_options.clone())?;
     let transaction_manager = Arc::new(TransactionManager::create_recover_from_log(lsm_options.clone())?);
 
     transaction_manager.get_active_transactions();
 
     let mut lsm = Lsm {
-        compaction: Compaction::new(transaction_manager.clone(), lsm_options.clone(), sstables.clone(),
-                                    manifest.clone()),
+        compaction: Compaction::create(transaction_manager.clone(), lsm_options.clone(), sstables.clone(),
+                                       manifest.clone()),
         options: lsm_options.clone(),
         sstables: sstables.clone(),
         transaction_manager,

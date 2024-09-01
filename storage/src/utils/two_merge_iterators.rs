@@ -109,8 +109,8 @@ mod test {
         memtable1.set(&Transaction::none(), "f", &vec![5]);
 
         let mut two_merge_iterators = TwoMergeIterator::new(
-            MemtableIterator::new(&memtable1, &Transaction::none()),
-            MemtableIterator::new(&memtable2, &Transaction::none()),
+            MemtableIterator::create(&memtable1, &Transaction::none()),
+            MemtableIterator::create(&memtable2, &Transaction::none()),
         );
 
         assert!(two_merge_iterators.has_next());

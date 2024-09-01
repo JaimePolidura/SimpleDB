@@ -17,7 +17,7 @@ pub struct Memtables {
 }
 
 impl Memtables {
-    pub fn new(
+    pub fn create_and_recover_from_wal(
         options: Arc<LsmOptions>
     ) -> Result<Memtables, LsmError> {
         let (wals, max_memtable_id) = Wal::get_persisted_wal_id(&options)?;
@@ -54,14 +54,14 @@ impl Memtables {
         unsafe {
             let mut memtable_iterators: Vec<Box<MemtableIterator>> = Vec::new();
 
-            memtable_iterators.push(Box::from(MemtableIterator::new(&(*self.current_memtable.load(Acquire)), transaction)));
+            memtable_iterators.push(Box::from(MemtableIterator::create(&(*self.current_memtable.load(Acquire)), transaction)));
 
             let inactive_memtables_rw_lock = &*self.inactive_memtables.load(Acquire);
             let inactive_memtables_rw_result = inactive_memtables_rw_lock.read().unwrap();
 
             for memtable in inactive_memtables_rw_result.iter() {
                 let cloned = Arc::clone(memtable);
-                memtable_iterators.push(Box::new(MemtableIterator::new(&cloned, transaction)));
+                memtable_iterators.push(Box::new(MemtableIterator::create(&cloned, transaction)));
             }
 
             MergeIterator::create(memtable_iterators)
@@ -184,6 +184,8 @@ impl Memtables {
         wals: Vec<Wal>,
     ) -> Result<Memtables, LsmError> {
         let current_memtable = MemTable::create_new(options.clone(), max_memtable_id + 1)?;
+        current_memtable.set_active();
+
         let mut memtables: Vec<Arc<MemTable>> = Vec::new();
         let next_memtable_id = max_memtable_id + 2;
 
