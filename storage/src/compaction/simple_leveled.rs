@@ -51,7 +51,9 @@ pub(crate) fn start_simple_leveled_compaction(
     ));
     let mut new_sstables_id = Vec::new();
 
-    while iterator.next() {
+    while iterator.has_next() {
+        iterator.next();
+
         let key = iterator.key().clone();
 
         match transaction_manager.on_write_key(&key) {

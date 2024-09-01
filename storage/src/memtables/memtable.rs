@@ -4,7 +4,7 @@ use std::ops::Bound::{Excluded, Included};
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use crossbeam_skiplist::{SkipList, SkipMap, SkipSet};
 use crate::key;
 use crate::key::Key;
@@ -233,7 +233,7 @@ impl MemTable {
         let current_state = unsafe { &*self.state.get() };
 
         match current_state {
-            MemtableState::Active | MemtableState::RecoveringFromWal => true,
+            Active | RecoveringFromWal => true,
             _ => false,
         }
     }
@@ -253,8 +253,6 @@ pub struct MemtableIterator {
     current_value: Option<Bytes>,
     current_key: Option<Key>,
 
-    n_elements_iterated: usize,
-
     transaction: Transaction,
 }
 
@@ -264,60 +262,91 @@ impl MemtableIterator {
             transaction: transaction.clone(),
             memtable: memtable.clone(),
             current_value: None,
-            n_elements_iterated: 0,
             current_key: None,
         }
     }
 
-    fn move_to_next_key(&mut self) {
-        if self.n_elements_iterated == 0 {
-            return;
-        }
+    //Sets current_key & current_value to the next key & value to be returned by the iterator
+    //Returns true if it found a key to be returned by the iterator
+    fn go_to_next_readble_key(&mut self) -> bool {
+        loop {
+            match self.move_to_different_key_string(&self.current_key) {
+                Some((next_key, next_value)) => {
+                    self.current_key = Some(next_key.clone());
+                    self.current_value = Some(next_value.clone());
 
-        match &self.current_key {
-            Some(last_key) => {
-                while let Some(next_entry) = self.memtable.data.lower_bound(Excluded(last_key)) {
-                    self.n_elements_iterated = self.n_elements_iterated + 1;
-
-                    if !next_entry.key().as_str().eq(last_key.as_str()) {
-                        self.current_value = Some(next_entry.value().clone());
-                        self.current_key = Some(next_entry.key().clone());
-                        break;
+                    match self.move_to_most_up_to_date_key_string(&next_key, &next_value) {
+                        Some((new_key, new_value)) => {
+                            self.current_value = Some(new_value);
+                            self.current_key = Some(new_key);
+                            return true;
+                        },
+                        None => continue
                     }
-                }
-            },
-            None => {}
-        };
+                },
+                None => { return false; }
+            };
+        }
     }
 
-    fn move_to_most_up_to_date_key(&mut self) -> bool {
-        let mut has_advanced = false;
+    //Moves current_key to the next key with different string
+    //Returns Some if the key was found
+    //Returns None if no key was found to be the next one (reached the end)
+    fn move_to_different_key_string(&self, current_key: &Option<Key>) -> Option<(Key, Bytes)> {
+        match &current_key {
+            Some(last_key) => {
+                let mut last_key = last_key.clone();
 
-        loop {
-            match &self.current_key {
-                Some(current_key) => {
-                    if let Some(next_entry) = self.memtable.data.lower_bound(Excluded(current_key)) {
-                        let next_key = next_entry.key();
+                while let Some(next_entry) = self.memtable.data.lower_bound(Excluded(&last_key)) {
+                    let next_key = next_entry.key().clone();
 
-                        if current_key.as_str().eq(next_key.as_str()) && self.transaction.can_read(next_key) {
-                            self.n_elements_iterated = self.n_elements_iterated + 1;
-                            self.current_value = Some(next_entry.value().clone());
-                            self.current_key = Some(next_entry.key().clone());
-                            has_advanced = true;
-                            continue;
-                        }
+                    if !next_key.as_str().eq(last_key.as_str()) {
+                        return Some((next_key, next_entry.value().clone()));
+                    } else {
+                        last_key = next_key;
                     }
                 }
-                None => {
-                    self.current_value = Some(self.memtable.data.iter().next().expect("Illegal iterator state").value().clone());
-                    self.current_key = Some(self.memtable.data.iter().next().expect("Illegal iterator state").key().clone());
-                    self.n_elements_iterated = self.n_elements_iterated + 1;
-                    has_advanced = true;
-                    continue;
-                }
+
+                None
+            },
+            None => self.memtable.data.iter().next().map(|entry| (entry.key().clone(), entry.value().clone()))
+        }
+    }
+
+    //Given a key "start_key", this function will set current_key to the key with the same string as "start_key" which
+    //is the most up-to-date readable by the current transaction
+    fn move_to_most_up_to_date_key_string(&self, start_key: &Key, start_value: &Bytes) -> Option<(Key, Bytes)> {
+        let mut current_key = start_key.clone();
+        let mut n_iterations_with_same_string_key = 0;
+        let mut has_advanced = false;
+        let mut selected_value: Option<Bytes> = None;
+        let mut selected_key: Option<Key> = None;
+
+
+        while let Some(next_entry) = self.memtable.data.lower_bound(Excluded(&current_key)) {
+            let next_key = next_entry.key();
+            if !current_key.as_str().eq(next_key.as_str()) {
+                break;
             }
 
-            return has_advanced;
+            n_iterations_with_same_string_key = n_iterations_with_same_string_key + 1;
+            current_key = next_entry.key().clone();
+
+            if self.transaction.can_read(next_key) {
+                selected_value = Some(next_entry.value().clone());
+                selected_key = Some(next_entry.key().clone());
+                has_advanced = true;
+            }
+        }
+
+        if !has_advanced && self.transaction.can_read(start_key) {
+            return Some((start_key.clone(), start_value.clone()))
+        }
+
+        if has_advanced {
+            Some((selected_key.take().unwrap(), selected_value.take().unwrap()))
+        } else {
+            None
         }
     }
 }
@@ -327,15 +356,31 @@ impl<'a> StorageIterator for MemtableIterator {
         if self.memtable.data.is_empty() {
             return false;
         }
-        if self.n_elements_iterated > 0 {
-            self.move_to_next_key();
-        }
 
-        self.move_to_most_up_to_date_key()
+        self.go_to_next_readble_key()
     }
 
     fn has_next(&self) -> bool {
-        self.n_elements_iterated < self.memtable.data.len()
+        if self.memtable.data.is_empty() {
+            return false;
+        }
+
+        let mut current_key = match &self.current_key {
+            Some(key) => key.clone(),
+            None => self.memtable.data.iter().next().unwrap().key().clone()
+        };
+
+        loop {
+            match self.move_to_different_key_string(&Some(current_key)) {
+                Some((next_key, next_value)) => {
+                    match self.move_to_most_up_to_date_key_string(&next_key, &next_value) {
+                        Some(_) => return true,
+                        None => current_key = next_key,
+                    };
+                }
+                None => return false,
+            }
+        }
     }
 
     fn key(&self) -> &Key {
@@ -358,10 +403,11 @@ mod test {
     use crate::lsm_options::LsmOptions;
     use crate::memtables::memtable::{MemTable, MemtableIterator};
     use crate::transactions::transaction::{Transaction, TxnId};
+    use crate::transactions::transaction_manager::IsolationLevel;
     use crate::utils::storage_iterator::StorageIterator;
 
     #[test]
-    fn get_set_delete() {
+    fn get_set_delete_no_transactions() {
         let memtable = MemTable::create_mock(Arc::new(LsmOptions::default()), 0)
             .unwrap();
         let value: Vec<u8> = vec![10, 12];
@@ -377,6 +423,32 @@ mod test {
         memtable.delete(&Transaction::none(), "nombre");
 
         assert!(memtable.get("nombre", &Transaction::none()).is_some());
+    }
+
+    #[test]
+    fn get_set_delete_transactions() {
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(LsmOptions::default()), 0).unwrap());
+        memtable.set_active();
+        memtable.set(&transaction(10), "aa", &vec![1]); //Cannot be read by the transaction, should be ignored
+        memtable.set(&transaction(1), "alberto", &vec![2]);
+        memtable.set(&transaction(2), "alberto", &vec![3]);
+        memtable.set(&transaction(3), "alberto", &vec![4]);
+        memtable.set(&transaction(1), "gonchi", &vec![5]);
+        memtable.set(&transaction(5), "javier", &vec![6]); //Cannot be read by the transaction, should be ignored
+        memtable.set(&transaction(1), "jaime", &vec![7]);
+        memtable.set(&transaction(5), "jaime", &vec![8]);
+        memtable.set(&transaction(0), "wili", &vec![9]);
+
+        let to_test = memtable.get("alberto", &transaction(2));
+        assert!(to_test.is_some());
+        assert!(to_test.unwrap().eq(&vec![3]));
+
+        let to_test = memtable.get("aa", &transaction(9));
+        assert!(to_test.is_none());
+
+        let to_test = memtable.get("jaime", &transaction(6));
+        assert!(to_test.is_some());
+        assert!(to_test.unwrap().eq(&vec![8]));
     }
 
     #[test]
@@ -414,8 +486,50 @@ mod test {
         assert!(!iterator.has_next());
     }
 
+    #[test]
+    fn iterators_snapshotisolation() {
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(LsmOptions::default()), 0).unwrap());
+        memtable.set_active();
+        let value: Vec<u8> = vec![10, 12];
+        memtable.set(&transaction(10), "aa", &value); //Cannot be read by the transaction, should be ignored
+        memtable.set(&transaction(1), "alberto", &value);
+        memtable.set(&transaction(2), "alberto", &value);
+        memtable.set(&transaction(3), "alberto", &value);
+        memtable.set(&transaction(1), "gonchi", &value);
+        memtable.set(&transaction(5), "javier", &value); //Cannot be read by the transaction, should be ignored
+        memtable.set(&transaction(1), "jaime", &value);
+        memtable.set(&transaction(5), "jaime", &value);
+        memtable.set(&transaction(0), "wili", &value);
+
+        let mut iterator = MemtableIterator::create(&memtable, &transaction_with_iso(3, IsolationLevel::SnapshotIsolation));
+
+        assert!(iterator.has_next());
+        iterator.next();
+
+        assert!(iterator.key().eq(&key::new("alberto", 3)));
+
+        assert!(iterator.has_next());
+        iterator.next();
+        assert!(iterator.key().eq(&key::new("gonchi", 1)));
+
+        assert!(iterator.has_next());
+        iterator.next();
+        assert!(iterator.key().eq(&key::new("jaime", 1)));
+
+        assert!(iterator.has_next());
+        iterator.next();
+        assert!(iterator.key().eq(&key::new("wili", 0)));
+    }
+
     fn transaction(txn_id: TxnId) -> Transaction {
         let mut transaction = Transaction::none();
+        transaction.txn_id = txn_id;
+        transaction
+    }
+
+    fn transaction_with_iso(txn_id: TxnId, isolation_level: IsolationLevel) -> Transaction {
+        let mut transaction = Transaction::none();
+        transaction.isolation_level = isolation_level;
         transaction.txn_id = txn_id;
         transaction
     }
