@@ -13,11 +13,12 @@ fn main() {
         .build())
         .unwrap();
 
-    transactions(&mut lsm);
-    //write(&mut lsm);
+    // transactions(&mut lsm);
+    write(&mut lsm);
     //read(&mut lsm);
 }
 
+//"Resources" folder should be cleared before running this function
 fn transactions(lsm: &mut lsm::Lsm) {
     let transaction1 = lsm.start_transaction();
     let transaction2 = lsm.start_transaction();

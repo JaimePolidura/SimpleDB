@@ -10,6 +10,7 @@ use crate::lsm_options::LsmOptions;
 use crate::sst::block_metadata::BlockMetadata;
 use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
 use crate::transactions::transaction::TxnId;
+use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::bloom_filter::BloomFilter;
 use crate::utils::lsm_file::{LsmFile, LsmFileMode};
 use crate::utils::utils;
@@ -33,10 +34,12 @@ pub struct SSTableBuilder {
     level: u32,
 
     memtable_id: Option<usize>,
+
+    transaction_manager: Arc<TransactionManager>
 }
 
 impl SSTableBuilder {
-    pub fn create(lsm_options: Arc<LsmOptions>, level: u32) -> SSTableBuilder {
+    pub fn create(lsm_options: Arc<LsmOptions>, transaction_manager: Arc<TransactionManager>, level: u32) -> SSTableBuilder {
         SSTableBuilder {
             current_block_builder: BlockBuilder::new(lsm_options.clone()),
             level,
@@ -49,6 +52,7 @@ impl SSTableBuilder {
             active_txn_ids_written: SkipSet::new(),
             first_key: None,
             last_key: None,
+            transaction_manager,
             lsm_options,
         }
     }
@@ -74,7 +78,9 @@ impl SSTableBuilder {
 
         self.key_hashes.push(utils::hash(key.as_bytes()));
 
-        self.active_txn_ids_written.insert(key.txn_id());
+        if self.transaction_manager.is_active(key.txn_id()) {
+            self.active_txn_ids_written.insert(key.txn_id());
+        }
 
         match self.current_block_builder.add_entry(key, value) {
             Err(_) => self.build_current_block(),

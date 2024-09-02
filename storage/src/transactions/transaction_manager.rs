@@ -111,6 +111,10 @@ impl TransactionManager {
         }
     }
 
+    pub fn is_active(&self, txn_id: TxnId) -> bool {
+        self.active_transactions.contains(&txn_id)
+    }
+
     fn copy_active_transactions(&self) -> HashSet<TxnId> {
         let mut active_transactions: HashSet<TxnId> = HashSet::new();
 

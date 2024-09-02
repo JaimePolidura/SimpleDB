@@ -53,7 +53,7 @@ fn do_tiered_compaction(
     let levels_id_to_compact: Vec<usize> = (0..max_level_id_to_compact).into_iter().collect();
     let mut iterator = sstables.iter(&levels_id_to_compact);
     let mut new_sstable_builder = Some(SSTableBuilder::create(
-        options.clone(), new_level as u32
+        options.clone(), transaction_manager.clone(), new_level as u32
     ));
 
     while iterator.has_next() {
@@ -69,7 +69,9 @@ fn do_tiered_compaction(
                 if new_sstable_builder.as_ref().unwrap().estimated_size_bytes() > options.sst_size_bytes {
                     sstables.flush_to_disk(new_sstable_builder.take().unwrap())?;
 
-                    new_sstable_builder = Some(SSTableBuilder::create(options.clone(), new_level as u32));
+                    new_sstable_builder = Some(
+                        SSTableBuilder::create(options.clone(), transaction_manager.clone(), new_level as u32)
+                    );
                 }
             },
             Err(_) => {}

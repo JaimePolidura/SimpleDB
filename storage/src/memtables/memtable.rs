@@ -197,7 +197,7 @@ impl MemTable {
 
     pub fn to_sst(self: &Arc<MemTable>, transaction_manager: &Arc<TransactionManager>) -> SSTableBuilder {
         let mut memtable_iterator = MemtableIterator::create(&self, &Transaction::none());
-        let mut sstable_builder = SSTableBuilder::create(self.options.clone(), 0);
+        let mut sstable_builder = SSTableBuilder::create(self.options.clone(), transaction_manager.clone(), 0);
         sstable_builder.set_memtable_id(self.memtable_id);
 
         while memtable_iterator.next() {

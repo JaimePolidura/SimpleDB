@@ -47,7 +47,7 @@ pub(crate) fn start_simple_leveled_compaction(
 
     let mut iterator = sstables.iter(&vec![level_to_compact, level_to_compact + 1]);
     let mut new_sstable_builder = Some(SSTableBuilder::create(
-        options.clone(), (level_to_compact + 1) as u32
+        options.clone(), transaction_manager.clone(), (level_to_compact + 1) as u32
     ));
     let mut new_sstables_id = Vec::new();
 
@@ -67,7 +67,7 @@ pub(crate) fn start_simple_leveled_compaction(
                     new_sstables_id.push(new_sstable_id);
 
                     new_sstable_builder = Some(SSTableBuilder::create(
-                        options.clone(), (level_to_compact + 1) as u32
+                        options.clone(), transaction_manager.clone(), (level_to_compact + 1) as u32
                     ));
                 }
             },
