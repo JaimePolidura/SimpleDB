@@ -2,6 +2,7 @@ use crate::manifest::manifest::ManifestOperationContent;
 use std::fmt::{format, Debug, Formatter};
 use std::string::FromUtf8Error;
 use std::path::PathBuf;
+use crate::keyspace::keyspace::KeyspaceId;
 
 pub enum DecodeErrorType {
     CorruptedCrc(u32, u32), //Expected crc, actual crc
@@ -26,6 +27,9 @@ pub enum SSTableCorruptedPart {
 }
 
 pub enum LsmError {
+    //Keyspaces
+    KeyspaceNotFound(KeyspaceId),
+
     //Wal errors
     CannotCreateWal(usize, std::io::Error),
     CannotWriteWalEntry(usize, std::io::Error),
@@ -126,6 +130,9 @@ impl Debug for LsmError {
             LsmError::CannotResetTransacionLog(io_error) => {
                 write!(f, "Cannot reset transaction log. Error: {}", io_error)
             }
+            LsmError::KeyspaceNotFound(keyspace_id) => {
+                write!(f, "Keyspace with ID {} not found", keyspace_id)
+            },
             LsmError::Internal => {
                 panic!("This error shoudnt be returned to the final user!! Invalid code path");
             }
