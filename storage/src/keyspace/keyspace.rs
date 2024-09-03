@@ -1,6 +1,5 @@
-use std::sync::Arc;
 use crate::compaction::compaction::{Compaction, CompactionTask};
-use crate::lsm::{LsmIterator, WriteBatch};
+use crate::lsm::LsmIterator;
 use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
@@ -11,6 +10,7 @@ use crate::sst::sstables::SSTables;
 use crate::transactions::transaction::{Transaction, TxnId};
 use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
 use crate::utils::two_merge_iterators::TwoMergeIterator;
+use std::sync::Arc;
 
 pub type KeyspaceId = u16;
 
@@ -30,9 +30,9 @@ impl Keyspace {
         transaction_manager: Arc<TransactionManager>,
         lsm_options: Arc<LsmOptions>
     ) -> Result<Arc<Keyspace>, LsmError> {
-        let manifest = Arc::new(Manifest::create(lsm_options.clone())?);
-        let sstables = Arc::new(SSTables::open(lsm_options.clone(), manifest.clone())?);
-        let memtables = Memtables::create_and_recover_from_wal(lsm_options.clone())?;
+        let manifest = Arc::new(Manifest::create(lsm_options.clone(), keyspace_id)?);
+        let sstables = Arc::new(SSTables::open(lsm_options.clone(), keyspace_id, manifest.clone())?);
+        let memtables = Memtables::create_and_recover_from_wal(lsm_options.clone(), keyspace_id)?;
         let compaction =  Compaction::create(transaction_manager.clone(), lsm_options.clone(),
             sstables.clone(), manifest.clone());
 

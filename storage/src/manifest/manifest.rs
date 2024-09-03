@@ -6,16 +6,18 @@ use std::sync::atomic::Ordering::Relaxed;
 use bytes::{Buf, BufMut};
 use serde::{Deserialize, Deserializer, Serialize};
 use crate::compaction::compaction::CompactionTask;
+use crate::keyspace::keyspace::KeyspaceId;
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
 use crate::lsm_error::LsmError::{CannotCreateManifest, CannotDecodeManifest, CannotReadManifestOperations, CannotResetManifest};
 use crate::lsm_options::LsmOptions;
 use crate::utils::lsm_file::{LsmFile, LsmFileMode};
-use crate::utils::utils;
+use crate::utils::{lsm_files, utils};
 
 pub struct Manifest {
     file: Mutex<LsmFile>,
     last_manifest_record_id: AtomicUsize,
-    options: Arc<LsmOptions>
+    options: Arc<LsmOptions>,
+    keyspace_id: KeyspaceId
 }
 
 #[derive(Serialize, Deserialize)]
@@ -38,11 +40,12 @@ pub struct MemtableFlushManifestOperation {
 }
 
 impl Manifest {
-    pub fn create(options: Arc<LsmOptions>) -> Result<Manifest, LsmError> {
-        match LsmFile::open(Self::manifest_path(&options).as_path(), LsmFileMode::AppendOnly) {
+    pub fn create(options: Arc<LsmOptions>, keyspace_id: KeyspaceId) -> Result<Manifest, LsmError> {
+        match LsmFile::open(Self::manifest_path(&options, keyspace_id).as_path(), LsmFileMode::AppendOnly) {
             Ok(file) => Ok(Manifest {
                 last_manifest_record_id: AtomicUsize::new(0),
                 file: Mutex::new(file),
+                keyspace_id,
                 options
             }),
             Err(e) => Err(CannotCreateManifest(e))
@@ -68,7 +71,7 @@ impl Manifest {
     }
 
     fn clear_manifest(&self) -> Result<(), LsmError> {
-        let path = Self::manifest_path(&self.options);
+        let path = Self::manifest_path(&self.options, self.keyspace_id);
         let mut file = LsmFile::open(path.as_path(), LsmFileMode::RandomWrites)
             .map_err(|e| CannotResetManifest(e))?;
 
@@ -173,9 +176,7 @@ impl Manifest {
         }
     }
 
-    fn manifest_path(options: &Arc<LsmOptions>) -> PathBuf {
-        let mut path_buf = PathBuf::from(&options.base_path);
-        path_buf.push("MANIFEST");
-        path_buf
+    fn manifest_path(options: &Arc<LsmOptions>, keyspace_id: KeyspaceId) -> PathBuf {
+        lsm_files::get_path(options, keyspace_id, "MANIFEST")
     }
 }

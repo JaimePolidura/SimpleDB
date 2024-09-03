@@ -6,13 +6,14 @@ use std::sync::Arc;
 use bytes::{Buf, BufMut, Bytes};
 use crate::key;
 use crate::key::Key;
+use crate::keyspace::keyspace::KeyspaceId;
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
 use crate::lsm_error::LsmError::{CannotCreateWal, CannotDecodeWal, CannotReadWalEntries, CannotReadWalFiles, CannotWriteWalEntry};
 use crate::lsm_options::{DurabilityLevel, LsmOptions};
 use crate::memtables::memtable::MemtableId;
 use crate::transactions::transaction::TxnId;
 use crate::utils::lsm_file::{LsmFile, LsmFileMode};
-use crate::utils::utils;
+use crate::utils::{lsm_files, utils};
 
 pub struct Wal {
     lsm_options: Arc<LsmOptions>,
@@ -26,9 +27,9 @@ pub(crate) struct WalEntry {
 }
 
 impl Wal {
-    pub fn create(lsm_options: Arc<LsmOptions>, memtable_id: MemtableId) -> Result<Wal, LsmError> {
+    pub fn create(lsm_options: Arc<LsmOptions>, keyspace_id: KeyspaceId, memtable_id: MemtableId) -> Result<Wal, LsmError> {
         Ok(Wal {
-            file: LsmFile::open(Self::to_wal_file_path(&lsm_options, memtable_id).as_path(), LsmFileMode::AppendOnly)
+            file: LsmFile::open(Self::to_wal_file_path(&lsm_options, memtable_id, keyspace_id).as_path(), LsmFileMode::AppendOnly)
                 .map_err(|e| CannotCreateWal(memtable_id, e))?,
             lsm_options,
             memtable_id,
@@ -171,10 +172,8 @@ impl Wal {
         file.file_name().to_str().unwrap().starts_with("wal-")
     }
 
-    fn to_wal_file_path(lsm_options: &Arc<LsmOptions>, memtable_id: MemtableId) -> PathBuf {
-        let mut path_buff = PathBuf::from(&lsm_options.base_path);
+    fn to_wal_file_path(lsm_options: &Arc<LsmOptions>, memtable_id: MemtableId, keyspace_id: KeyspaceId) -> PathBuf {
         let wal_file_name = format!("wal-{}", memtable_id);
-        path_buff.push(wal_file_name);
-        path_buff
+        lsm_files::get_path(lsm_options, keyspace_id, wal_file_name.as_str())
     }
 }

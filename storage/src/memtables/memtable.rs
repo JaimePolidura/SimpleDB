@@ -8,6 +8,7 @@ use bytes::{Buf, Bytes};
 use crossbeam_skiplist::{SkipList, SkipMap, SkipSet};
 use crate::key;
 use crate::key::Key;
+use crate::keyspace::keyspace::KeyspaceId;
 use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::MemtableState::{Active, Flushed, Flusing, Inactive, RecoveringFromWal};
@@ -44,10 +45,11 @@ enum MemtableState {
 impl MemTable {
     pub fn create_new(
         options: Arc<LsmOptions>,
-        memtable_id: MemtableId
+        memtable_id: MemtableId,
+        keyspace_id: KeyspaceId
     ) -> Result<MemTable, LsmError> {
         Ok(MemTable {
-            wal: UnsafeCell::new(Wal::create(options.clone(), memtable_id)?),
+            wal: UnsafeCell::new(Wal::create(options.clone(), keyspace_id, memtable_id)?),
             max_size_bytes: options.memtable_max_size_bytes,
             current_size_bytes: AtomicUsize::new(0),
             state: UnsafeCell::new(MemtableState::New),

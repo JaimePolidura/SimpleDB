@@ -10,24 +10,27 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
+use crate::keyspace::keyspace::KeyspaceId;
 use crate::lsm_error::LsmError;
 use crate::lsm_error::LsmError::CannotReadSSTablesFiles;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::transactions::transaction::{Transaction, TxnId};
+use crate::utils::lsm_files;
 
 pub struct SSTables {
     //For each level one index entry
     sstables: Vec<RwLock<Vec<Arc<SSTable>>>>,
+    keyspace_id: KeyspaceId,
     next_sstable_id: AtomicUsize,
     lsm_options: Arc<LsmOptions>,
     manifest: Arc<Manifest>,
     n_current_levels: usize,
-    path_buff: PathBuf
 }
 
 impl SSTables {
     pub fn open(
         lsm_options: Arc<LsmOptions>,
+        keyspace_id: KeyspaceId,
         manifest: Arc<Manifest>
     ) -> Result<SSTables, LsmError> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
@@ -36,9 +39,9 @@ impl SSTables {
         }
         let (sstables, max_ssatble_id) = Self::load_sstables(&lsm_options)?;
 
-        Ok(SSTables{
+        Ok(SSTables {
+            keyspace_id,
             next_sstable_id: AtomicUsize::new(max_ssatble_id + 1),
-            path_buff: PathBuf::new(),
             n_current_levels: 0,
             lsm_options,
             sstables,
@@ -256,7 +259,7 @@ impl SSTables {
     fn do_flush_to_disk(&self, sstable_builder: SSTableBuilder, sstable_id: SSTableId) -> Result<usize, LsmError> {
         let sstable_build_result = sstable_builder.build(
             sstable_id,
-            self.to_sstable_file_path(sstable_id).as_path(),
+            self.to_sstable_file_path(sstable_id, self.keyspace_id).as_path(),
         );
 
         match sstable_build_result {
@@ -271,11 +274,8 @@ impl SSTables {
         }
     }
 
-    fn to_sstable_file_path(&self, sstable_id: SSTableId) -> PathBuf {
-        //SSTable file path
-        let mut path_buff = PathBuf::from(self.lsm_options.base_path.to_string());
-        path_buff.push(to_sstable_file_name(sstable_id));
-        path_buff
+    fn to_sstable_file_path(&self, sstable_id: SSTableId, keyspace_id: KeyspaceId) -> PathBuf {
+        lsm_files::get_path(&self.lsm_options, keyspace_id, to_sstable_file_name(sstable_id).as_str())
     }
 
     pub fn calculate_space_amplificacion(&self) -> usize {

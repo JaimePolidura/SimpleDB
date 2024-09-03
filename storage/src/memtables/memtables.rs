@@ -1,6 +1,7 @@
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
+use crate::keyspace::keyspace::KeyspaceId;
 use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::{MemTable, MemtableId, MemtableIterator};
@@ -11,21 +12,22 @@ use crate::utils::merge_iterator::MergeIterator;
 pub struct Memtables {
     inactive_memtables: AtomicPtr<RwLock<Vec<Arc<MemTable>>>>,
     current_memtable: AtomicPtr<Arc<MemTable>>,
-
+    keyspace_id: KeyspaceId,
     next_memtable_id: AtomicUsize,
     options: Arc<LsmOptions>,
 }
 
 impl Memtables {
     pub fn create_and_recover_from_wal(
-        options: Arc<LsmOptions>
+        options: Arc<LsmOptions>,
+        keyspace_id: KeyspaceId
     ) -> Result<Memtables, LsmError> {
         let (wals, max_memtable_id) = Wal::get_persisted_wal_id(&options)?;
 
         if !wals.is_empty() {
-            Self::recover_memtables_from_wal(options, max_memtable_id, wals)
+            Self::recover_memtables_from_wal(options, max_memtable_id, wals, keyspace_id)
         } else {
-            Self::create_memtables_no_wal(options)
+            Self::create_memtables_no_wal(options, keyspace_id)
         }
     }
 
@@ -144,7 +146,8 @@ impl Memtables {
     //This might be called by concurrently, it might fail returing None
     fn set_current_memtable_as_inactive(&self) -> Option<Arc<MemTable>> {
         let new_memtable_id = self.next_memtable_id.fetch_add(1, Relaxed) as MemtableId;
-        let new_memtable = MemTable::create_new(self.options.clone(), new_memtable_id).expect("Failed to create memtable");
+        let new_memtable = MemTable::create_new(self.options.clone(), new_memtable_id, self.keyspace_id)
+            .expect("Failed to create memtable");
         new_memtable.set_active();
         let new_memtable = Box::into_raw(Box::new(Arc::new(new_memtable)));
         let current_memtable = self.current_memtable.load(Acquire);
@@ -182,8 +185,9 @@ impl Memtables {
         options: Arc<LsmOptions>,
         max_memtable_id: usize,
         wals: Vec<Wal>,
+        keyspace_id: KeyspaceId
     ) -> Result<Memtables, LsmError> {
-        let current_memtable = MemTable::create_new(options.clone(), max_memtable_id + 1)?;
+        let current_memtable = MemTable::create_new(options.clone(), max_memtable_id + 1, keyspace_id)?;
         current_memtable.set_active();
 
         let mut memtables: Vec<Arc<MemTable>> = Vec::new();
@@ -201,20 +205,23 @@ impl Memtables {
             inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(memtables)))),
             current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(current_memtable)))),
             next_memtable_id: AtomicUsize::new(next_memtable_id),
+            keyspace_id,
             options
         })
     }
 
     fn create_memtables_no_wal(
-        options: Arc<LsmOptions>
+        options: Arc<LsmOptions>,
+        keyspace_id: KeyspaceId
     ) -> Result<Memtables, LsmError> {
-        let current_memtable = MemTable::create_new(options.clone(), 0)?;
+        let current_memtable = MemTable::create_new(options.clone(), 0, keyspace_id)?;
         current_memtable.set_active();
 
         Ok(Memtables {
             inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(Vec::with_capacity(options.max_memtables_inactive))))),
             current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(current_memtable)))),
             next_memtable_id: AtomicUsize::new(1),
+            keyspace_id,
             options
         })
     }

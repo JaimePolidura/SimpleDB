@@ -5,3 +5,4 @@ pub mod utils;
 pub mod lsm_file;
 pub mod bloom_filter;
 pub mod two_merge_iterators;
+pub mod lsm_files;
