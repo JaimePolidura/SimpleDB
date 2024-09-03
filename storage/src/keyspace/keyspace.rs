@@ -122,7 +122,7 @@ impl Keyspace {
     }
 
     //TODO If lsm engine crash during recovering from manifest, we will likely lose some operations
-    pub fn recover_from_manifest(&mut self) {
+    pub fn recover_from_manifest(&self) {
         let manifest_operations = self.manifest.read_uncompleted_operations()
             .expect("Cannot read Manifest");
 
@@ -141,7 +141,7 @@ impl Keyspace {
         self.compaction.compact(compaction);
     }
 
-    fn restart_memtable_flush(&mut self, memtable_flush: MemtableFlushManifestOperation) {
+    fn restart_memtable_flush(&self, memtable_flush: MemtableFlushManifestOperation) {
         //If it contains the SSTable, it means the memtable flush was completed before marking the operation as completed
         if !self.sstables.contains_sstable_id(memtable_flush.sstable_id) {
             let memtable_to_flush = self.memtables.get_memtable_to_flush(memtable_flush.memtable_id);

@@ -104,7 +104,7 @@ impl Memtables {
         }
     }
 
-    pub fn get_memtable_to_flush(&mut self, memtable_id: usize) -> Option<Arc<MemTable>> {
+    pub fn get_memtable_to_flush(&self, memtable_id: usize) -> Option<Arc<MemTable>> {
         unsafe {
             let current_memtable = (*self.current_memtable.load(Acquire)).clone();
             if current_memtable.get_id() == memtable_id {
