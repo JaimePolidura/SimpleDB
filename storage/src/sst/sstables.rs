@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
-use crate::keyspace::keyspace::KeyspaceId;
+use crate::lsm::KeyspaceId;
 use crate::lsm_error::LsmError;
 use crate::lsm_error::LsmError::CannotReadSSTablesFiles;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
@@ -37,7 +37,7 @@ impl SSTables {
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
         }
-        let (sstables, max_ssatble_id) = Self::load_sstables(&lsm_options)?;
+        let (sstables, max_ssatble_id) = Self::load_sstables(&lsm_options, keyspace_id)?;
 
         Ok(SSTables {
             keyspace_id,
@@ -49,17 +49,20 @@ impl SSTables {
         })
     }
 
-    fn load_sstables(lsm_options: &Arc<LsmOptions>) -> Result<(Vec<RwLock<Vec<Arc<SSTable>>>>, SSTableId), LsmError> {
+    fn load_sstables(
+        lsm_options: &Arc<LsmOptions>,
+        keyspace_id: KeyspaceId
+    ) -> Result<(Vec<RwLock<Vec<Arc<SSTable>>>>, SSTableId), LsmError> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
         }
 
-        let path = PathBuf::from(&lsm_options.base_path);
+        let path = lsm_files::get_keyspace_directory(lsm_options, keyspace_id);
         let path = path.as_path();
         let mut max_sstable_id: SSTableId = 0;
 
-        for file in fs::read_dir(path).map_err(|e| CannotReadSSTablesFiles(e))? {
+        for file in fs::read_dir(path).map_err(|e| CannotReadSSTablesFiles(keyspace_id, e))? {
             let file = file.unwrap();
 
             if !is_sstable_file(&file) {
@@ -70,7 +73,7 @@ impl SSTables {
                 println!("Loading SSTable with ID: {}", sstable_id);
 
                 let sstable = SSTable::from_file(
-                    sstable_id, file.path().as_path(), lsm_options.clone()
+                    sstable_id, keyspace_id, file.path().as_path(), lsm_options.clone()
                 )?;
 
                 if sstable.state.load(Acquire) != SSTABLE_ACTIVE {
@@ -164,7 +167,7 @@ impl SSTables {
         for lock_sstables_level in &self.sstables {
             let read_lock_result = lock_sstables_level.read().unwrap();
             for sstable_in_level in read_lock_result.iter() {
-                if sstable_in_level.id == sstable_id {
+                if sstable_in_level.sstable_id == sstable_id {
                     return true;
                 }
             }
@@ -182,7 +185,7 @@ impl SSTables {
 
                 for (current_index, current_sstable) in sstables_in_level.iter().enumerate() {
                     for sstable_to_delete in sstables_id.iter() {
-                        if *sstable_to_delete == current_sstable.id {
+                        if *sstable_to_delete == current_sstable.sstable_id {
                             indexes_to_remove.push(current_index);
                         }
                     }
@@ -220,7 +223,7 @@ impl SSTables {
         match self.sstables.get(level) {
             Some(sstables) => sstables.read().unwrap()
                 .iter()
-                .map(|it| it.id)
+                .map(|it| it.sstable_id)
                 .collect(),
             None => Vec::new(),
         }
@@ -275,7 +278,7 @@ impl SSTables {
     }
 
     fn to_sstable_file_path(&self, sstable_id: SSTableId, keyspace_id: KeyspaceId) -> PathBuf {
-        lsm_files::get_path(&self.lsm_options, keyspace_id, to_sstable_file_name(sstable_id).as_str())
+        lsm_files::get_keyspace_file(&self.lsm_options, keyspace_id, to_sstable_file_name(sstable_id).as_str())
     }
 
     pub fn calculate_space_amplificacion(&self) -> usize {

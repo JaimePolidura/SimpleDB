@@ -1,7 +1,7 @@
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
-use crate::keyspace::keyspace::KeyspaceId;
+use crate::lsm::KeyspaceId;
 use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::{MemTable, MemtableId, MemtableIterator};
@@ -22,7 +22,7 @@ impl Memtables {
         options: Arc<LsmOptions>,
         keyspace_id: KeyspaceId
     ) -> Result<Memtables, LsmError> {
-        let (wals, max_memtable_id) = Wal::get_persisted_wal_id(&options)?;
+        let (wals, max_memtable_id) = Wal::get_persisted_wal_id(&options, keyspace_id)?;
 
         if !wals.is_empty() {
             Self::recover_memtables_from_wal(options, max_memtable_id, wals, keyspace_id)
@@ -195,7 +195,7 @@ impl Memtables {
 
         for wal in wals {
             let memtable_id = wal.get_memtable_id();
-            let mut memtable_created = MemTable::create_and_recover_from_wal(options.clone(), memtable_id, wal)?;
+            let mut memtable_created = MemTable::create_and_recover_from_wal(options.clone(), memtable_id, keyspace_id, wal)?;
 
             memtable_created.set_inactive();
             memtables.push(Arc::new(memtable_created));

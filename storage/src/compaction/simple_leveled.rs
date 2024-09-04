@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
+use crate::lsm::KeyspaceId;
 use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::sst::sstable_builder::SSTableBuilder;
@@ -34,7 +35,8 @@ pub(crate) fn start_simple_leveled_compaction(
     compaction_task: SimpleLeveledCompactionTask,
     transaction_manager: &Arc<TransactionManager>,
     options: &Arc<LsmOptions>,
-    sstables: &Arc<SSTables>
+    sstables: &Arc<SSTables>,
+    keyspace_id: KeyspaceId
 ) -> Result<(), LsmError> {
     let level_to_compact = compaction_task.level;
 
@@ -47,7 +49,7 @@ pub(crate) fn start_simple_leveled_compaction(
 
     let mut iterator = sstables.iter(&vec![level_to_compact, level_to_compact + 1]);
     let mut new_sstable_builder = Some(SSTableBuilder::create(
-        options.clone(), transaction_manager.clone(), (level_to_compact + 1) as u32
+        options.clone(), transaction_manager.clone(), keyspace_id, (level_to_compact + 1) as u32
     ));
     let mut new_sstables_id = Vec::new();
 
@@ -67,7 +69,7 @@ pub(crate) fn start_simple_leveled_compaction(
                     new_sstables_id.push(new_sstable_id);
 
                     new_sstable_builder = Some(SSTableBuilder::create(
-                        options.clone(), transaction_manager.clone(), (level_to_compact + 1) as u32
+                        options.clone(), transaction_manager.clone(), keyspace_id, (level_to_compact + 1) as u32
                     ));
                 }
             },

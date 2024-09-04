@@ -2,7 +2,9 @@ use crate::manifest::manifest::ManifestOperationContent;
 use std::fmt::{format, Debug, Formatter};
 use std::string::FromUtf8Error;
 use std::path::PathBuf;
-use crate::keyspace::keyspace::KeyspaceId;
+use crate::lsm::KeyspaceId;
+use crate::memtables::memtable::MemtableId;
+use crate::sst::sstable::SSTableId;
 
 pub enum DecodeErrorType {
     CorruptedCrc(u32, u32), //Expected crc, actual crc
@@ -29,28 +31,31 @@ pub enum SSTableCorruptedPart {
 pub enum LsmError {
     //Keyspaces
     KeyspaceNotFound(KeyspaceId),
+    CannotReadKeyspacesDirectories(std::io::Error),
+    CannotReadKeyspaceFile(KeyspaceId, std::io::Error),
+    CannotCreateKeyspaceDirectory(KeyspaceId, std::io::Error),
 
     //Wal errors
-    CannotCreateWal(usize, std::io::Error),
-    CannotWriteWalEntry(usize, std::io::Error),
-    CannotReadWalEntries(usize, std::io::Error),
-    CannotReadWalFiles(std::io::Error),
-    CannotDecodeWal(usize, DecodeError),
+    CannotCreateWal(KeyspaceId, MemtableId, std::io::Error),
+    CannotWriteWalEntry(KeyspaceId, MemtableId, std::io::Error),
+    CannotReadWalEntries(KeyspaceId, MemtableId, std::io::Error),
+    CannotReadWalFiles(KeyspaceId, std::io::Error),
+    CannotDecodeWal(KeyspaceId, MemtableId, DecodeError),
 
     //Manifest errors
-    CannotCreateManifest(std::io::Error),
-    CannotWriteManifestOperation(ManifestOperationContent, std::io::Error),
-    CannotReadManifestOperations(std::io::Error),
-    CannotDecodeManifest(DecodeError),
-    CannotResetManifest(std::io::Error),
+    CannotCreateManifest(KeyspaceId, std::io::Error),
+    CannotWriteManifestOperation(KeyspaceId, ManifestOperationContent, std::io::Error),
+    CannotReadManifestOperations(KeyspaceId, std::io::Error),
+    CannotDecodeManifest(KeyspaceId, DecodeError),
+    CannotResetManifest(KeyspaceId, std::io::Error),
 
     //SSTable errors
-    CannotOpenSSTableFile(usize, std::io::Error),
-    CannotReadSSTableFile(usize, std::io::Error),
-    CannotReadSSTablesFiles(std::io::Error),
-    CannotDecodeSSTable(usize, SSTableCorruptedPart, DecodeError),
-    CannotDeleteSSTable(usize, std::io::Error),
-    CannotCreateSSTableFile(usize, std::io::Error),
+    CannotOpenSSTableFile(KeyspaceId, SSTableId, std::io::Error),
+    CannotReadSSTableFile(KeyspaceId, SSTableId, std::io::Error),
+    CannotReadSSTablesFiles(KeyspaceId, std::io::Error),
+    CannotDecodeSSTable(KeyspaceId, SSTableId, SSTableCorruptedPart, DecodeError),
+    CannotDeleteSSTable(KeyspaceId, SSTableId, std::io::Error),
+    CannotCreateSSTableFile(KeyspaceId, SSTableId, std::io::Error),
 
     //Transaction log errors
     CannotCreateTransactionLog(std::io::Error),
@@ -67,50 +72,50 @@ pub enum LsmError {
 impl Debug for LsmError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            LsmError::CannotCreateWal(memtable_id, io_error) => {
-                write!(f, "Cannot create WAL file. Memtable ID: {}. IO Error: {}", memtable_id, io_error)
+            LsmError::CannotCreateWal(keyspace_id, memtable_id, io_error) => {
+                write!(f, "Cannot create WAL file. Memtable ID: {}. IO Error: {}. Keyspace ID: {}", memtable_id, io_error, keyspace_id)
             }
-            LsmError::CannotWriteWalEntry(memtable_id, io_error) => {
-                write!(f, "Cannot write WAL entry. Memtable ID: {}. IO Error: {}", memtable_id, io_error)
+            LsmError::CannotWriteWalEntry(keyspace_id, memtable_id, io_error) => {
+                write!(f, "Cannot write WAL entry. Memtable ID: {}. IO Error: {}. Keyspace ID: {}", memtable_id, io_error, keyspace_id)
             }
-            LsmError::CannotReadWalEntries(memtable_id, io_error) => {
-                write!(f, "Cannot read WAL entries. Memtable ID: {}. IO Error: {}", memtable_id, io_error)
+            LsmError::CannotReadWalEntries(keyspace_id, memtable_id, io_error) => {
+                write!(f, "Cannot read WAL entries. Memtable ID: {}. IO Error: {}. Keyspace ID: {}", memtable_id, io_error, keyspace_id)
             }
-            LsmError::CannotReadWalFiles(io_error) => {
-                write!(f, "Cannot list WAL files in base path. IO Error: {}", io_error)
+            LsmError::CannotReadWalFiles(keyspace_id, io_error) => {
+                write!(f, "Cannot list WAL files in base path. IO Error: {}. Keyspace ID: {}", io_error, keyspace_id)
             }
-            LsmError::CannotDecodeWal(memtable_id, decode_error) => {
-                write!(f, "Cannot decode WAL. Memtable ID: {} Error: {}", memtable_id, decode_error_to_message(&decode_error))
+            LsmError::CannotDecodeWal(keyspace_id, memtable_id, decode_error) => {
+                write!(f, "Cannot decode WAL. Memtable ID: {} Error: {}. Keyspace ID: {}", memtable_id, decode_error_to_message(&decode_error), keyspace_id)
             }
-            LsmError::CannotCreateManifest(io_error) => {
-                write!(f, "Cannot create manifest file. IO Error: {}", io_error)
+            LsmError::CannotCreateManifest(keyspace_id, io_error) => {
+                write!(f, "Cannot create manifest file. IO Error: {}. Keyspace ID: {}", io_error, keyspace_id)
             }
-            LsmError::CannotWriteManifestOperation(_, io_error) => {
-                write!(f, "Cannot write manifest operation. IO Error: {}", io_error)
+            LsmError::CannotWriteManifestOperation(keyspace_id, _, io_error) => {
+                write!(f, "Cannot write manifest operation. IO Error: {}. Keyspace ID: {}", io_error, keyspace_id)
             }
-            LsmError::CannotReadManifestOperations(io_error) => {
-                write!(f, "Cannot read manifest operations. IO Error: {}", io_error)
+            LsmError::CannotReadManifestOperations(keyspace_id, io_error) => {
+                write!(f, "Cannot read manifest operations. IO Error: {}. Keyspace ID: {}", io_error, keyspace_id)
             }
-            LsmError::CannotDecodeManifest(decode_error) => {
-                write!(f, "Cannot decode manifest. Error: {}", decode_error_to_message(&decode_error))
+            LsmError::CannotDecodeManifest(keyspace_id, decode_error) => {
+                write!(f, "Cannot decode manifest. Error: {}. Keyspace ID: {}", decode_error_to_message(&decode_error), keyspace_id)
             }
-            LsmError::CannotResetManifest(io_error) => {
-                write!(f, "Cannot clear manifest. Error: {}", io_error)
+            LsmError::CannotResetManifest(keyspace_id, io_error) => {
+                write!(f, "Cannot clear manifest. Error: {}. Keyspace ID: {}", io_error, keyspace_id)
             }
-            LsmError::CannotOpenSSTableFile(sstable_id, io_error) => {
-                write!(f, "Cannot open SSTable. SSTable ID: {}. Error: {}", sstable_id, io_error)
+            LsmError::CannotOpenSSTableFile(keyspace_id, sstable_id, io_error) => {
+                write!(f, "Cannot open SSTable. SSTable ID: {}. Error: {}. Keyspace ID: {}", sstable_id, io_error, keyspace_id)
             }
-            LsmError::CannotReadSSTableFile(sstable_id, io_error) => {
-                write!(f, "Cannot read SSTable. SSTable ID: {}. Error: {}", sstable_id, io_error)
+            LsmError::CannotReadSSTableFile(keyspace_id, sstable_id, io_error) => {
+                write!(f, "Cannot read SSTable. SSTable ID: {}. Error: {}. Keyspace ID: {}", sstable_id, io_error, keyspace_id)
             }
-            LsmError::CannotDecodeSSTable(sstable_id, error_part, decode_error) => {
+            LsmError::CannotDecodeSSTable(keyspace_id, sstable_id, error_part, decode_error) => {
                 write!(f, "{}", sstable_decode_error_to_message(*sstable_id, error_part.clone(), decode_error))
             }
-            LsmError::CannotDeleteSSTable(sstable_id, io_error) => {
-                write!(f, "Cannot delete SSTable. SSTable ID: {} Error: {}", sstable_id, io_error)
+            LsmError::CannotDeleteSSTable(keyspace_id, sstable_id, io_error) => {
+                write!(f, "Cannot delete SSTable. SSTable ID: {} Error: {}. Keyspace ID: {}", sstable_id, io_error, keyspace_id)
             }
-            LsmError::CannotCreateSSTableFile(sstable_id, io_error) => {
-                write!(f, "Cannot create SSTable file. SSTable ID: {} Error: {}", sstable_id, io_error)
+            LsmError::CannotCreateSSTableFile(keyspace_id, sstable_id, io_error) => {
+                write!(f, "Cannot create SSTable file. SSTable ID: {} Error: {}. Keyspace ID: {}", sstable_id, io_error, keyspace_id)
             }
             LsmError::CannotCreateTransactionLog(io_error) => {
                 write!(f, "Cannot create transaction log file. Error: {}", io_error)
@@ -121,8 +126,8 @@ impl Debug for LsmError {
             LsmError::CannotReadTransactionLogEntries(io_error) => {
                 write!(f, "Cannot read transactionlog entries entries. IO Error: {}", io_error)
             },
-            LsmError::CannotReadSSTablesFiles(io_error) => {
-                write!(f, "Cannot list SSTables files in base path. IO Error: {}", io_error)
+            LsmError::CannotReadSSTablesFiles(keyspace_id, io_error) => {
+                write!(f, "Cannot list SSTables files in base path. IO Error: {}. Keyspace ID: {}", io_error, keyspace_id)
             }
             LsmError::CannotDecodeTransactionLogEntry(decode_error) => {
                 write!(f, "Cannot decode transaction log entry. Error: {}", decode_error_to_message(&decode_error))
@@ -135,6 +140,15 @@ impl Debug for LsmError {
             },
             LsmError::Internal => {
                 panic!("This error shoudnt be returned to the final user!! Invalid code path");
+            }
+            LsmError::CannotReadKeyspacesDirectories(io_error) => {
+                write!(f, "Cannot list keyspaces directories in base path. IO Error: {}", io_error)
+            }
+            LsmError::CannotReadKeyspaceFile(keyspace_id, io_error) => {
+                write!(f, "Cannot read keyspace directory. Keyspace ID: {}. Error: {}", keyspace_id, io_error)
+            }
+            LsmError::CannotCreateKeyspaceDirectory(keyspace_id, io_error) => {
+                write!(f, "Cannot create keyspace directory. IO Error: {}. Keyspace ID: {}", io_error, keyspace_id)
             }
         }
     }

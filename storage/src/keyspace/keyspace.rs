@@ -1,5 +1,6 @@
+use std::fs;
 use crate::compaction::compaction::{Compaction, CompactionTask};
-use crate::lsm::LsmIterator;
+use crate::lsm::{KeyspaceId, LsmIterator};
 use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
@@ -11,8 +12,8 @@ use crate::transactions::transaction::{Transaction, TxnId};
 use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use std::sync::Arc;
-
-pub type KeyspaceId = u16;
+use crate::lsm_error::LsmError::CannotCreateKeyspaceDirectory;
+use crate::utils::lsm_files;
 
 pub struct Keyspace {
     keyspace_id: KeyspaceId,
@@ -25,7 +26,18 @@ pub struct Keyspace {
 }
 
 impl Keyspace {
-    pub fn create(
+    pub fn create_new(
+        keyspace_id: KeyspaceId,
+        transaction_manager: Arc<TransactionManager>,
+        lsm_options: Arc<LsmOptions>
+    ) -> Result<Arc<Keyspace>, LsmError> {
+        let path = lsm_files::get_keyspace_directory(&lsm_options, keyspace_id);
+        fs::create_dir(path.as_path())
+            .map_err(|e| CannotCreateKeyspaceDirectory(keyspace_id, e))?;
+        Self::load(keyspace_id, transaction_manager, lsm_options)
+    }
+
+    pub fn load(
         keyspace_id: KeyspaceId,
         transaction_manager: Arc<TransactionManager>,
         lsm_options: Arc<LsmOptions>
@@ -34,7 +46,7 @@ impl Keyspace {
         let sstables = Arc::new(SSTables::open(lsm_options.clone(), keyspace_id, manifest.clone())?);
         let memtables = Memtables::create_and_recover_from_wal(lsm_options.clone(), keyspace_id)?;
         let compaction =  Compaction::create(transaction_manager.clone(), lsm_options.clone(),
-            sstables.clone(), manifest.clone());
+            sstables.clone(), manifest.clone(), keyspace_id);
 
         Ok(Arc::new(Keyspace{
             keyspace_id,
@@ -119,6 +131,10 @@ impl Keyspace {
 
     pub fn start_compaction_thread(&self) {
         self.compaction.start_compaction_thread();
+    }
+
+    pub fn keyspace_id(&self) -> KeyspaceId {
+        self.keyspace_id
     }
 
     //TODO If lsm engine crash during recovering from manifest, we will likely lose some operations

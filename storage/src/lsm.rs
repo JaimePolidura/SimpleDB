@@ -1,6 +1,5 @@
-use crate::keyspace::keyspace::{Keyspace, KeyspaceId};
+use crate::keyspace::keyspaces::Keyspaces;
 use crate::lsm_error::LsmError;
-use crate::lsm_error::LsmError::KeyspaceNotFound;
 use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::MemtableIterator;
 use crate::sst::ssttable_iterator::SSTableIterator;
@@ -9,15 +8,16 @@ use crate::transactions::transaction_manager::{IsolationLevel, TransactionManage
 use crate::utils::merge_iterator::MergeIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use bytes::Bytes;
-use crossbeam_skiplist::SkipMap;
 use std::collections::HashSet;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
+pub type KeyspaceId = usize;
+
 pub struct Lsm {
     transaction_manager: Arc<TransactionManager>,
-    keyspaces: SkipMap<KeyspaceId, Arc<Keyspace>>,
     lsm_options: Arc<LsmOptions>,
+    keyspaces: Keyspaces,
 }
 
 pub enum WriteBatch {
@@ -32,8 +32,8 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Result<Lsm, LsmError> {
     let transaction_manager = Arc::new(
         TransactionManager::create_recover_from_log(lsm_options.clone())?
     );
-    let keyspaces = create_keyspaces(
-        &transaction_manager, &lsm_options
+    let keyspaces = Keyspaces::load_keyspaces(
+        transaction_manager.clone(), lsm_options.clone()
     )?;
 
     let mut lsm = Lsm {
@@ -43,21 +43,12 @@ pub fn new(lsm_options: Arc<LsmOptions>) -> Result<Lsm, LsmError> {
     };
 
     lsm.rollback_active_transactions();
-    lsm.recover_from_manifest();
-    lsm.start_keyspaces_compaction_threads();
+    lsm.keyspaces.recover_from_manifest();
+    lsm.keyspaces.start_keyspaces_compaction_threads();
 
     println!("Mini lsm engine started!");
 
     Ok(lsm)
-}
-
-fn create_keyspaces(
-    transaction_manager: &Arc<TransactionManager>,
-    lsm_options: &Arc<LsmOptions>
-) -> Result<SkipMap<KeyspaceId, Arc<Keyspace>>, LsmError> {
-    
-
-    unimplemented!();
 }
 
 impl Lsm {
@@ -71,7 +62,7 @@ impl Lsm {
         keyspace_id: KeyspaceId,
         transaction: &Transaction
     ) -> Result<LsmIterator, LsmError> {
-        let keyspace = self.get_keyspace(keyspace_id)?;
+        let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         Ok(keyspace.scan_all_with_transaction(transaction))
     }
 
@@ -90,7 +81,7 @@ impl Lsm {
         transaction: &Transaction,
         key: &str,
     ) -> Result<Option<bytes::Bytes>, LsmError> {
-        let keyspace = self.get_keyspace(keyspace_id)?;
+        let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         keyspace.get_with_transaction(transaction, key)
     }
 
@@ -111,7 +102,7 @@ impl Lsm {
         key: &str,
         value: &[u8],
     ) -> Result<(), LsmError> {
-        let keyspace = self.get_keyspace(keyspace_id)?;
+        let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         keyspace.set_with_transaction(transaction, key, value)
     }
 
@@ -130,7 +121,7 @@ impl Lsm {
         transaction: &Transaction,
         key: &str,
     ) -> Result<(), LsmError> {
-        let keyspace = self.get_keyspace(keyspace_id)?;
+        let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         keyspace.delete_with_transaction(transaction, key)
     }
 
@@ -166,19 +157,17 @@ impl Lsm {
         self.transaction_manager.rollback(transaction);
     }
 
-    fn get_keyspace(&self, keyspace_id: KeyspaceId) -> Result<Arc<Keyspace>, LsmError> {
-        match self.keyspaces.get(&keyspace_id) {
-            Some(entry) => Ok(entry.value().clone()),
-            None => Err(KeyspaceNotFound(keyspace_id))
-        }
+    pub fn create_keyspace(&self) -> Result<KeyspaceId, LsmError> {
+        let keyspace = self.keyspaces.create_keyspace()?;
+        keyspace.start_compaction_thread();
+        Ok(keyspace.keyspace_id())
     }
 
-    //The following functions are used when booting up the minilsm storage engine
     fn rollback_active_transactions(&mut self) {
         let active_transactions_id = self.transaction_manager.get_active_transactions();
 
         for active_transaction_id in active_transactions_id {
-            if self.has_txn_id_been_written(active_transaction_id) {
+            if self.keyspaces.has_txn_id_been_written(active_transaction_id) {
                 self.transaction_manager.rollback(Transaction {
                     active_transactions: HashSet::new(),
                     isolation_level: IsolationLevel::SnapshotIsolation,
@@ -189,31 +178,6 @@ impl Lsm {
             } else {
                 self.transaction_manager.rollback_active_transaction_failure(active_transaction_id);
             }
-        }
-    }
-
-    fn has_txn_id_been_written(&self, txn_id: TxnId) -> bool {
-        for keyspace in self.keyspaces.iter() {
-            let keyspace = keyspace.value();
-            if keyspace.has_txn_id_been_written(txn_id) {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    fn start_keyspaces_compaction_threads(&self) {
-        for keyspace in self.keyspaces.iter() {
-            let keyspace = keyspace.value();
-            keyspace.start_compaction_thread();
-        }
-    }
-
-    fn recover_from_manifest(&mut self) {
-        for keyspace in self.keyspaces.iter() {
-            let keyspace = keyspace.value();
-            keyspace.recover_from_manifest();
         }
     }
 }

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
+use crate::lsm::KeyspaceId;
 use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::sst::sstable_builder::SSTableBuilder;
@@ -35,11 +36,16 @@ pub(crate) fn start_tiered_compaction(
     task: TieredCompactionTask,
     transaction_manager: &Arc<TransactionManager>,
     options: &Arc<LsmOptions>,
-    sstables: &Arc<SSTables>
+    sstables: &Arc<SSTables>,
+    keyspace_id: KeyspaceId
 ) -> Result<(), LsmError> {
     match task {
-        TieredCompactionTask::AmplificationRatioTrigger => do_tiered_compaction(options, sstables, sstables.get_n_levels() - 1, transaction_manager),
-        TieredCompactionTask::SizeRatioTrigger(level_id) => do_tiered_compaction(options, sstables, level_id, transaction_manager),
+        TieredCompactionTask::AmplificationRatioTrigger => {
+            do_tiered_compaction(options, sstables, sstables.get_n_levels() - 1, transaction_manager, keyspace_id)
+        },
+        TieredCompactionTask::SizeRatioTrigger(level_id) => {
+            do_tiered_compaction(options, sstables, level_id, transaction_manager, keyspace_id)
+        },
     }
 }
 
@@ -47,13 +53,14 @@ fn do_tiered_compaction(
     options: &Arc<LsmOptions>,
     sstables: &Arc<SSTables>,
     max_level_id_to_compact: usize, //Compact from level 0 to max_level_id_to_compact (inclusive, inclusive)
-    transaction_manager: &Arc<TransactionManager>
+    transaction_manager: &Arc<TransactionManager>,
+    keyspace_id: KeyspaceId
 ) -> Result<(), LsmError> {
     let new_level = max_level_id_to_compact + 1;
     let levels_id_to_compact: Vec<usize> = (0..max_level_id_to_compact).into_iter().collect();
     let mut iterator = sstables.iter(&levels_id_to_compact);
     let mut new_sstable_builder = Some(SSTableBuilder::create(
-        options.clone(), transaction_manager.clone(), new_level as u32
+        options.clone(), transaction_manager.clone(), keyspace_id, new_level as u32
     ));
 
     while iterator.has_next() {
@@ -70,7 +77,7 @@ fn do_tiered_compaction(
                     sstables.flush_to_disk(new_sstable_builder.take().unwrap())?;
 
                     new_sstable_builder = Some(
-                        SSTableBuilder::create(options.clone(), transaction_manager.clone(), new_level as u32)
+                        SSTableBuilder::create(options.clone(), transaction_manager.clone(), keyspace_id, new_level as u32)
                     );
                 }
             },

@@ -1,14 +1,5 @@
-use std::cell::UnsafeCell;
-use std::collections::HashSet;
-use std::ops::Bound::{Excluded, Included};
-use std::sync::Arc;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::Relaxed;
-use bytes::{Buf, Bytes};
-use crossbeam_skiplist::{SkipList, SkipMap, SkipSet};
 use crate::key;
 use crate::key::Key;
-use crate::keyspace::keyspace::KeyspaceId;
 use crate::lsm_error::LsmError;
 use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::MemtableState::{Active, Flushed, Flusing, Inactive, RecoveringFromWal};
@@ -16,7 +7,15 @@ use crate::memtables::wal::Wal;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::transactions::transaction::{Transaction, TxnId};
 use crate::transactions::transaction_manager::TransactionManager;
-use crate::utils::storage_iterator::{StorageIterator};
+use crate::utils::storage_iterator::StorageIterator;
+use bytes::{Buf, Bytes};
+use crossbeam_skiplist::{SkipMap, SkipSet};
+use std::cell::UnsafeCell;
+use std::ops::Bound::Excluded;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::Relaxed;
+use std::sync::Arc;
+use crate::lsm::KeyspaceId;
 
 const TOMBSTONE: Bytes = Bytes::new();
 
@@ -31,6 +30,7 @@ pub struct MemTable {
     wal: UnsafeCell<Wal>,
     options: Arc<LsmOptions>,
     txn_ids_written: SkipSet<TxnId>,
+    keyspace_id: KeyspaceId,
 }
 
 enum MemtableState {
@@ -55,6 +55,7 @@ impl MemTable {
             state: UnsafeCell::new(MemtableState::New),
             data: Arc::new(SkipMap::new()),
             txn_ids_written: SkipSet::new(),
+            keyspace_id,
             memtable_id,
             options,
         })
@@ -71,6 +72,7 @@ impl MemTable {
             state: UnsafeCell::new(MemtableState::Active),
             data: Arc::new(SkipMap::new()),
             txn_ids_written: SkipSet::new(),
+            keyspace_id: 0,
             memtable_id,
             options,
         })
@@ -79,6 +81,7 @@ impl MemTable {
     pub fn create_and_recover_from_wal(
         options: Arc<LsmOptions>,
         memtable_id: MemtableId,
+        keyspace_id: KeyspaceId,
         wal: Wal
     ) -> Result<MemTable, LsmError> {
         let mut memtable = MemTable {
@@ -88,6 +91,7 @@ impl MemTable {
             data: Arc::new(SkipMap::new()),
             wal: UnsafeCell::new(wal),
             txn_ids_written: SkipSet::new(),
+            keyspace_id,
             memtable_id,
             options
         };
@@ -199,7 +203,8 @@ impl MemTable {
 
     pub fn to_sst(self: &Arc<MemTable>, transaction_manager: &Arc<TransactionManager>) -> SSTableBuilder {
         let mut memtable_iterator = MemtableIterator::create(&self, &Transaction::none());
-        let mut sstable_builder = SSTableBuilder::create(self.options.clone(), transaction_manager.clone(), 0);
+        let mut sstable_builder = SSTableBuilder::create(self.options.clone(),
+                                                         transaction_manager.clone(), self.keyspace_id, 0);
         sstable_builder.set_memtable_id(self.memtable_id);
 
         while memtable_iterator.next() {
@@ -400,13 +405,13 @@ impl<'a> StorageIterator for MemtableIterator {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
     use crate::key;
     use crate::lsm_options::LsmOptions;
     use crate::memtables::memtable::{MemTable, MemtableIterator};
     use crate::transactions::transaction::{Transaction, TxnId};
     use crate::transactions::transaction_manager::IsolationLevel;
     use crate::utils::storage_iterator::StorageIterator;
+    use std::sync::Arc;
 
     #[test]
     fn get_set_delete_no_transactions() {

@@ -6,7 +6,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use bytes::{Buf, BufMut};
 use serde::{Deserialize, Deserializer, Serialize};
 use crate::compaction::compaction::CompactionTask;
-use crate::keyspace::keyspace::KeyspaceId;
+use crate::lsm::KeyspaceId;
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
 use crate::lsm_error::LsmError::{CannotCreateManifest, CannotDecodeManifest, CannotReadManifestOperations, CannotResetManifest};
 use crate::lsm_options::LsmOptions;
@@ -48,7 +48,7 @@ impl Manifest {
                 keyspace_id,
                 options
             }),
-            Err(e) => Err(CannotCreateManifest(e))
+            Err(e) => Err(CannotCreateManifest(keyspace_id, e))
         }
     }
 
@@ -73,10 +73,10 @@ impl Manifest {
     fn clear_manifest(&self) -> Result<(), LsmError> {
         let path = Self::manifest_path(&self.options, self.keyspace_id);
         let mut file = LsmFile::open(path.as_path(), LsmFileMode::RandomWrites)
-            .map_err(|e| CannotResetManifest(e))?;
+            .map_err(|e| CannotResetManifest(self.keyspace_id, e))?;
 
         file.clear()
-            .map_err(|e| CannotResetManifest(e))
+            .map_err(|e| CannotResetManifest(self.keyspace_id, e))
     }
 
     fn get_uncompleted_operations(&self, all_operations: &mut Vec<ManifestOperation>) -> Vec<ManifestOperationContent> {
@@ -110,7 +110,7 @@ impl Manifest {
             .as_mut()
             .unwrap();
         let records_bytes = file.read_all()
-            .map_err(|e| CannotReadManifestOperations(e))?;
+            .map_err(|e| CannotReadManifestOperations(self.keyspace_id, e))?;
         let mut records_bytes_ptr = records_bytes.as_slice();
         let mut all_records: Vec<ManifestOperation> = Vec::new();
         let mut current_offset = 0;
@@ -122,7 +122,7 @@ impl Manifest {
             let actual_crc = crc32fast::hash(json_record_bytes);
 
             if expected_crc != actual_crc {
-                return Err(CannotDecodeManifest(DecodeError {
+                return Err(CannotDecodeManifest(self.keyspace_id, DecodeError {
                     error_type: DecodeErrorType::CorruptedCrc(expected_crc, actual_crc),
                     index: all_records.len(),
                     offset: current_offset,
@@ -131,7 +131,7 @@ impl Manifest {
             }
 
             let deserialized_record = serde_json::from_slice::<ManifestOperation>(json_record_bytes)
-                .map_err(|e| CannotDecodeManifest(DecodeError {
+                .map_err(|e| CannotDecodeManifest(self.keyspace_id, DecodeError {
                     error_type: DecodeErrorType::JsonSerdeDeserialization(e),
                     index: all_records.len(),
                     offset: current_offset,
@@ -166,7 +166,7 @@ impl Manifest {
                 serialized.extend(record_json_serialized);
 
                 file.write(&serialized)
-                    .map_err(|e| LsmError::CannotWriteManifestOperation(manifest_record.content.clone(), e))?;
+                    .map_err(|e| LsmError::CannotWriteManifestOperation(self.keyspace_id, manifest_record.content.clone(), e))?;
                 file.fsync();
                 Ok(manifest_record_id)
             }
@@ -177,6 +177,6 @@ impl Manifest {
     }
 
     fn manifest_path(options: &Arc<LsmOptions>, keyspace_id: KeyspaceId) -> PathBuf {
-        lsm_files::get_path(options, keyspace_id, "MANIFEST")
+        lsm_files::get_keyspace_file(options, keyspace_id, "MANIFEST")
     }
 }

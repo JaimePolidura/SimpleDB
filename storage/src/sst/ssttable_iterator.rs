@@ -197,7 +197,7 @@ mod test {
 
         let sstable = Arc::new(SSTable{
             active_txn_ids_written: SkipSet::new(),
-            id: 1,
+            sstable_id: 1,
             bloom_filter: BloomFilter::new(&Vec::new(), 8),
             file: LsmFile::mock(),
             block_cache: Mutex::new(block_cache),

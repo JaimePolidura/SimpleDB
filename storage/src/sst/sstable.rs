@@ -16,6 +16,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering::Release;
 use std::sync::{Arc, Mutex};
+use crate::lsm::KeyspaceId;
 
 pub type SSTableId = usize;
 
@@ -23,7 +24,7 @@ pub const SSTABLE_DELETED: u8 = 2;
 pub const SSTABLE_ACTIVE: u8 = 1;
 
 pub struct SSTable {
-    pub(crate) id: SSTableId,
+    pub(crate) sstable_id: SSTableId,
     pub(crate) bloom_filter: BloomFilter,
     pub(crate) file: LsmFile,
     pub(crate) block_cache: Mutex<BlockCache>,
@@ -33,7 +34,9 @@ pub struct SSTable {
     pub(crate) state: AtomicU8,
     pub(crate) first_key: Key,
     pub(crate) last_key: Key,
-    pub(crate) active_txn_ids_written: SkipSet<TxnId>
+    pub(crate) active_txn_ids_written: SkipSet<TxnId>,
+
+    pub(crate) keyspace_id: KeyspaceId,
 }
 
 impl SSTable {
@@ -46,8 +49,9 @@ impl SSTable {
         last_key: Key,
         file: LsmFile,
         level: u32,
-        id: SSTableId,
+        sstable_id: SSTableId,
         state: u8,
+        keyspace_id: KeyspaceId
     ) -> SSTable {
         SSTable {
             block_cache: Mutex::new(BlockCache::new(lsm_options.clone())),
@@ -60,26 +64,29 @@ impl SSTable {
             last_key,
             level,
             file,
-            id,
+            sstable_id,
+            keyspace_id,
         }
     }
 
     pub fn from_file(
-        id: SSTableId,
+        sstable_id: SSTableId,
+        keyspace_id: KeyspaceId,
         path: &Path,
         lsm_options: Arc<LsmOptions>
     ) -> Result<Arc<SSTable>, LsmError> {
         let sst_file = LsmFile::open(path, LsmFileMode::RandomWrites)
-            .map_err(|e| CannotOpenSSTableFile(id, e))?;
+            .map_err(|e| CannotOpenSSTableFile(keyspace_id, sstable_id, e))?;
         let sst_bytes = sst_file.read_all()
-            .map_err(|e| CannotOpenSSTableFile(id, e))?;
+            .map_err(|e| CannotOpenSSTableFile(keyspace_id, sstable_id, e))?;
 
-        Self::decode(&sst_bytes, id, lsm_options, sst_file)
+        Self::decode(&sst_bytes, sstable_id, keyspace_id, lsm_options, sst_file)
     }
 
     fn decode(
         bytes: &Vec<u8>,
-        id: SSTableId,
+        sstable_id: SSTableId,
+        keyspace_id: KeyspaceId,
         lsm_options: Arc<LsmOptions>,
         file: LsmFile,
     ) -> Result<Arc<SSTable>, LsmError> {
@@ -90,7 +97,7 @@ impl SSTable {
         let state = bytes[bytes.len() - 13];
 
         let block_metadata = BlockMetadata::decode_all(bytes, meta_offset as usize)
-            .map_err(|error_type| CannotDecodeSSTable(id, SSTableCorruptedPart::BlockMetadata, DecodeError {
+            .map_err(|error_type| CannotDecodeSSTable(keyspace_id, sstable_id, SSTableCorruptedPart::BlockMetadata, DecodeError {
                 offset: meta_offset as usize,
                 path: file.path(),
                 error_type,
@@ -98,7 +105,7 @@ impl SSTable {
             }))?;
 
         let bloom_filter = BloomFilter::decode(bytes, bloom_offset as usize)
-            .map_err(|error_type| CannotDecodeSSTable(id, SSTableCorruptedPart::BloomFilter, DecodeError {
+            .map_err(|error_type| CannotDecodeSSTable(keyspace_id, sstable_id, SSTableCorruptedPart::BloomFilter, DecodeError {
                 offset: bloom_offset as usize,
                 path: file.path(),
                 error_type,
@@ -119,8 +126,9 @@ impl SSTable {
             last_key,
             file,
             level,
-            id,
-            state
+            sstable_id,
+            state,
+            keyspace_id
         )))
     }
 
@@ -147,7 +155,7 @@ impl SSTable {
 
     pub fn delete(&self) -> Result<(), LsmError> {
         self.state.store(SSTABLE_DELETED, Release);
-        self.file.delete().map_err(|e| CannotDeleteSSTable(self.id, e))
+        self.file.delete().map_err(|e| CannotDeleteSSTable(self.keyspace_id, self.sstable_id, e))
     }
 
     pub fn size(&self) -> SSTableId {
@@ -169,10 +177,10 @@ impl SSTable {
         //Read from disk
         let metadata: &BlockMetadata = &self.block_metadata[block_id];
         let encoded_block = self.file.read(metadata.offset, self.lsm_options.block_size_bytes)
-            .map_err(|e| CannotReadSSTableFile(self.id, e))?;
+            .map_err(|e| CannotReadSSTableFile(self.keyspace_id, self.sstable_id, e))?;
 
         let block = Block::decode(&encoded_block, &self.lsm_options)
-            .map_err(|error_type| CannotDecodeSSTable(self.id, SSTableCorruptedPart::Block(block_id), DecodeError {
+            .map_err(|error_type| CannotDecodeSSTable(self.keyspace_id, self.sstable_id, SSTableCorruptedPart::Block(block_id), DecodeError {
                 offset: metadata.offset,
                 path: self.file.path(),
                 error_type,

@@ -4,6 +4,7 @@ use bytes::{BufMut, Bytes};
 use crossbeam_skiplist::SkipSet;
 use crate::sst::block::block_builder::BlockBuilder;
 use crate::key::Key;
+use crate::lsm::KeyspaceId;
 use crate::lsm_error::LsmError;
 use crate::lsm_error::LsmError::CannotCreateSSTableFile;
 use crate::lsm_options::LsmOptions;
@@ -35,14 +36,21 @@ pub struct SSTableBuilder {
 
     memtable_id: Option<usize>,
 
-    transaction_manager: Arc<TransactionManager>
+    transaction_manager: Arc<TransactionManager>,
+    keyspace_id: KeyspaceId,
 }
 
 impl SSTableBuilder {
-    pub fn create(lsm_options: Arc<LsmOptions>, transaction_manager: Arc<TransactionManager>, level: u32) -> SSTableBuilder {
+    pub fn create(
+        lsm_options: Arc<LsmOptions>,
+        transaction_manager: Arc<TransactionManager>,
+        keyspace_id: KeyspaceId,
+        level: u32
+    ) -> SSTableBuilder {
         SSTableBuilder {
             current_block_builder: BlockBuilder::new(lsm_options.clone()),
             level,
+            keyspace_id,
             key_hashes: Vec::new(),
             builded_block_metadata: Vec::new(),
             builded_encoded_blocks: Vec::new(),
@@ -135,9 +143,9 @@ impl SSTableBuilder {
         match LsmFile::create(path, &encoded, LsmFileMode::ReadOnly) {
             Ok(lsm_file) => Ok(SSTable::new(
                 self.active_txn_ids_written, self.builded_block_metadata, self.lsm_options, bloom_filter, self.first_key.unwrap(),
-                self.last_key.unwrap(), lsm_file, self.level, id, SSTABLE_ACTIVE
+                self.last_key.unwrap(), lsm_file, self.level, id, SSTABLE_ACTIVE, self.keyspace_id,
             )),
-            Err(e) => Err(CannotCreateSSTableFile(id, e))
+            Err(e) => Err(CannotCreateSSTableFile(self.keyspace_id, id, e))
         }
     }
 
