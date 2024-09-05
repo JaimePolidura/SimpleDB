@@ -1,6 +1,6 @@
-use bytes::BufMut;
-use crate::lsm_error::{DecodeErrorType, LsmError};
+use crate::lsm_error::DecodeErrorType;
 use crate::utils::utils;
+use bytes::BufMut;
 
 pub struct BloomFilter {
     bitmap: Vec<u8>,

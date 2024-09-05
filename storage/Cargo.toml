@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+storage = {path = "../shared" }
 crossbeam-skiplist = "0.1"
 bytes = "1.6.1"
 ouroboros = "0.18.4"

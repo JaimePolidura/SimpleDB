@@ -12,14 +12,12 @@ use crate::lsm_error::LsmError::{CannotCreateWal, CannotDecodeWal, CannotReadWal
 use crate::lsm_options::{DurabilityLevel, LsmOptions};
 use crate::memtables::memtable::MemtableId;
 use crate::transactions::transaction::TxnId;
-use crate::utils::lsm_file::{LsmFile, LsmFileMode};
-use crate::utils::{lsm_files, utils};
 
 pub struct Wal {
     keyspace_id: KeyspaceId,
     lsm_options: Arc<LsmOptions>,
     memtable_id: MemtableId,
-    file: LsmFile
+    file:
 }
 
 pub(crate) struct WalEntry {

@@ -1,0 +1,11 @@
+C:\programacion\mini-lsm\playground\target\debug\deps\libaliasable-49c3ee00377209ba.rmeta: C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\lib.rs C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\mut_ref.rs C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\boxed.rs C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\string.rs C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\vec.rs
+
+C:\programacion\mini-lsm\playground\target\debug\deps\libaliasable-49c3ee00377209ba.rlib: C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\lib.rs C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\mut_ref.rs C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\boxed.rs C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\string.rs C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\vec.rs
+
+C:\programacion\mini-lsm\playground\target\debug\deps\aliasable-49c3ee00377209ba.d: C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\lib.rs C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\mut_ref.rs C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\boxed.rs C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\string.rs C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\vec.rs
+
+C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\lib.rs:
+C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\mut_ref.rs:
+C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\boxed.rs:
+C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\string.rs:
+C:\Users\jaime\.cargo\registry\src\index.crates.io-6f17d22bba15001f\aliasable-0.1.3\src\vec.rs:
