@@ -3,7 +3,6 @@ use bytes::{BufMut, Bytes};
 use crate::sst::block::block::{Block, BLOCK_FOOTER_LENGTH};
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
-use crate::utils::utils;
 
 pub struct BlockBuilder {
     entries: Vec<Entry>,

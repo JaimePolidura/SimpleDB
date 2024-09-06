@@ -1,5 +1,4 @@
 use crate::lsm_error::DecodeErrorType;
-use crate::utils::utils;
 use bytes::BufMut;
 
 pub struct BloomFilter {
@@ -25,8 +24,8 @@ impl BloomFilter {
     }
 
     pub fn decode(bytes: &Vec<u8>, start_offset: usize) -> Result<BloomFilter, DecodeErrorType> {
-        let expected_crc = utils::u8_vec_to_u32_le(bytes, start_offset);
-        let n_bytes = utils::u8_vec_to_u32_le(bytes, start_offset + 4);
+        let expected_crc = shared::u8_vec_to_u32_le(bytes, start_offset);
+        let n_bytes = shared::u8_vec_to_u32_le(bytes, start_offset + 4);
 
         let bitmap_start_index = start_offset + 8;
         let bitmap_end_index = start_offset + 8 + n_bytes as usize;
@@ -50,7 +49,7 @@ impl BloomFilter {
     ) -> BloomFilter {
         let n_vec_slots = (n_entries / 8) as u32;
         let mut bitmap: Vec<u8> = Vec::with_capacity(n_vec_slots as usize);
-        utils::fill_vec(&mut bitmap, n_vec_slots as usize, 0);
+        shared::fill_vec(&mut bitmap, n_vec_slots as usize, 0);
 
         for hash in hashes {
             let slot_index = hash & (n_vec_slots - 1);

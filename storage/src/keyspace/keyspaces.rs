@@ -3,7 +3,6 @@ use crate::lsm_error::LsmError;
 use crate::lsm_error::LsmError::{CannotReadKeyspaceFile, CannotReadKeyspacesDirectories, KeyspaceNotFound};
 use crate::lsm_options::LsmOptions;
 use crate::transactions::transaction_manager::TransactionManager;
-use crate::utils::utils;
 use crossbeam_skiplist::SkipMap;
 use std::cmp::max;
 use std::fs;

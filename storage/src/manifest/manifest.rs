@@ -5,16 +5,15 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use bytes::{Buf, BufMut};
 use serde::{Deserialize, Deserializer, Serialize};
+use shared::SimpleDbFile;
 use crate::compaction::compaction::CompactionTask;
 use crate::lsm::KeyspaceId;
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
 use crate::lsm_error::LsmError::{CannotCreateManifest, CannotDecodeManifest, CannotReadManifestOperations, CannotResetManifest};
 use crate::lsm_options::LsmOptions;
-use crate::utils::lsm_file::{LsmFile, LsmFileMode};
-use crate::utils::{lsm_files, utils};
 
 pub struct Manifest {
-    file: Mutex<LsmFile>,
+    file: Mutex<shared::SimpleDbFile>,
     last_manifest_record_id: AtomicUsize,
     options: Arc<LsmOptions>,
     keyspace_id: KeyspaceId
@@ -41,7 +40,7 @@ pub struct MemtableFlushManifestOperation {
 
 impl Manifest {
     pub fn create(options: Arc<LsmOptions>, keyspace_id: KeyspaceId) -> Result<Manifest, LsmError> {
-        match LsmFile::open(Self::manifest_path(&options, keyspace_id).as_path(), LsmFileMode::AppendOnly) {
+        match shared::SimpleDbFile::open(Self::manifest_path(&options, keyspace_id).as_path(), shared::SimpleDbFileMode::AppendOnly) {
             Ok(file) => Ok(Manifest {
                 last_manifest_record_id: AtomicUsize::new(0),
                 file: Mutex::new(file),
@@ -72,7 +71,7 @@ impl Manifest {
 
     fn clear_manifest(&self) -> Result<(), LsmError> {
         let path = Self::manifest_path(&self.options, self.keyspace_id);
-        let mut file = LsmFile::open(path.as_path(), LsmFileMode::RandomWrites)
+        let mut file = shared::SimpleDbFile::open(path.as_path(), shared::SimpleDbFileMode::RandomWrites)
             .map_err(|e| CannotResetManifest(self.keyspace_id, e))?;
 
         file.clear()
@@ -83,7 +82,7 @@ impl Manifest {
         let mut operations_by_id: HashMap<usize, ManifestOperation> = HashMap::new();
         let mut to_return: Vec<ManifestOperationContent> = Vec::new();
 
-        while let Some(operation) = utils::pop_front(all_operations) {
+        while let Some(operation) = shared::pop_front(all_operations) {
             match operation.content {
                 ManifestOperationContent::Completed(operation_id) => operations_by_id.remove(&operation_id),
                 _ => operations_by_id.insert(operation.manifest_operation_id, operation),
@@ -177,6 +176,6 @@ impl Manifest {
     }
 
     fn manifest_path(options: &Arc<LsmOptions>, keyspace_id: KeyspaceId) -> PathBuf {
-        lsm_files::get_keyspace_file(options, keyspace_id, "MANIFEST")
+        shared::get_file_usize(&options.base_path, keyspace_id, "MANIFEST")
     }
 }

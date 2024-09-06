@@ -2,7 +2,6 @@ use crate::lsm_error::LsmError::{CannotCreateTransactionLog, CannotDecodeTransac
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
 use crate::lsm_options::{DurabilityLevel, LsmOptions};
 use crate::transactions::transaction::TxnId;
-use crate::utils::lsm_file::{LsmFile, LsmFileMode, LsmFileWrapper};
 use bytes::{Buf, BufMut};
 use std::cell::UnsafeCell;
 use std::path::PathBuf;
@@ -32,22 +31,23 @@ pub enum TransactionLogEntry {
 
 pub struct TransactionLog {
     //Wrapped with RwLock Becase TransactionLog needs to be passed to threads. UnsafeCell doest implement Sync
-    log_file: LsmFileWrapper,
+    log_file: shared::SimpleDbFileWrapper,
     lsm_options: Arc<LsmOptions>
 }
 
 impl TransactionLog {
     pub fn create(lsm_options: Arc<LsmOptions>) -> Result<TransactionLog, LsmError> {
         Ok(TransactionLog {
-            log_file: LsmFileWrapper {file: UnsafeCell::new(LsmFile::open(to_transaction_log_file_path(&lsm_options).as_path(),
-                        LsmFileMode::AppendOnly).map_err(|e| CannotCreateTransactionLog(e))?) },
+            log_file: shared::SimpleDbFileWrapper {file: UnsafeCell::new(
+                shared::SimpleDbFile::open(to_transaction_log_file_path(&lsm_options).as_path(),
+                        shared::SimpleDbFileMode::AppendOnly).map_err(|e| CannotCreateTransactionLog(e))?) },
             lsm_options
         })
     }
 
     pub fn create_mock(lsm_options: Arc<LsmOptions>) -> TransactionLog {
         TransactionLog {
-            log_file: LsmFileWrapper {file: UnsafeCell::new(LsmFile::mock())},
+            log_file: shared::SimpleDbFileWrapper {file: UnsafeCell::new(shared::SimpleDbFile::mock())},
             lsm_options
         }
     }

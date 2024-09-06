@@ -8,7 +8,6 @@ use crate::key::Key;
 use crate::lsm_error::DecodeErrorType;
 use crate::lsm_options::LsmOptions;
 use crate::transactions::transaction::TxnId;
-use crate::utils::utils;
 
 pub(crate) fn decode_block(
     encoded: &Vec<u8>,
@@ -18,9 +17,9 @@ pub(crate) fn decode_block(
         return Err(DecodeErrorType::IllegalSize(options.block_size_bytes, encoded.len()));
     }
 
-    let flag: u64 = utils::u8_vec_to_u64_le(&encoded, options.block_size_bytes - 12);
-    let offsets_offset: u16 = utils::u8_vec_to_u16_le(&encoded, options.block_size_bytes - 2);
-    let n_entries: u16 = utils::u8_vec_to_u16_le(&encoded, options.block_size_bytes - 4);
+    let flag: u64 = shared::u8_vec_to_u64_le(&encoded, options.block_size_bytes - 12);
+    let offsets_offset: u16 = shared::u8_vec_to_u16_le(&encoded, options.block_size_bytes - 2);
+    let n_entries: u16 = shared::u8_vec_to_u16_le(&encoded, options.block_size_bytes - 4);
     let offsets = decode_offsets(encoded, offsets_offset, n_entries);
     let (entries, new_offsets) = match flag {
         PREFIX_COMPRESSED => Ok(decode_entries_prefix_compressed(encoded, &offsets)),
@@ -39,7 +38,7 @@ fn decode_offsets(
     let start_index = offsets_offset as usize;
     let end_inedx = start_index + (n_entries * std::mem::size_of::<u16>() as u16) as usize;
 
-    utils::u8_vec_to_u16_vec(&encoded[start_index..end_inedx].to_vec())
+    shared::u8_vec_to_u16_vec(&encoded[start_index..end_inedx].to_vec())
 }
 
 fn decode_entries_prefix_compressed(
@@ -55,11 +54,11 @@ fn decode_entries_prefix_compressed(
         let mut current_index: usize = *current_offset as usize;
         new_offsets.push(entries_decoded.len() as u16);
 
-        let key_overlap_size = utils::u8_vec_to_u16_le(encoded, current_index);
+        let key_overlap_size = shared::u8_vec_to_u16_le(encoded, current_index);
         current_index = current_index + 2;
-        let rest_key_size = utils::u8_vec_to_u16_le(encoded, current_index);
+        let rest_key_size = shared::u8_vec_to_u16_le(encoded, current_index);
         current_index = current_index + 2;
-        let key_txn_id = utils::u8_vec_to_u64_le(encoded, current_index) as TxnId;
+        let key_txn_id = shared::u8_vec_to_u64_le(encoded, current_index) as TxnId;
         current_index = current_index + 8;
         let rest_key_u8_vec = encoded[current_index..(current_index + rest_key_size as usize)].to_vec();
 
@@ -78,7 +77,7 @@ fn decode_entries_prefix_compressed(
         prev_key = Some(current_key);
 
         //Decode value
-        let value_size = utils::u8_vec_to_u16_le(encoded, current_index);
+        let value_size = shared::u8_vec_to_u16_le(encoded, current_index);
         current_index = current_index + 2;
         let value = &encoded[current_index..(current_index + value_size as usize)];
         entries_decoded.put_u16_le(value_size);

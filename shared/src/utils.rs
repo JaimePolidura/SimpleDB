@@ -95,7 +95,8 @@ pub fn pop_front<T>(vec: &mut Vec<T>) -> Option<T> {
 }
 
 pub fn hash(key: &[u8]) -> u32 {
-    farmhash::hash32(key)
+    //farmhash::hash32(key)
+    todo!()
 }
 
 pub fn fill_vec<T>(vec: &mut Vec<T>, size: usize, value: T)

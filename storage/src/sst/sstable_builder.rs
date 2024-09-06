@@ -13,8 +13,6 @@ use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
 use crate::transactions::transaction::TxnId;
 use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::bloom_filter::BloomFilter;
-use crate::utils::lsm_file::{LsmFile, LsmFileMode};
-use crate::utils::utils;
 
 pub struct SSTableBuilder {
     first_key: Option<Key>,
@@ -84,7 +82,7 @@ impl SSTableBuilder {
             self.first_key_current_block = Some(key.clone());
         }
 
-        self.key_hashes.push(utils::hash(key.as_bytes()));
+        self.key_hashes.push(shared::hash(key.as_bytes()));
 
         if self.transaction_manager.is_active(key.txn_id()) {
             self.active_txn_ids_written.insert(key.txn_id());
@@ -140,7 +138,7 @@ impl SSTableBuilder {
         encoded.put_u32_le(bloom_offset as u32);
         encoded.put_u32_le(meta_offset as u32);
 
-        match LsmFile::create(path, &encoded, LsmFileMode::ReadOnly) {
+        match shared::SimpleDbFile::create(path, &encoded, shared::SimpleDbFileMode::ReadOnly) {
             Ok(lsm_file) => Ok(SSTable::new(
                 self.active_txn_ids_written, self.builded_block_metadata, self.lsm_options, bloom_filter, self.first_key.unwrap(),
                 self.last_key.unwrap(), lsm_file, self.level, id, SSTABLE_ACTIVE, self.keyspace_id,

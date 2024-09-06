@@ -26,8 +26,9 @@ pub struct SimpleDbFile {
 //UnsafeCell does not implement Sync, so it cannot be passed to threads
 //We need to wrap it in a struct that implements Sync
 pub struct SimpleDbFileWrapper {
-    pub(crate) file: UnsafeCell<SimpleDbFile>,
+    pub file: UnsafeCell<SimpleDbFile>,
 }
+
 unsafe impl Send for SimpleDbFileWrapper {}
 unsafe impl Sync for SimpleDbFileWrapper {}
 
@@ -35,7 +36,7 @@ impl SimpleDbFile {
     //Only used for testing purposes
     pub fn mock() -> SimpleDbFile {
         SimpleDbFile {
-            mode: Mock,
+            mode: SimpleDbFileMode::Mock,
             size_bytes: 0,
             path: None,
             file: None,

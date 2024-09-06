@@ -1,23 +1,23 @@
+use crate::key;
+use crate::key::Key;
+use crate::lsm::KeyspaceId;
+use crate::lsm_error::LsmError::{CannotCreateWal, CannotDecodeWal, CannotReadWalEntries, CannotReadWalFiles, CannotWriteWalEntry};
+use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
+use crate::lsm_options::{DurabilityLevel, LsmOptions};
+use crate::memtables::memtable::MemtableId;
+use crate::transactions::transaction::TxnId;
+use bytes::{Buf, BufMut, Bytes};
 use std::cmp::max;
 use std::fs;
 use std::fs::DirEntry;
 use std::path::PathBuf;
 use std::sync::Arc;
-use bytes::{Buf, BufMut, Bytes};
-use crate::key;
-use crate::key::Key;
-use crate::lsm::KeyspaceId;
-use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
-use crate::lsm_error::LsmError::{CannotCreateWal, CannotDecodeWal, CannotReadWalEntries, CannotReadWalFiles, CannotWriteWalEntry};
-use crate::lsm_options::{DurabilityLevel, LsmOptions};
-use crate::memtables::memtable::MemtableId;
-use crate::transactions::transaction::TxnId;
 
 pub struct Wal {
     keyspace_id: KeyspaceId,
     lsm_options: Arc<LsmOptions>,
     memtable_id: MemtableId,
-    file:
+    file: shared::SimpleDbFile,
 }
 
 pub(crate) struct WalEntry {
@@ -28,7 +28,7 @@ pub(crate) struct WalEntry {
 impl Wal {
     pub fn create(lsm_options: Arc<LsmOptions>, keyspace_id: KeyspaceId, memtable_id: MemtableId) -> Result<Wal, LsmError> {
         Ok(Wal {
-            file: LsmFile::open(Self::to_wal_file_path(&lsm_options, memtable_id, keyspace_id).as_path(), LsmFileMode::AppendOnly)
+            file: shared::SimpleDbFile::open(Self::to_wal_file_path(&lsm_options, memtable_id, keyspace_id).as_path(), shared::SimpleDbFileMode::AppendOnly)
                 .map_err(|e| CannotCreateWal(keyspace_id, memtable_id, e))?,
             lsm_options,
             keyspace_id,
@@ -38,7 +38,7 @@ impl Wal {
 
     pub fn create_mock(lsm_options: Arc<LsmOptions>, memtable_id: MemtableId) -> Result<Wal, LsmError> {
         Ok(Wal {
-            file: LsmFile::mock(),
+            file: shared::SimpleDbFile::mock(),
             keyspace_id: 0,
             lsm_options,
             memtable_id,
@@ -127,7 +127,7 @@ impl Wal {
         lsm_options: &Arc<LsmOptions>,
         keyspace_id: KeyspaceId
     ) -> Result<(Vec<Wal>, MemtableId), LsmError> {
-        let path = lsm_files::get_keyspace_directory(lsm_options, keyspace_id);
+        let path = shared::get_directory_usize(&lsm_options.base_path, keyspace_id);
         let path = path.as_path();
         let mut max_memtable_id: usize = 0;
         let mut wals: Vec<Wal> = Vec::new();
@@ -142,7 +142,7 @@ impl Wal {
             if let Ok(memtable_id) = Self::extract_memtable_id_from_file(&file) {
                 max_memtable_id = max(max_memtable_id, memtable_id);
                 wals.push(Wal{
-                    file: LsmFile::open(file.path().as_path(), LsmFileMode::AppendOnly)
+                    file: shared::SimpleDbFile::open(file.path().as_path(), shared::SimpleDbFileMode::AppendOnly)
                         .map_err(|e| CannotReadWalFiles(keyspace_id, e))?,
                     lsm_options: lsm_options.clone(),
                     keyspace_id,
@@ -170,7 +170,7 @@ impl Wal {
     }
 
     fn extract_memtable_id_from_file(file: &DirEntry) -> Result<MemtableId, ()> {
-        utils::extract_number_from_file_name(file, "-")
+        shared::extract_number_from_file_name(file, "-")
     }
 
     fn is_wal_file(file: &DirEntry) -> bool {
@@ -179,6 +179,6 @@ impl Wal {
 
     fn to_wal_file_path(lsm_options: &Arc<LsmOptions>, memtable_id: MemtableId, keyspace_id: KeyspaceId) -> PathBuf {
         let wal_file_name = format!("wal-{}", memtable_id);
-        lsm_files::get_keyspace_file(lsm_options, keyspace_id, wal_file_name.as_str())
+        shared::get_file_usize(&lsm_options.base_path, keyspace_id, wal_file_name.as_str())
     }
 }

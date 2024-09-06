@@ -15,7 +15,6 @@ use crate::lsm_error::LsmError;
 use crate::lsm_error::LsmError::CannotReadSSTablesFiles;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::transactions::transaction::{Transaction, TxnId};
-use crate::utils::lsm_files;
 
 pub struct SSTables {
     //For each level one index entry
@@ -58,7 +57,7 @@ impl SSTables {
             levels.push(RwLock::new(Vec::new()));
         }
 
-        let path = lsm_files::get_keyspace_directory(lsm_options, keyspace_id);
+        let path = shared::get_directory_usize(&lsm_options.base_path, keyspace_id);
         let path = path.as_path();
         let mut max_sstable_id: SSTableId = 0;
 
@@ -278,7 +277,7 @@ impl SSTables {
     }
 
     fn to_sstable_file_path(&self, sstable_id: SSTableId, keyspace_id: KeyspaceId) -> PathBuf {
-        lsm_files::get_keyspace_file(&self.lsm_options, keyspace_id, to_sstable_file_name(sstable_id).as_str())
+        shared::get_file_usize(&self.lsm_options.base_path, keyspace_id, to_sstable_file_name(sstable_id).as_str())
     }
 
     pub fn calculate_space_amplificacion(&self) -> usize {

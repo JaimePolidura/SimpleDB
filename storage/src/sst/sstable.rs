@@ -8,8 +8,6 @@ use crate::sst::block_cache::BlockCache;
 use crate::sst::block_metadata::BlockMetadata;
 use crate::transactions::transaction::{Transaction, TxnId};
 use crate::utils::bloom_filter::BloomFilter;
-use crate::utils::lsm_file::{LsmFile, LsmFileMode};
-use crate::utils::utils;
 use bytes::{Buf, BufMut};
 use crossbeam_skiplist::SkipSet;
 use std::path::Path;
@@ -26,7 +24,7 @@ pub const SSTABLE_ACTIVE: u8 = 1;
 pub struct SSTable {
     pub(crate) sstable_id: SSTableId,
     pub(crate) bloom_filter: BloomFilter,
-    pub(crate) file: LsmFile,
+    pub(crate) file: shared::SimpleDbFile,
     pub(crate) block_cache: Mutex<BlockCache>,
     pub(crate) block_metadata: Vec<BlockMetadata>,
     pub(crate) lsm_options: Arc<LsmOptions>,
@@ -47,7 +45,7 @@ impl SSTable {
         bloom_filter: BloomFilter,
         first_key: Key,
         last_key: Key,
-        file: LsmFile,
+        file: shared::SimpleDbFile,
         level: u32,
         sstable_id: SSTableId,
         state: u8,
@@ -75,7 +73,7 @@ impl SSTable {
         path: &Path,
         lsm_options: Arc<LsmOptions>
     ) -> Result<Arc<SSTable>, LsmError> {
-        let sst_file = LsmFile::open(path, LsmFileMode::RandomWrites)
+        let sst_file = shared::SimpleDbFile::open(path, shared::SimpleDbFileMode::RandomWrites)
             .map_err(|e| CannotOpenSSTableFile(keyspace_id, sstable_id, e))?;
         let sst_bytes = sst_file.read_all()
             .map_err(|e| CannotOpenSSTableFile(keyspace_id, sstable_id, e))?;
@@ -88,12 +86,12 @@ impl SSTable {
         sstable_id: SSTableId,
         keyspace_id: KeyspaceId,
         lsm_options: Arc<LsmOptions>,
-        file: LsmFile,
+        file: shared::SimpleDbFile,
     ) -> Result<Arc<SSTable>, LsmError> {
-        let meta_offset = utils::u8_vec_to_u32_le(bytes, bytes.len() - 4);
-        let bloom_offset = utils::u8_vec_to_u32_le(bytes, bytes.len() - 8);
-        let active_txn_ids_written_offset = utils::u8_vec_to_u32_le(bytes, bytes.len() - 12);
-        let level = utils::u8_vec_to_u32_le(bytes, bytes.len() - 16);
+        let meta_offset = shared::u8_vec_to_u32_le(bytes, bytes.len() - 4);
+        let bloom_offset = shared::u8_vec_to_u32_le(bytes, bytes.len() - 8);
+        let active_txn_ids_written_offset = shared::u8_vec_to_u32_le(bytes, bytes.len() - 12);
+        let level = shared::u8_vec_to_u32_le(bytes, bytes.len() - 16);
         let state = bytes[bytes.len() - 13];
 
         let block_metadata = BlockMetadata::decode_all(bytes, meta_offset as usize)
@@ -203,7 +201,7 @@ impl SSTable {
         if self.first_key.as_str().gt(key) || self.last_key.as_str().lt(key) {
             return Ok(None);
         }
-        if !self.bloom_filter.may_contain(utils::hash(key.as_bytes())) {
+        if !self.bloom_filter.may_contain(shared::hash(key.as_bytes())) {
             return Ok(None);
         }
 

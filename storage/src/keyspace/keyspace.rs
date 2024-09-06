@@ -13,7 +13,6 @@ use crate::transactions::transaction_manager::{IsolationLevel, TransactionManage
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use std::sync::Arc;
 use crate::lsm_error::LsmError::CannotCreateKeyspaceDirectory;
-use crate::utils::lsm_files;
 
 pub struct Keyspace {
     keyspace_id: KeyspaceId,
@@ -31,7 +30,7 @@ impl Keyspace {
         transaction_manager: Arc<TransactionManager>,
         lsm_options: Arc<LsmOptions>
     ) -> Result<Arc<Keyspace>, LsmError> {
-        let path = lsm_files::get_keyspace_directory(&lsm_options, keyspace_id);
+        let path = shared::get_directory_usize(&lsm_options.base_path, keyspace_id);
         fs::create_dir(path.as_path())
             .map_err(|e| CannotCreateKeyspaceDirectory(keyspace_id, e))?;
         Self::load(keyspace_id, transaction_manager, lsm_options)

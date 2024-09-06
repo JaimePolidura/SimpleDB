@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 pub fn get_directory_usize(
-    base_path: String,
+    base_path: &String,
     keyspace_id: usize,
 ) -> PathBuf {
     let mut path_buff = PathBuf::from(base_path.as_str());
@@ -10,7 +10,7 @@ pub fn get_directory_usize(
 }
 
 pub fn get_file_usize(
-    base_path: String,
+    base_path: &String,
     keyspace_id: usize,
     name: &str
 ) -> PathBuf {

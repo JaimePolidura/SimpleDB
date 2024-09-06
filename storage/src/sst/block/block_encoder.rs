@@ -3,7 +3,6 @@ use bytes::BufMut;
 use crate::sst::block::block::{Block, BLOCK_FOOTER_LENGTH, NOT_COMPRESSED, PREFIX_COMPRESSED};
 use crate::key::Key;
 use crate::lsm_options::LsmOptions;
-use crate::utils::utils;
 
 pub(crate) fn encode_block (
     block: &Block,
@@ -89,7 +88,7 @@ fn encode_prefix_compressed_entries(
 
 fn encode_offsets(offsets: &Vec<u16>, encoded: &mut Vec<u8>) -> usize {
     let offsets_offset_xd = encoded.len();
-    encoded.extend(utils::u16_vec_to_u8_vec(offsets));
+    encoded.extend(shared::u16_vec_to_u8_vec(offsets));
     offsets_offset_xd
 }
 
@@ -101,7 +100,7 @@ fn encode_footer(
     options: &Arc<LsmOptions>
 ) {
     let n_entries: u16 = block.offsets.len() as u16;
-    utils::u64_to_u8_le(flags, options.block_size_bytes - 12, encoded);
-    utils::u16_to_u8_le(n_entries, options.block_size_bytes - 4, encoded);
-    utils::u16_to_u8_le(start_offsets_offset as u16, options.block_size_bytes - 2, encoded);
+    shared::u64_to_u8_le(flags, options.block_size_bytes - 12, encoded);
+    shared::u16_to_u8_le(n_entries, options.block_size_bytes - 4, encoded);
+    shared::u16_to_u8_le(start_offsets_offset as u16, options.block_size_bytes - 2, encoded);
 }
