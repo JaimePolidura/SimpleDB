@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use crate::lsm::KeyspaceId;
+use crate::storage::KeyspaceId;
 use crate::lsm_error::LsmError;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;

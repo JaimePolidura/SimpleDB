@@ -1,6 +1,6 @@
 use crate::key;
 use crate::key::Key;
-use crate::lsm::KeyspaceId;
+use crate::storage::KeyspaceId;
 use crate::lsm_error::LsmError::{CannotCreateWal, CannotDecodeWal, CannotReadWalEntries, CannotReadWalFiles, CannotWriteWalEntry};
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
 use crate::memtables::memtable::MemtableId;

@@ -13,7 +13,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering::Release;
 use std::sync::{Arc, Mutex};
-use crate::lsm::KeyspaceId;
+use crate::storage::KeyspaceId;
 
 pub type SSTableId = usize;
 

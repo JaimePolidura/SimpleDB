@@ -2,7 +2,7 @@ use crate::keyspace::keyspaces::Keyspaces;
 use crate::lsm_error::LsmError;
 use crate::memtables::memtable::MemtableIterator;
 use crate::sst::ssttable_iterator::SSTableIterator;
-use crate::transactions::transaction::{Transaction, TxnId};
+use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
 use crate::utils::merge_iterator::MergeIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 pub type KeyspaceId = usize;
 
-pub struct Lsm {
+pub struct Storage {
     transaction_manager: Arc<TransactionManager>,
     options: Arc<shared::SimpleDbOptions>,
     keyspaces: Keyspaces,
@@ -24,10 +24,10 @@ pub enum WriteBatch {
     Delete(KeyspaceId, String)
 }
 
-pub type LsmIterator = TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>;
+pub type StorageIterator = TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>;
 
-pub fn new(options: Arc<shared::SimpleDbOptions>) -> Result<Lsm, LsmError> {
-    println!("Starting mini lsm engine!");
+pub fn new(options: Arc<shared::SimpleDbOptions>) -> Result<Storage, LsmError> {
+    println!("Starting storage engine!");
     let transaction_manager = Arc::new(
         TransactionManager::create_recover_from_log(options.clone())?
     );
@@ -35,23 +35,23 @@ pub fn new(options: Arc<shared::SimpleDbOptions>) -> Result<Lsm, LsmError> {
         transaction_manager.clone(), options.clone()
     )?;
 
-    let mut lsm = Lsm {
+    let mut storage = Storage {
         transaction_manager,
         keyspaces,
         options
     };
 
-    lsm.rollback_active_transactions();
-    lsm.keyspaces.recover_from_manifest();
-    lsm.keyspaces.start_keyspaces_compaction_threads();
+    storage.rollback_active_transactions();
+    storage.keyspaces.recover_from_manifest();
+    storage.keyspaces.start_keyspaces_compaction_threads();
 
-    println!("Mini lsm engine started!");
+    println!("Storage engine started!");
 
-    Ok(lsm)
+    Ok(storage)
 }
 
-impl Lsm {
-    pub fn scan_all(&self, keyspace_id: KeyspaceId) -> Result<LsmIterator, LsmError> {
+impl Storage {
+    pub fn scan_all(&self, keyspace_id: KeyspaceId) -> Result<StorageIterator, LsmError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         self.scan_all_with_transaction(keyspace_id, &transaction)
     }
@@ -60,7 +60,7 @@ impl Lsm {
         &self,
         keyspace_id: KeyspaceId,
         transaction: &Transaction
-    ) -> Result<LsmIterator, LsmError> {
+    ) -> Result<StorageIterator, LsmError> {
         let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         Ok(keyspace.scan_all_with_transaction(transaction))
     }

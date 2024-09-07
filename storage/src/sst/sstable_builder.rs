@@ -4,7 +4,7 @@ use bytes::{BufMut, Bytes};
 use crossbeam_skiplist::SkipSet;
 use crate::sst::block::block_builder::BlockBuilder;
 use crate::key::Key;
-use crate::lsm::KeyspaceId;
+use crate::storage::KeyspaceId;
 use crate::lsm_error::LsmError;
 use crate::lsm_error::LsmError::CannotCreateSSTableFile;
 use crate::sst::block_metadata::BlockMetadata;

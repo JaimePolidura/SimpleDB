@@ -1,7 +1,7 @@
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
-use crate::lsm::KeyspaceId;
+use crate::storage::KeyspaceId;
 use crate::lsm_error::LsmError;
 use crate::memtables::memtable::{MemTable, MemtableId, MemtableIterator};
 use crate::memtables::wal::Wal;

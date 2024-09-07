@@ -7,5 +7,7 @@ mod lsm_error;
 mod transactions;
 mod keyspace;
 
-pub mod lsm;
+pub mod storage;
 pub mod key;
+
+pub use storage::*;

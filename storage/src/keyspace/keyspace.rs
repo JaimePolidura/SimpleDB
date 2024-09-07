@@ -1,6 +1,6 @@
 use std::fs;
 use crate::compaction::compaction::{Compaction, CompactionTask};
-use crate::lsm::{KeyspaceId, LsmIterator};
+use crate::storage::{KeyspaceId, StorageIterator};
 use crate::lsm_error::LsmError;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::memtables::memtable::MemTable;
@@ -60,7 +60,7 @@ impl Keyspace {
     pub fn scan_all_with_transaction(
         &self,
         transaction: &Transaction
-    ) -> LsmIterator {
+    ) -> StorageIterator {
         TwoMergeIterator::new(
             self.memtables.iterator(&transaction),
             self.sstables.iterator(&transaction),

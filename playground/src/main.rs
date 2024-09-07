@@ -1,9 +1,7 @@
-use storage::lsm;
 use rand::Rng;
-use storage::lsm::KeyspaceId;
 
 fn main() {
-    let mut lsm = lsm::new(shared::builder_options()
+    let mut lsm = storage::new(shared::builder_options()
         .base_path(String::from("C:\\programacion\\mini-lsm\\playground\\resources"))
         .compaction_strategy(shared::CompactionStrategy::SimpleLeveled)
         .durability_level(shared::DurabilityLevel::Strong)
@@ -21,7 +19,7 @@ fn main() {
 }
 
 //"Resources" folder should be cleared before running this function
-fn transactions(lsm: &mut lsm::Lsm) {
+fn transactions(lsm: &mut storage::Storage) {
     let keyspace = lsm.create_keyspace().unwrap();
 
     let transaction1 = lsm.start_transaction();
@@ -54,13 +52,13 @@ fn transactions(lsm: &mut lsm::Lsm) {
     assert_eq!(value1.unwrap(), vec![1]);
 }
 
-fn read(lsm: &mut lsm::Lsm, keyspace_id: KeyspaceId) {
+fn read(lsm: &mut storage::Storage, keyspace_id: storage::KeyspaceId) {
     let value = lsm.get(keyspace_id, "AAB").unwrap();
     if value.is_some() {
     }
 }
 
-fn write(lsm: &mut lsm::Lsm, keyspace_id: KeyspaceId)  {
+fn write(lsm: &mut storage::Storage, keyspace_id: storage::KeyspaceId)  {
     loop {
         let value = next_value();
         let key = next_key();

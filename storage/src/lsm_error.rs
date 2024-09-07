@@ -2,7 +2,7 @@ use crate::manifest::manifest::ManifestOperationContent;
 use std::fmt::{format, Debug, Formatter};
 use std::string::FromUtf8Error;
 use std::path::PathBuf;
-use crate::lsm::KeyspaceId;
+use crate::storage::KeyspaceId;
 use crate::memtables::memtable::MemtableId;
 use crate::sst::sstable::SSTableId;
 

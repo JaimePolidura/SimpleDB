@@ -1,5 +1,5 @@
 use crate::keyspace::keyspace::Keyspace;
-use crate::lsm::KeyspaceId;
+use crate::storage::KeyspaceId;
 use crate::lsm_error::LsmError;
 use crate::lsm_error::LsmError::{CannotReadKeyspaceFile, CannotReadKeyspacesDirectories, KeyspaceNotFound};
 use crate::transactions::transaction::TxnId;

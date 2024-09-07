@@ -14,7 +14,7 @@ use std::ops::Bound::Excluded;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
-use crate::lsm::KeyspaceId;
+use crate::storage::KeyspaceId;
 
 const TOMBSTONE: Bytes = Bytes::new();
 
