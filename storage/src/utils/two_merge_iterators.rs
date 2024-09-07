@@ -87,7 +87,7 @@ mod test {
     use std::sync::Arc;
     use crate::key;
     use crate::key::Key;
-    use crate::lsm_options::LsmOptions;
+    use crate::simpledb_options::LsmOptions;
     use crate::memtables::memtable::{MemTable, MemtableIterator};
     use crate::transactions::transaction::Transaction;
     use crate::utils::storage_iterator::StorageIterator;

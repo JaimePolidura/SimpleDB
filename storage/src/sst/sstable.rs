@@ -2,7 +2,6 @@ use crate::key;
 use crate::key::Key;
 use crate::lsm_error::LsmError::{CannotDecodeSSTable, CannotDeleteSSTable, CannotOpenSSTableFile, CannotReadSSTableFile};
 use crate::lsm_error::{DecodeError, LsmError, SSTableCorruptedPart};
-use crate::lsm_options::LsmOptions;
 use crate::sst::block::block::Block;
 use crate::sst::block_cache::BlockCache;
 use crate::sst::block_metadata::BlockMetadata;
@@ -27,7 +26,7 @@ pub struct SSTable {
     pub(crate) file: shared::SimpleDbFile,
     pub(crate) block_cache: Mutex<BlockCache>,
     pub(crate) block_metadata: Vec<BlockMetadata>,
-    pub(crate) lsm_options: Arc<LsmOptions>,
+    pub(crate) options: Arc<shared::SimpleDbOptions>,
     pub(crate) level: u32,
     pub(crate) state: AtomicU8,
     pub(crate) first_key: Key,
@@ -41,7 +40,7 @@ impl SSTable {
     pub fn new(
         active_txn_ids_written: SkipSet<TxnId>,
         block_metadata: Vec<BlockMetadata>,
-        lsm_options: Arc<LsmOptions>,
+        options: Arc<shared::SimpleDbOptions>,
         bloom_filter: BloomFilter,
         first_key: Key,
         last_key: Key,
@@ -52,12 +51,12 @@ impl SSTable {
         keyspace_id: KeyspaceId
     ) -> SSTable {
         SSTable {
-            block_cache: Mutex::new(BlockCache::new(lsm_options.clone())),
+            block_cache: Mutex::new(BlockCache::new(options.clone())),
             state: AtomicU8::new(state),
             active_txn_ids_written,
             block_metadata,
             bloom_filter,
-            lsm_options,
+            options,
             first_key,
             last_key,
             level,
@@ -71,21 +70,21 @@ impl SSTable {
         sstable_id: SSTableId,
         keyspace_id: KeyspaceId,
         path: &Path,
-        lsm_options: Arc<LsmOptions>
+        options: Arc<shared::SimpleDbOptions>
     ) -> Result<Arc<SSTable>, LsmError> {
         let sst_file = shared::SimpleDbFile::open(path, shared::SimpleDbFileMode::RandomWrites)
             .map_err(|e| CannotOpenSSTableFile(keyspace_id, sstable_id, e))?;
         let sst_bytes = sst_file.read_all()
             .map_err(|e| CannotOpenSSTableFile(keyspace_id, sstable_id, e))?;
 
-        Self::decode(&sst_bytes, sstable_id, keyspace_id, lsm_options, sst_file)
+        Self::decode(&sst_bytes, sstable_id, keyspace_id, options, sst_file)
     }
 
     fn decode(
         bytes: &Vec<u8>,
         sstable_id: SSTableId,
         keyspace_id: KeyspaceId,
-        lsm_options: Arc<LsmOptions>,
+        options: Arc<shared::SimpleDbOptions>,
         file: shared::SimpleDbFile,
     ) -> Result<Arc<SSTable>, LsmError> {
         let meta_offset = shared::u8_vec_to_u32_le(bytes, bytes.len() - 4);
@@ -118,7 +117,7 @@ impl SSTable {
         Ok(Arc::new(SSTable::new(
             active_txn_ids_written,
             block_metadata,
-            lsm_options,
+            options,
             bloom_filter,
             first_key,
             last_key,
@@ -174,10 +173,10 @@ impl SSTable {
 
         //Read from disk
         let metadata: &BlockMetadata = &self.block_metadata[block_id];
-        let encoded_block = self.file.read(metadata.offset, self.lsm_options.block_size_bytes)
+        let encoded_block = self.file.read(metadata.offset, self.options.block_size_bytes)
             .map_err(|e| CannotReadSSTableFile(self.keyspace_id, self.sstable_id, e))?;
 
-        let block = Block::decode(&encoded_block, &self.lsm_options)
+        let block = Block::decode(&encoded_block, &self.options)
             .map_err(|error_type| CannotDecodeSSTable(self.keyspace_id, self.sstable_id, SSTableCorruptedPart::Block(block_id), DecodeError {
                 offset: metadata.offset,
                 path: self.file.path(),

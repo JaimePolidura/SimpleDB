@@ -3,38 +3,20 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use crate::lsm::KeyspaceId;
 use crate::lsm_error::LsmError;
-use crate::lsm_options::LsmOptions;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
 use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_iterator::StorageIterator;
-
-#[derive(Clone, Copy)]
-pub struct SimpleLeveledCompactionOptions {
-    pub level0_file_num_compaction_trigger: usize,
-    pub size_ratio_percent: usize,
-    pub max_levels: usize,
-}
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
 pub struct SimpleLeveledCompactionTask {
     level: usize,
 }
 
-impl Default for SimpleLeveledCompactionOptions {
-    fn default() -> Self {
-        SimpleLeveledCompactionOptions {
-            level0_file_num_compaction_trigger: 1,
-            size_ratio_percent: 1,
-            max_levels: 8,
-        }
-    }
-}
-
 pub(crate) fn start_simple_leveled_compaction(
     compaction_task: SimpleLeveledCompactionTask,
     transaction_manager: &Arc<TransactionManager>,
-    options: &Arc<LsmOptions>,
+    options: &Arc<shared::SimpleDbOptions>,
     sstables: &Arc<SSTables>,
     keyspace_id: KeyspaceId
 ) -> Result<(), LsmError> {
@@ -92,7 +74,7 @@ pub(crate) fn start_simple_leveled_compaction(
 }
 
 pub(crate) fn create_simple_level_compaction_task(
-    options: SimpleLeveledCompactionOptions,
+    options: shared::SimpleLeveledCompactionOptions,
     sstables: &Arc<SSTables>
 ) -> Option<SimpleLeveledCompactionTask> {
     //Trigger l0 to l1 compaction

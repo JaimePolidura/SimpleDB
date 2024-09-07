@@ -1,6 +1,5 @@
 use crate::lsm_error::LsmError::{CannotCreateTransactionLog, CannotDecodeTransactionLogEntry, CannotReadTransactionLogEntries, CannotResetTransacionLog, CannotWriteTransactionLogEntry};
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
-use crate::lsm_options::{DurabilityLevel, LsmOptions};
 use crate::transactions::transaction::TxnId;
 use bytes::{Buf, BufMut};
 use std::cell::UnsafeCell;
@@ -32,23 +31,23 @@ pub enum TransactionLogEntry {
 pub struct TransactionLog {
     //Wrapped with RwLock Becase TransactionLog needs to be passed to threads. UnsafeCell doest implement Sync
     log_file: shared::SimpleDbFileWrapper,
-    lsm_options: Arc<LsmOptions>
+    options: Arc<shared::SimpleDbOptions>
 }
 
 impl TransactionLog {
-    pub fn create(lsm_options: Arc<LsmOptions>) -> Result<TransactionLog, LsmError> {
+    pub fn create(options: Arc<shared::SimpleDbOptions>) -> Result<TransactionLog, LsmError> {
         Ok(TransactionLog {
             log_file: shared::SimpleDbFileWrapper {file: UnsafeCell::new(
-                shared::SimpleDbFile::open(to_transaction_log_file_path(&lsm_options).as_path(),
-                        shared::SimpleDbFileMode::AppendOnly).map_err(|e| CannotCreateTransactionLog(e))?) },
-            lsm_options
+                shared::SimpleDbFile::open(to_transaction_log_file_path(&options).as_path(),
+                                           shared::SimpleDbFileMode::AppendOnly).map_err(|e| CannotCreateTransactionLog(e))?) },
+            options
         })
     }
 
-    pub fn create_mock(lsm_options: Arc<LsmOptions>) -> TransactionLog {
+    pub fn create_mock(options: Arc<shared::SimpleDbOptions>) -> TransactionLog {
         TransactionLog {
             log_file: shared::SimpleDbFileWrapper {file: UnsafeCell::new(shared::SimpleDbFile::mock())},
-            lsm_options
+            options
         }
     }
 
@@ -61,7 +60,7 @@ impl TransactionLog {
         log_file.write(&entry.encode())
             .map_err(|e| CannotWriteTransactionLogEntry(e))?;
 
-        if matches!(self.lsm_options.durability_level, DurabilityLevel::Strong) {
+        if matches!(self.options.durability_level, shared::DurabilityLevel::Strong) {
             log_file.fsync();
         }
         
@@ -94,7 +93,7 @@ impl TransactionLog {
                 &mut current_ptr,
                 current_offset,
                 entries.len(),
-                &self.lsm_options
+                &self.options
             )?;
 
             current_offset = current_offset + decoded_size;
@@ -110,12 +109,12 @@ impl TransactionLogEntry {
         current_ptr: &mut &[u8],
         current_offset: usize,
         n_entry_to_decode: usize,
-        lsm_options: &Arc<LsmOptions>,
+        options: &Arc<shared::SimpleDbOptions>,
     ) -> Result<(TransactionLogEntry, usize), LsmError> {
         let expected_crc = current_ptr.get_u32_le();
         let encoded_size = Self::encoded_size(current_ptr[0])
             .map_err(|_| CannotDecodeTransactionLogEntry(DecodeError {
-                path: to_transaction_log_file_path(lsm_options),
+                path: to_transaction_log_file_path(options),
                 offset: current_offset,
                 index: n_entry_to_decode,
                 error_type: DecodeErrorType::UnknownFlag(current_ptr[0] as usize)
@@ -124,7 +123,7 @@ impl TransactionLogEntry {
 
         if actual_crc != expected_crc {
             return Err(CannotDecodeTransactionLogEntry(DecodeError{
-                path: to_transaction_log_file_path(lsm_options),
+                path: to_transaction_log_file_path(options),
                 offset: current_offset,
                 index: n_entry_to_decode,
                 error_type: DecodeErrorType::CorruptedCrc(expected_crc, actual_crc)
@@ -144,7 +143,7 @@ impl TransactionLogEntry {
             COMMIT_BINARY_CODE => TransactionLogEntry::Commit(txn_id),
             START_BINARY_CODE => TransactionLogEntry::Start(txn_id),
             _ => return Err(CannotDecodeTransactionLogEntry(DecodeError {
-                path: to_transaction_log_file_path(lsm_options),
+                path: to_transaction_log_file_path(options),
                 offset: current_offset,
                 index: n_entry_to_decode,
                 error_type: DecodeErrorType::UnknownFlag(current_ptr[0] as usize)
@@ -204,8 +203,8 @@ impl TransactionLogEntry {
     }
 }
 
-fn to_transaction_log_file_path(lsm_options: &Arc<LsmOptions>) -> PathBuf {
-    let mut path = PathBuf::from(&lsm_options.base_path);
+fn to_transaction_log_file_path(options: &Arc<shared::SimpleDbOptions>) -> PathBuf {
+    let mut path = PathBuf::from(&options.base_path);
     path.push("transaction-log");
     path
 }

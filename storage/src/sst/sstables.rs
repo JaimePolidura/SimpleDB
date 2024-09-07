@@ -1,5 +1,4 @@
 use std::cmp::max;
-use crate::lsm_options::LsmOptions;
 use crate::sst::sstable::{SSTable, SSTableId, SSTABLE_ACTIVE};
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables_files::{extract_sstable_id_from_file, is_sstable_file, to_sstable_file_name};
@@ -21,14 +20,14 @@ pub struct SSTables {
     sstables: Vec<RwLock<Vec<Arc<SSTable>>>>,
     keyspace_id: KeyspaceId,
     next_sstable_id: AtomicUsize,
-    lsm_options: Arc<LsmOptions>,
+    options: Arc<shared::SimpleDbOptions>,
     manifest: Arc<Manifest>,
     n_current_levels: usize,
 }
 
 impl SSTables {
     pub fn open(
-        lsm_options: Arc<LsmOptions>,
+        options: Arc<shared::SimpleDbOptions>,
         keyspace_id: KeyspaceId,
         manifest: Arc<Manifest>
     ) -> Result<SSTables, LsmError> {
@@ -36,20 +35,20 @@ impl SSTables {
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
         }
-        let (sstables, max_ssatble_id) = Self::load_sstables(&lsm_options, keyspace_id)?;
+        let (sstables, max_ssatble_id) = Self::load_sstables(&options, keyspace_id)?;
 
         Ok(SSTables {
             keyspace_id,
             next_sstable_id: AtomicUsize::new(max_ssatble_id + 1),
             n_current_levels: 0,
-            lsm_options,
+            options,
             sstables,
             manifest,
         })
     }
 
     fn load_sstables(
-        lsm_options: &Arc<LsmOptions>,
+        options: &Arc<shared::SimpleDbOptions>,
         keyspace_id: KeyspaceId
     ) -> Result<(Vec<RwLock<Vec<Arc<SSTable>>>>, SSTableId), LsmError> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
@@ -57,7 +56,7 @@ impl SSTables {
             levels.push(RwLock::new(Vec::new()));
         }
 
-        let path = shared::get_directory_usize(&lsm_options.base_path, keyspace_id);
+        let path = shared::get_directory_usize(&options.base_path, keyspace_id);
         let path = path.as_path();
         let mut max_sstable_id: SSTableId = 0;
 
@@ -72,7 +71,7 @@ impl SSTables {
                 println!("Loading SSTable with ID: {}", sstable_id);
 
                 let sstable = SSTable::from_file(
-                    sstable_id, keyspace_id, file.path().as_path(), lsm_options.clone()
+                    sstable_id, keyspace_id, file.path().as_path(), options.clone()
                 )?;
 
                 if sstable.state.load(Acquire) != SSTABLE_ACTIVE {
@@ -277,7 +276,7 @@ impl SSTables {
     }
 
     fn to_sstable_file_path(&self, sstable_id: SSTableId, keyspace_id: KeyspaceId) -> PathBuf {
-        shared::get_file_usize(&self.lsm_options.base_path, keyspace_id, to_sstable_file_name(sstable_id).as_str())
+        shared::get_file_usize(&self.options.base_path, keyspace_id, to_sstable_file_name(sstable_id).as_str())
     }
 
     pub fn calculate_space_amplificacion(&self) -> usize {

@@ -1,6 +1,5 @@
 use crate::keyspace::keyspaces::Keyspaces;
 use crate::lsm_error::LsmError;
-use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::MemtableIterator;
 use crate::sst::ssttable_iterator::SSTableIterator;
 use crate::transactions::transaction::{Transaction, TxnId};
@@ -16,7 +15,7 @@ pub type KeyspaceId = usize;
 
 pub struct Lsm {
     transaction_manager: Arc<TransactionManager>,
-    lsm_options: Arc<LsmOptions>,
+    options: Arc<shared::SimpleDbOptions>,
     keyspaces: Keyspaces,
 }
 
@@ -27,19 +26,19 @@ pub enum WriteBatch {
 
 pub type LsmIterator = TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>;
 
-pub fn new(lsm_options: Arc<LsmOptions>) -> Result<Lsm, LsmError> {
+pub fn new(options: Arc<shared::SimpleDbOptions>) -> Result<Lsm, LsmError> {
     println!("Starting mini lsm engine!");
     let transaction_manager = Arc::new(
-        TransactionManager::create_recover_from_log(lsm_options.clone())?
+        TransactionManager::create_recover_from_log(options.clone())?
     );
     let keyspaces = Keyspaces::load_keyspaces(
-        transaction_manager.clone(), lsm_options.clone()
+        transaction_manager.clone(), options.clone()
     )?;
 
     let mut lsm = Lsm {
         transaction_manager,
         keyspaces,
-        lsm_options
+        options
     };
 
     lsm.rollback_active_transactions();

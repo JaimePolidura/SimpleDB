@@ -3,7 +3,6 @@ use crate::key::Key;
 use crate::lsm::KeyspaceId;
 use crate::lsm_error::LsmError::{CannotCreateWal, CannotDecodeWal, CannotReadWalEntries, CannotReadWalFiles, CannotWriteWalEntry};
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
-use crate::lsm_options::{DurabilityLevel, LsmOptions};
 use crate::memtables::memtable::MemtableId;
 use crate::transactions::transaction::TxnId;
 use bytes::{Buf, BufMut, Bytes};
@@ -15,7 +14,7 @@ use std::sync::Arc;
 
 pub struct Wal {
     keyspace_id: KeyspaceId,
-    lsm_options: Arc<LsmOptions>,
+    options: Arc<shared::SimpleDbOptions>,
     memtable_id: MemtableId,
     file: shared::SimpleDbFile,
 }
@@ -26,21 +25,28 @@ pub(crate) struct WalEntry {
 }
 
 impl Wal {
-    pub fn create(lsm_options: Arc<LsmOptions>, keyspace_id: KeyspaceId, memtable_id: MemtableId) -> Result<Wal, LsmError> {
+    pub fn create(
+        options: Arc<shared::SimpleDbOptions>,
+        keyspace_id: KeyspaceId,
+        memtable_id: MemtableId
+    ) -> Result<Wal, LsmError> {
         Ok(Wal {
-            file: shared::SimpleDbFile::open(Self::to_wal_file_path(&lsm_options, memtable_id, keyspace_id).as_path(), shared::SimpleDbFileMode::AppendOnly)
+            file: shared::SimpleDbFile::open(Self::to_wal_file_path(&options, memtable_id, keyspace_id).as_path(), shared::SimpleDbFileMode::AppendOnly)
                 .map_err(|e| CannotCreateWal(keyspace_id, memtable_id, e))?,
-            lsm_options,
+            options,
             keyspace_id,
             memtable_id,
         })
     }
 
-    pub fn create_mock(lsm_options: Arc<LsmOptions>, memtable_id: MemtableId) -> Result<Wal, LsmError> {
+    pub fn create_mock(
+        options: Arc<shared::SimpleDbOptions>,
+        memtable_id: MemtableId
+    ) -> Result<Wal, LsmError> {
         Ok(Wal {
             file: shared::SimpleDbFile::mock(),
             keyspace_id: 0,
-            lsm_options,
+            options,
             memtable_id,
         })
     }
@@ -50,7 +56,7 @@ impl Wal {
         self.file.write(&encoded)
             .map_err(|e| CannotWriteWalEntry(self.keyspace_id, self.memtable_id, e))?;
 
-        if matches!(self.lsm_options.durability_level, DurabilityLevel::Strong) {
+        if matches!(self.options.durability_level, shared::DurabilityLevel::Strong) {
             self.file.fsync();
         }
 
@@ -124,10 +130,10 @@ impl Wal {
     }
 
     pub fn get_persisted_wal_id(
-        lsm_options: &Arc<LsmOptions>,
+        options: &Arc<shared::SimpleDbOptions>,
         keyspace_id: KeyspaceId
     ) -> Result<(Vec<Wal>, MemtableId), LsmError> {
-        let path = shared::get_directory_usize(&lsm_options.base_path, keyspace_id);
+        let path = shared::get_directory_usize(&options.base_path, keyspace_id);
         let path = path.as_path();
         let mut max_memtable_id: usize = 0;
         let mut wals: Vec<Wal> = Vec::new();
@@ -144,7 +150,7 @@ impl Wal {
                 wals.push(Wal{
                     file: shared::SimpleDbFile::open(file.path().as_path(), shared::SimpleDbFileMode::AppendOnly)
                         .map_err(|e| CannotReadWalFiles(keyspace_id, e))?,
-                    lsm_options: lsm_options.clone(),
+                    options: options.clone(),
                     keyspace_id,
                     memtable_id,
                 });
@@ -177,8 +183,12 @@ impl Wal {
         file.file_name().to_str().unwrap().starts_with("wal-")
     }
 
-    fn to_wal_file_path(lsm_options: &Arc<LsmOptions>, memtable_id: MemtableId, keyspace_id: KeyspaceId) -> PathBuf {
+    fn to_wal_file_path(
+        options: &Arc<shared::SimpleDbOptions>,
+        memtable_id: MemtableId,
+        keyspace_id: KeyspaceId
+    ) -> PathBuf {
         let wal_file_name = format!("wal-{}", memtable_id);
-        shared::get_file_usize(&lsm_options.base_path, keyspace_id, wal_file_name.as_str())
+        shared::get_file_usize(&options.base_path, keyspace_id, wal_file_name.as_str())
     }
 }

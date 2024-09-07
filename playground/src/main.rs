@@ -1,13 +1,12 @@
-use storage::lsm_options;
 use storage::lsm;
 use rand::Rng;
 use storage::lsm::KeyspaceId;
 
 fn main() {
-    let mut lsm = lsm::new(lsm_options::builder()
+    let mut lsm = lsm::new(shared::builder_options()
         .base_path(String::from("C:\\programacion\\mini-lsm\\playground\\resources"))
-        .compaction_strategy(lsm_options::CompactionStrategy::SimpleLeveled)
-        .durability_level(lsm_options::DurabilityLevel::Strong)
+        .compaction_strategy(shared::CompactionStrategy::SimpleLeveled)
+        .durability_level(shared::DurabilityLevel::Strong)
         .memtable_max_size_bytes(8192)
         .compaction_task_frequency_ms(10)
         .sst_size_bytes(65536)

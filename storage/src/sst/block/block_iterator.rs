@@ -64,7 +64,7 @@ mod test {
     use crate::sst::block::block_iterator::BlockIterator;
     use crate::key;
     use crate::key::Key;
-    use crate::lsm_options::LsmOptions;
+    use crate::simpledb_options::LsmOptions;
     use crate::utils::storage_iterator::StorageIterator;
 
     #[test]

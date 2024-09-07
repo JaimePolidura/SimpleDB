@@ -2,7 +2,6 @@ use std::fs;
 use crate::compaction::compaction::{Compaction, CompactionTask};
 use crate::lsm::{KeyspaceId, LsmIterator};
 use crate::lsm_error::LsmError;
-use crate::lsm_options::LsmOptions;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::memtables::memtable::MemTable;
 use crate::memtables::memtables::Memtables;
@@ -17,7 +16,7 @@ use crate::lsm_error::LsmError::CannotCreateKeyspaceDirectory;
 pub struct Keyspace {
     keyspace_id: KeyspaceId,
     transaction_manager: Arc<TransactionManager>,
-    lsm_options: Arc<LsmOptions>,
+    options: Arc<shared::SimpleDbOptions>,
     compaction: Arc<Compaction>,
     sstables: Arc<SSTables>,
     memtables: Memtables,
@@ -28,29 +27,29 @@ impl Keyspace {
     pub fn create_new(
         keyspace_id: KeyspaceId,
         transaction_manager: Arc<TransactionManager>,
-        lsm_options: Arc<LsmOptions>
+        options: Arc<shared::SimpleDbOptions>
     ) -> Result<Arc<Keyspace>, LsmError> {
-        let path = shared::get_directory_usize(&lsm_options.base_path, keyspace_id);
+        let path = shared::get_directory_usize(&options.base_path, keyspace_id);
         fs::create_dir(path.as_path())
             .map_err(|e| CannotCreateKeyspaceDirectory(keyspace_id, e))?;
-        Self::load(keyspace_id, transaction_manager, lsm_options)
+        Self::load(keyspace_id, transaction_manager, options)
     }
 
     pub fn load(
         keyspace_id: KeyspaceId,
         transaction_manager: Arc<TransactionManager>,
-        lsm_options: Arc<LsmOptions>
+        options: Arc<shared::SimpleDbOptions>
     ) -> Result<Arc<Keyspace>, LsmError> {
-        let manifest = Arc::new(Manifest::create(lsm_options.clone(), keyspace_id)?);
-        let sstables = Arc::new(SSTables::open(lsm_options.clone(), keyspace_id, manifest.clone())?);
-        let memtables = Memtables::create_and_recover_from_wal(lsm_options.clone(), keyspace_id)?;
-        let compaction =  Compaction::create(transaction_manager.clone(), lsm_options.clone(),
-            sstables.clone(), manifest.clone(), keyspace_id);
+        let manifest = Arc::new(Manifest::create(options.clone(), keyspace_id)?);
+        let sstables = Arc::new(SSTables::open(options.clone(), keyspace_id, manifest.clone())?);
+        let memtables = Memtables::create_and_recover_from_wal(options.clone(), keyspace_id)?;
+        let compaction =  Compaction::create(transaction_manager.clone(), options.clone(),
+                                             sstables.clone(), manifest.clone(), keyspace_id);
 
         Ok(Arc::new(Keyspace{
             keyspace_id,
             transaction_manager,
-            lsm_options,
+            options,
             compaction,
             sstables,
             memtables,

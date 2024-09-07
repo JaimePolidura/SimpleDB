@@ -1,7 +1,6 @@
 use crate::key;
 use crate::key::Key;
 use crate::lsm_error::LsmError;
-use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::MemtableState::{Active, Flushed, Flusing, Inactive, RecoveringFromWal};
 use crate::memtables::wal::Wal;
 use crate::sst::sstable_builder::SSTableBuilder;
@@ -28,7 +27,7 @@ pub struct MemTable {
     memtable_id: MemtableId,
     state: UnsafeCell<MemtableState>,
     wal: UnsafeCell<Wal>,
-    options: Arc<LsmOptions>,
+    options: Arc<shared::SimpleDbOptions>,
     txn_ids_written: SkipSet<TxnId>,
     keyspace_id: KeyspaceId,
 }
@@ -44,7 +43,7 @@ enum MemtableState {
 
 impl MemTable {
     pub fn create_new(
-        options: Arc<LsmOptions>,
+        options: Arc<shared::SimpleDbOptions>,
         memtable_id: MemtableId,
         keyspace_id: KeyspaceId
     ) -> Result<MemTable, LsmError> {
@@ -62,7 +61,7 @@ impl MemTable {
     }
 
     pub fn create_mock(
-        options: Arc<LsmOptions>,
+        options: Arc<shared::SimpleDbOptions>,
         memtable_id: MemtableId
     ) -> Result<MemTable, LsmError> {
         Ok(MemTable {
@@ -79,7 +78,7 @@ impl MemTable {
     }
 
     pub fn create_and_recover_from_wal(
-        options: Arc<LsmOptions>,
+        options: Arc<shared::SimpleDbOptions>,
         memtable_id: MemtableId,
         keyspace_id: KeyspaceId,
         wal: Wal
@@ -406,7 +405,6 @@ impl<'a> StorageIterator for MemtableIterator {
 #[cfg(test)]
 mod test {
     use crate::key;
-    use crate::lsm_options::LsmOptions;
     use crate::memtables::memtable::{MemTable, MemtableIterator};
     use crate::transactions::transaction::{Transaction, TxnId};
     use crate::transactions::transaction_manager::IsolationLevel;
@@ -415,7 +413,7 @@ mod test {
 
     #[test]
     fn get_set_delete_no_transactions() {
-        let memtable = MemTable::create_mock(Arc::new(LsmOptions::default()), 0)
+        let memtable = MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0)
             .unwrap();
         let value: Vec<u8> = vec![10, 12];
 
@@ -434,7 +432,7 @@ mod test {
 
     #[test]
     fn get_set_delete_transactions() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(LsmOptions::default()), 0).unwrap());
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
         memtable.set_active();
         memtable.set(&transaction(10), "aa", &vec![1]); //Cannot be read by the transaction, should be ignored
         memtable.set(&transaction(1), "alberto", &vec![2]);
@@ -460,7 +458,7 @@ mod test {
 
     #[test]
     fn iterators_readuncommited() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(LsmOptions::default()), 0).unwrap());
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
         memtable.set_active();
         let value: Vec<u8> = vec![10, 12];
         memtable.set(&transaction(1), "alberto", &value);
@@ -495,7 +493,7 @@ mod test {
 
     #[test]
     fn iterators_snapshotisolation() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(LsmOptions::default()), 0).unwrap());
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
         memtable.set_active();
         let value: Vec<u8> = vec![10, 12];
         memtable.set(&transaction(10), "aa", &value); //Cannot be read by the transaction, should be ignored

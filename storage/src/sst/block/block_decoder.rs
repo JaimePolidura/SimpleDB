@@ -6,12 +6,11 @@ use crate::sst::block::block::Block;
 use crate::key;
 use crate::key::Key;
 use crate::lsm_error::DecodeErrorType;
-use crate::lsm_options::LsmOptions;
 use crate::transactions::transaction::TxnId;
 
 pub(crate) fn decode_block(
     encoded: &Vec<u8>,
-    options: &Arc<LsmOptions>
+    options: &Arc<shared::SimpleDbOptions>
 ) -> Result<Block, DecodeErrorType> {
     if encoded.len() != options.block_size_bytes {
         return Err(DecodeErrorType::IllegalSize(options.block_size_bytes, encoded.len()));

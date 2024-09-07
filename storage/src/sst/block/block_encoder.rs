@@ -1,12 +1,12 @@
+use std::ops::Shl;
 use std::sync::Arc;
 use bytes::BufMut;
 use crate::sst::block::block::{Block, BLOCK_FOOTER_LENGTH, NOT_COMPRESSED, PREFIX_COMPRESSED};
 use crate::key::Key;
-use crate::lsm_options::LsmOptions;
 
 pub(crate) fn encode_block (
     block: &Block,
-    options: &Arc<LsmOptions>
+    options: &Arc<shared::SimpleDbOptions>
 ) -> Vec<u8> {
     let mut encoded: Vec<u8> = Vec::with_capacity(options.block_size_bytes);
 
@@ -29,7 +29,7 @@ fn encode_entries(
     block: &Block,
     encoded: &mut Vec<u8>,
     flags: u64,
-    options: &Arc<LsmOptions>
+    options: &Arc<shared::SimpleDbOptions>
 ) -> (bool, Vec<u16>) {
     match flags {
         PREFIX_COMPRESSED => encode_prefix_compressed_entries(block, encoded, options),
@@ -41,7 +41,7 @@ fn encode_entries(
 fn encode_prefix_compressed_entries(
     block: &Block,
     encoded: &mut Vec<u8>,
-    options: &Arc<LsmOptions>
+    options: &Arc<shared::SimpleDbOptions>
 ) -> (bool, Vec<u16>) {
     let mut prev_key: Option<Key> = None;
     let mut new_offsets: Vec<u16> = Vec::new();
@@ -97,7 +97,7 @@ fn encode_footer(
     block: &Block,
     encoded: &mut Vec<u8>,
     flags: u64,
-    options: &Arc<LsmOptions>
+    options: &Arc<shared::SimpleDbOptions>
 ) {
     let n_entries: u16 = block.offsets.len() as u16;
     shared::u64_to_u8_le(flags, options.block_size_bytes - 12, encoded);

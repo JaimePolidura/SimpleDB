@@ -1,6 +1,5 @@
 use crate::key::Key;
 use crate::lsm_error::LsmError;
-use crate::lsm_options::LsmOptions;
 use crate::transactions::transaction::{Transaction, TxnId};
 use crate::transactions::transaction_log::{TransactionLog, TransactionLogEntry};
 use crossbeam_skiplist::{SkipMap, SkipSet};
@@ -24,7 +23,7 @@ pub struct TransactionManager {
 }
 
 impl TransactionManager {
-    pub fn create_recover_from_log(options: Arc<LsmOptions>) -> Result<TransactionManager, LsmError> {
+    pub fn create_recover_from_log(options: Arc<shared::SimpleDbOptions>) -> Result<TransactionManager, LsmError> {
         let mut log = TransactionLog::create(options)?;
         let transaction_log_entries = log.read_entries()?;
         let rolledback_transactions = Self::get_pending_transactions_to_rollback_from_log_entries(&transaction_log_entries);
@@ -50,7 +49,7 @@ impl TransactionManager {
         active_transactions
     }
 
-    pub fn create_mock(options: Arc<LsmOptions>) -> TransactionManager {
+    pub fn create_mock(options: Arc<shared::SimpleDbOptions>) -> TransactionManager {
         TransactionManager {
             log: TransactionLog::create_mock(options),
             rolledback_transactions: SkipMap::new(),

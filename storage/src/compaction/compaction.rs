@@ -1,6 +1,5 @@
 use crate::compaction::simple_leveled::{create_simple_level_compaction_task, start_simple_leveled_compaction, SimpleLeveledCompactionTask};
 use crate::compaction::tiered::{create_tiered_compaction_task, start_tiered_compaction, TieredCompactionTask};
-use crate::lsm_options::{CompactionStrategy, LsmOptions};
 use serde::{Deserialize, Serialize};
 use crate::sst::sstables::SSTables;
 use std::time::Duration;
@@ -12,7 +11,7 @@ use crate::transactions::transaction_manager::TransactionManager;
 
 pub struct Compaction {
     transaction_manager: Arc<TransactionManager>,
-    lsm_options: Arc<LsmOptions>,
+    options: Arc<shared::SimpleDbOptions>,
     sstables: Arc<SSTables>,
     manifest: Arc<Manifest>,
 
@@ -21,7 +20,7 @@ pub struct Compaction {
 
 struct CompactionThread {
     transaction_manager: Arc<TransactionManager>,
-    lsm_options: Arc<LsmOptions>,
+    options: Arc<shared::SimpleDbOptions>,
     sstables: Arc<SSTables>,
     manifest: Arc<Manifest>,
 
@@ -37,14 +36,14 @@ pub enum CompactionTask {
 impl Compaction {
     pub fn create(
         transaction_manager: Arc<TransactionManager>,
-        lsm_options: Arc<LsmOptions>,
+        options: Arc<shared::SimpleDbOptions>,
         sstables: Arc<SSTables>,
         manifest: Arc<Manifest>,
         keyspace_id: KeyspaceId,
     ) -> Arc<Compaction> {
         Arc::new(Compaction {
             transaction_manager: transaction_manager.clone(),
-            lsm_options: lsm_options.clone(),
+            options: options.clone(),
             sstables: sstables.clone(),
             manifest: manifest.clone(),
             keyspace_id
@@ -56,7 +55,7 @@ impl Compaction {
 
         let compaction_thread = CompactionThread {
             transaction_manager: self.transaction_manager.clone(),
-            lsm_options: self.lsm_options.clone(),
+            options: self.options.clone(),
             sstables: self.sstables.clone(),
             manifest: self.manifest.clone(),
             keyspace_id: self.keyspace_id,
@@ -70,10 +69,10 @@ impl Compaction {
     pub fn compact(&self, compaction_task: CompactionTask) -> Result<(), LsmError> {
         match compaction_task {
             CompactionTask::SimpleLeveled(simpleLeveledTask) => start_simple_leveled_compaction(
-                simpleLeveledTask, &self.transaction_manager, &self.lsm_options, &self.sstables, self.keyspace_id,
+                simpleLeveledTask, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id,
             ),
             CompactionTask::Tiered(tieredTask) => start_tiered_compaction(
-                tieredTask, &self.transaction_manager, &self.lsm_options, &self.sstables, self.keyspace_id,
+                tieredTask, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id,
             ),
         }
     }
@@ -82,7 +81,7 @@ impl Compaction {
 impl CompactionThread {
     fn start_compactions(&self) -> ! {
         loop {
-            std::thread::sleep(Duration::from_millis(self.lsm_options.compaction_task_frequency_ms as u64));
+            std::thread::sleep(Duration::from_millis(self.options.compaction_task_frequency_ms as u64));
 
             if let Some(compaction_task) = self.create_compaction_task() {
                 let operation_id = self.manifest.append_operation(ManifestOperationContent::Compaction(compaction_task));
@@ -100,17 +99,17 @@ impl CompactionThread {
     }
 
     pub fn create_compaction_task(&self) -> Option<CompactionTask> {
-        match self.lsm_options.compaction_strategy {
-            CompactionStrategy::SimpleLeveled => {
+        match self.options.compaction_strategy {
+            shared::CompactionStrategy::SimpleLeveled => {
                 if let Some(compaction_task) = create_simple_level_compaction_task(
-                    self.lsm_options.simple_leveled_compaction_options, &self.sstables
+                    self.options.simple_leveled_compaction_options, &self.sstables
                 ) {
                     return Some(CompactionTask::SimpleLeveled(compaction_task));
                 }
             },
-            CompactionStrategy::Tiered => {
+            shared::CompactionStrategy::Tiered => {
                 if let Some(compaction_task) = create_tiered_compaction_task(
-                    self.lsm_options.tiered_compaction_options, &self.sstables
+                    self.options.tiered_compaction_options, &self.sstables
                 ) {
                     return Some(CompactionTask::Tiered(compaction_task));
                 }
@@ -123,10 +122,10 @@ impl CompactionThread {
     fn compact(&self, compaction_task: CompactionTask) -> Result<(), LsmError> {
         match compaction_task {
             CompactionTask::SimpleLeveled(simpleLeveledTask) => start_simple_leveled_compaction(
-                simpleLeveledTask, &self.transaction_manager, &self.lsm_options, &self.sstables, self.keyspace_id
+                simpleLeveledTask, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id
             ),
             CompactionTask::Tiered(tieredTask) => start_tiered_compaction(
-                tieredTask, &self.transaction_manager, &self.lsm_options, &self.sstables, self.keyspace_id,
+                tieredTask, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id,
             ),
         }
     }

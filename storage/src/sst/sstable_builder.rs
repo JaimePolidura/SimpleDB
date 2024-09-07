@@ -7,7 +7,6 @@ use crate::key::Key;
 use crate::lsm::KeyspaceId;
 use crate::lsm_error::LsmError;
 use crate::lsm_error::LsmError::CannotCreateSSTableFile;
-use crate::lsm_options::LsmOptions;
 use crate::sst::block_metadata::BlockMetadata;
 use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
 use crate::transactions::transaction::TxnId;
@@ -29,7 +28,7 @@ pub struct SSTableBuilder {
 
     key_hashes: Vec<u32>,
 
-    lsm_options: Arc<LsmOptions>,
+    options: Arc<shared::SimpleDbOptions>,
     level: u32,
 
     memtable_id: Option<usize>,
@@ -40,13 +39,13 @@ pub struct SSTableBuilder {
 
 impl SSTableBuilder {
     pub fn create(
-        lsm_options: Arc<LsmOptions>,
+        options: Arc<shared::SimpleDbOptions>,
         transaction_manager: Arc<TransactionManager>,
         keyspace_id: KeyspaceId,
         level: u32
     ) -> SSTableBuilder {
         SSTableBuilder {
-            current_block_builder: BlockBuilder::new(lsm_options.clone()),
+            current_block_builder: BlockBuilder::new(options.clone()),
             level,
             keyspace_id,
             key_hashes: Vec::new(),
@@ -59,7 +58,7 @@ impl SSTableBuilder {
             first_key: None,
             last_key: None,
             transaction_manager,
-            lsm_options,
+            options,
         }
     }
 
@@ -111,7 +110,7 @@ impl SSTableBuilder {
 
         let bloom_filter: BloomFilter = BloomFilter::new(
             &self.key_hashes,
-            self.lsm_options.bloom_filter_n_entries
+            self.options.bloom_filter_n_entries
         );
 
         let mut encoded = self.builded_encoded_blocks;
@@ -140,7 +139,7 @@ impl SSTableBuilder {
 
         match shared::SimpleDbFile::create(path, &encoded, shared::SimpleDbFileMode::ReadOnly) {
             Ok(lsm_file) => Ok(SSTable::new(
-                self.active_txn_ids_written, self.builded_block_metadata, self.lsm_options, bloom_filter, self.first_key.unwrap(),
+                self.active_txn_ids_written, self.builded_block_metadata, self.options, bloom_filter, self.first_key.unwrap(),
                 self.last_key.unwrap(), lsm_file, self.level, id, SSTABLE_ACTIVE, self.keyspace_id,
             )),
             Err(e) => Err(CannotCreateSSTableFile(self.keyspace_id, id, e))
@@ -159,7 +158,7 @@ impl SSTableBuilder {
     }
 
     pub fn estimated_size_bytes(&self) -> usize {
-        self.builded_encoded_blocks.len() + self.lsm_options.block_size_bytes
+        self.builded_encoded_blocks.len() + self.options.block_size_bytes
     }
 
     fn build_current_block(&mut self) {
@@ -169,8 +168,8 @@ impl SSTableBuilder {
         }
 
         let encoded_block: Vec<u8> = self.current_block_builder.build()
-            .encode(&self.lsm_options);
-        self.current_block_builder = BlockBuilder::new(self.lsm_options.clone());
+            .encode(&self.options);
+        self.current_block_builder = BlockBuilder::new(self.options.clone());
 
         self.builded_block_metadata.push(BlockMetadata {
             first_key: self.first_key_current_block.take().unwrap(),

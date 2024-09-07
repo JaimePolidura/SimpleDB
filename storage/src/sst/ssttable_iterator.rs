@@ -123,18 +123,14 @@ mod test {
     use std::sync::atomic::AtomicU8;
     use bytes::Bytes;
     use crossbeam_skiplist::SkipSet;
-    use serde_json::ser::CharEscape::Tab;
     use crate::sst::block::block_builder::BlockBuilder;
     use crate::key;
-    use crate::key::Key;
-    use crate::lsm_options::LsmOptions;
     use crate::sst::block_cache::BlockCache;
     use crate::sst::block_metadata::BlockMetadata;
     use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
     use crate::sst::ssttable_iterator::SSTableIterator;
     use crate::transactions::transaction::Transaction;
     use crate::utils::bloom_filter::BloomFilter;
-    use crate::utils::lsm_file::LsmFile;
     use crate::utils::storage_iterator::StorageIterator;
 
     #[test]
@@ -174,39 +170,40 @@ mod test {
     }
 
     fn build_sstable_iterator() -> SSTableIterator {
-        let mut block1 = BlockBuilder::new(Arc::new(LsmOptions::default()));
+        let mut block1 = BlockBuilder::new(Arc::new(shared::SimpleDbOptions::default()));
         block1.add_entry(key::new("Alberto", 1), Bytes::from(vec![1]));
         block1.add_entry(key::new("Berto", 1), Bytes::from(vec![1]));
         let block1 = Arc::new(block1.build());
 
-        let mut block2 = BlockBuilder::new(Arc::new(LsmOptions::default()));
+        let mut block2 = BlockBuilder::new(Arc::new(shared::SimpleDbOptions::default()));
         block2.add_entry(key::new("Cigu", 1), Bytes::from(vec![1]));
         block2.add_entry(key::new("De", 1), Bytes::from(vec![1]));
         let block2 = Arc::new(block2.build());
 
-        let mut block3 = BlockBuilder::new(Arc::new(LsmOptions::default()));
+        let mut block3 = BlockBuilder::new(Arc::new(shared::SimpleDbOptions::default()));
         block3.add_entry(key::new("Estonia", 1), Bytes::from(vec![1]));
         block3.add_entry(key::new("Gibraltar", 1), Bytes::from(vec![1]));
         block3.add_entry(key::new("Zi", 1), Bytes::from(vec![1]));
         let block3 = Arc::new(block3.build());
 
-        let mut block_cache = BlockCache::new(Arc::new(LsmOptions::default()));
+        let mut block_cache = BlockCache::new(Arc::new(shared::SimpleDbOptions::default()));
         block_cache.put(0, block1);
         block_cache.put(1, block2);
         block_cache.put(2, block3);
 
         let sstable = Arc::new(SSTable{
+            keyspace_id: 0,
             active_txn_ids_written: SkipSet::new(),
             sstable_id: 1,
             bloom_filter: BloomFilter::new(&Vec::new(), 8),
-            file: LsmFile::mock(),
+            file: shared::SimpleDbFile::mock(),
             block_cache: Mutex::new(block_cache),
             block_metadata: vec![
                 BlockMetadata{offset: 0, first_key: key::new("Alberto", 1), last_key: key::new("Berto", 1)},
                 BlockMetadata{offset: 8, first_key: key::new("Cigu", 1), last_key: key::new("De", 1)},
                 BlockMetadata{offset: 16, first_key: key::new("Estonia", 1), last_key: key::new("Zi", 1)},
             ],
-            lsm_options: Arc::new(LsmOptions::default()),
+            options: Arc::new(shared::SimpleDbOptions::default()),
             level: 0,
             state: AtomicU8::new(SSTABLE_ACTIVE),
             first_key: key::new("Alberto", 1),

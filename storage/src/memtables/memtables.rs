@@ -3,7 +3,6 @@ use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use crate::lsm::KeyspaceId;
 use crate::lsm_error::LsmError;
-use crate::lsm_options::LsmOptions;
 use crate::memtables::memtable::{MemTable, MemtableId, MemtableIterator};
 use crate::memtables::wal::Wal;
 use crate::transactions::transaction::{Transaction, TxnId};
@@ -14,12 +13,12 @@ pub struct Memtables {
     current_memtable: AtomicPtr<Arc<MemTable>>,
     keyspace_id: KeyspaceId,
     next_memtable_id: AtomicUsize,
-    options: Arc<LsmOptions>,
+    options: Arc<shared::SimpleDbOptions>,
 }
 
 impl Memtables {
     pub fn create_and_recover_from_wal(
-        options: Arc<LsmOptions>,
+        options: Arc<shared::SimpleDbOptions>,
         keyspace_id: KeyspaceId
     ) -> Result<Memtables, LsmError> {
         let (wals, max_memtable_id) = Wal::get_persisted_wal_id(&options, keyspace_id)?;
@@ -182,7 +181,7 @@ impl Memtables {
     }
 
     fn recover_memtables_from_wal(
-        options: Arc<LsmOptions>,
+        options: Arc<shared::SimpleDbOptions>,
         max_memtable_id: usize,
         wals: Vec<Wal>,
         keyspace_id: KeyspaceId
@@ -211,7 +210,7 @@ impl Memtables {
     }
 
     fn create_memtables_no_wal(
-        options: Arc<LsmOptions>,
+        options: Arc<shared::SimpleDbOptions>,
         keyspace_id: KeyspaceId
     ) -> Result<Memtables, LsmError> {
         let current_memtable = MemTable::create_new(options.clone(), 0, keyspace_id)?;

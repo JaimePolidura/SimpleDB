@@ -5,7 +5,6 @@ use crate::sst::block::block_encoder::encode_block;
 use crate::key;
 use crate::key::Key;
 use crate::lsm_error::DecodeErrorType;
-use crate::lsm_options::LsmOptions;
 use crate::transactions::transaction::{Transaction, TxnId};
 
 pub const PREFIX_COMPRESSED: u64 = 0x01;
@@ -22,11 +21,11 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn encode(&self, options: &Arc<LsmOptions>) -> Vec<u8> {
+    pub fn encode(&self, options: &Arc<shared::SimpleDbOptions>) -> Vec<u8> {
         encode_block(&self, options)
     }
 
-    pub fn decode(encoded: &Vec<u8>, options: &Arc<LsmOptions>) -> Result<Block, DecodeErrorType> {
+    pub fn decode(encoded: &Vec<u8>, options: &Arc<shared::SimpleDbOptions>) -> Result<Block, DecodeErrorType> {
         decode_block(encoded, options)
     }
 
@@ -110,11 +109,10 @@ mod test {
     use crate::sst::block::block::Block;
     use crate::sst::block::block_builder::BlockBuilder;
     use crate::key;
-    use crate::lsm_options::LsmOptions;
 
     #[test]
     fn encode_and_decode() {
-        let mut block_builder = BlockBuilder::new(Arc::new(LsmOptions::default()));
+        let mut block_builder = BlockBuilder::new(Arc::new(shared::SimpleDbOptions::default()));
         block_builder.add_entry(key::new("Jaime", 1), Bytes::from(vec![1]));
         block_builder.add_entry(key::new("Javier", 1), Bytes::from(vec![2]));
         block_builder.add_entry(key::new("Jose", 1), Bytes::from(vec![3]));
@@ -124,9 +122,9 @@ mod test {
         block_builder.add_entry(key::new("Kia", 1), Bytes::from(vec![7]));
         let block = block_builder.build();
 
-        let encoded = block.encode(&Arc::new(LsmOptions::default()));
+        let encoded = block.encode(&Arc::new(shared::SimpleDbOptions::default()));
 
-        let decoded_block_to_test = Block::decode(&encoded, &Arc::new(LsmOptions::default()))
+        let decoded_block_to_test = Block::decode(&encoded, &Arc::new(shared::SimpleDbOptions::default()))
             .unwrap();
 
         assert_eq!(decoded_block_to_test.get_key_by_index(0).to_string(), String::from("Jaime"));

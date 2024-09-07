@@ -5,17 +5,15 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use bytes::{Buf, BufMut};
 use serde::{Deserialize, Deserializer, Serialize};
-use shared::SimpleDbFile;
 use crate::compaction::compaction::CompactionTask;
 use crate::lsm::KeyspaceId;
 use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
 use crate::lsm_error::LsmError::{CannotCreateManifest, CannotDecodeManifest, CannotReadManifestOperations, CannotResetManifest};
-use crate::lsm_options::LsmOptions;
 
 pub struct Manifest {
     file: Mutex<shared::SimpleDbFile>,
     last_manifest_record_id: AtomicUsize,
-    options: Arc<LsmOptions>,
+    options: Arc<shared::SimpleDbOptions>,
     keyspace_id: KeyspaceId
 }
 
@@ -39,7 +37,10 @@ pub struct MemtableFlushManifestOperation {
 }
 
 impl Manifest {
-    pub fn create(options: Arc<LsmOptions>, keyspace_id: KeyspaceId) -> Result<Manifest, LsmError> {
+    pub fn create(
+        options: Arc<shared::SimpleDbOptions>,
+        keyspace_id: KeyspaceId
+    ) -> Result<Manifest, LsmError> {
         match shared::SimpleDbFile::open(Self::manifest_path(&options, keyspace_id).as_path(), shared::SimpleDbFileMode::AppendOnly) {
             Ok(file) => Ok(Manifest {
                 last_manifest_record_id: AtomicUsize::new(0),
@@ -175,7 +176,7 @@ impl Manifest {
         }
     }
 
-    fn manifest_path(options: &Arc<LsmOptions>, keyspace_id: KeyspaceId) -> PathBuf {
+    fn manifest_path(options: &Arc<shared::SimpleDbOptions>, keyspace_id: KeyspaceId) -> PathBuf {
         shared::get_file_usize(&options.base_path, keyspace_id, "MANIFEST")
     }
 }

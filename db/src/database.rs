@@ -1,10 +1,12 @@
-use std::iter::Map;
 use std::sync::Arc;
+use crossbeam_skiplist::SkipMap;
 use storage::lsm;
-use crate::table::Table;
+use crate::table::table::Table;
 
 pub struct Database {
     name: String,
     storage: Arc<lsm::Lsm>,
-    tables: Map<String, Table>
+    tables: SkipMap<String, Arc<Table>>,
+
+    options: Arc<storage::LsmOptions>
 }

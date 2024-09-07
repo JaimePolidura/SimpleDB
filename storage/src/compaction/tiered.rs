@@ -3,18 +3,10 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use crate::lsm::KeyspaceId;
 use crate::lsm_error::LsmError;
-use crate::lsm_options::LsmOptions;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
 use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_iterator::StorageIterator;
-
-#[derive(Clone, Copy)]
-pub struct TieredCompactionOptions {
-    pub max_size_amplificacion: usize,
-    pub size_ratio: usize,
-    pub min_levels_trigger_size_ratio: usize,
-}
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
 pub enum TieredCompactionTask {
@@ -22,20 +14,10 @@ pub enum TieredCompactionTask {
     SizeRatioTrigger(usize)
 }
 
-impl Default for TieredCompactionOptions {
-    fn default() -> Self {
-        TieredCompactionOptions {
-            max_size_amplificacion: 2,
-            size_ratio: 2,
-            min_levels_trigger_size_ratio: 3,
-        }
-    }
-}
-
 pub(crate) fn start_tiered_compaction(
     task: TieredCompactionTask,
     transaction_manager: &Arc<TransactionManager>,
-    options: &Arc<LsmOptions>,
+    options: &Arc<shared::SimpleDbOptions>,
     sstables: &Arc<SSTables>,
     keyspace_id: KeyspaceId
 ) -> Result<(), LsmError> {
@@ -50,7 +32,7 @@ pub(crate) fn start_tiered_compaction(
 }
 
 fn do_tiered_compaction(
-    options: &Arc<LsmOptions>,
+    options: &Arc<shared::SimpleDbOptions>,
     sstables: &Arc<SSTables>,
     max_level_id_to_compact: usize, //Compact from level 0 to max_level_id_to_compact (inclusive, inclusive)
     transaction_manager: &Arc<TransactionManager>,
@@ -96,7 +78,7 @@ fn do_tiered_compaction(
 }
 
 pub(crate) fn create_tiered_compaction_task(
-    options: TieredCompactionOptions,
+    options: shared::TieredCompactionOptions,
     sstables: &Arc<SSTables>
 ) -> Option<TieredCompactionTask> {
     if  sstables.calculate_space_amplificacion() >= options.max_size_amplificacion {
