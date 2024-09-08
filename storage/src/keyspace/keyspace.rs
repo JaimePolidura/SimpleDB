@@ -1,20 +1,18 @@
 use std::fs;
 use crate::compaction::compaction::{Compaction, CompactionTask};
-use crate::storage::{KeyspaceId, StorageIterator};
-use crate::lsm_error::LsmError;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::memtables::memtable::MemTable;
 use crate::memtables::memtables::Memtables;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
-use crate::transactions::transaction::{Transaction, TxnId};
+use crate::transactions::transaction::{Transaction};
 use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use std::sync::Arc;
-use crate::lsm_error::LsmError::CannotCreateKeyspaceDirectory;
+use crate::utils::storage_iterator::StorageIterator;
 
 pub struct Keyspace {
-    keyspace_id: KeyspaceId,
+    keyspace_id: shared::KeyspaceId,
     transaction_manager: Arc<TransactionManager>,
     options: Arc<shared::SimpleDbOptions>,
     compaction: Arc<Compaction>,
@@ -25,21 +23,21 @@ pub struct Keyspace {
 
 impl Keyspace {
     pub fn create_new(
-        keyspace_id: KeyspaceId,
+        keyspace_id: shared::KeyspaceId,
         transaction_manager: Arc<TransactionManager>,
         options: Arc<shared::SimpleDbOptions>
-    ) -> Result<Arc<Keyspace>, LsmError> {
+    ) -> Result<Arc<Keyspace>, shared::SimpleDbError> {
         let path = shared::get_directory_usize(&options.base_path, keyspace_id);
         fs::create_dir(path.as_path())
-            .map_err(|e| CannotCreateKeyspaceDirectory(keyspace_id, e))?;
+            .map_err(|e| shared::SimpleDbError::CannotCreateKeyspaceDirectory(keyspace_id, e))?;
         Self::load(keyspace_id, transaction_manager, options)
     }
 
     pub fn load(
-        keyspace_id: KeyspaceId,
+        keyspace_id: shared::KeyspaceId,
         transaction_manager: Arc<TransactionManager>,
         options: Arc<shared::SimpleDbOptions>
-    ) -> Result<Arc<Keyspace>, LsmError> {
+    ) -> Result<Arc<Keyspace>, shared::SimpleDbError> {
         let manifest = Arc::new(Manifest::create(options.clone(), keyspace_id)?);
         let sstables = Arc::new(SSTables::open(options.clone(), keyspace_id, manifest.clone())?);
         let memtables = Memtables::create_and_recover_from_wal(options.clone(), keyspace_id)?;
@@ -71,7 +69,7 @@ impl Keyspace {
         &self,
         transaction: &Transaction,
         key: &str,
-    ) -> Result<Option<bytes::Bytes>, LsmError> {
+    ) -> Result<Option<bytes::Bytes>, shared::SimpleDbError> {
         match self.memtables.get(&key, transaction) {
             Some(value_from_memtable) => Ok(Some(value_from_memtable)),
             None => self.sstables.get(&key, &transaction),
@@ -83,7 +81,7 @@ impl Keyspace {
         transaction: &Transaction,
         key: &str,
         value: &[u8],
-    ) -> Result<(), LsmError> {
+    ) -> Result<(), shared::SimpleDbError> {
         transaction.increase_nwrites();
         match self.memtables.set(&key, value, transaction) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
@@ -94,7 +92,7 @@ impl Keyspace {
     pub fn delete(
         &self,
         key: &str
-    ) -> Result<(), LsmError> {
+    ) -> Result<(), shared::SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::ReadUncommited);
         self.delete_with_transaction(&transaction, key)
     }
@@ -103,7 +101,7 @@ impl Keyspace {
         &self,
         transaction: &Transaction,
         key: &str,
-    ) -> Result<(), LsmError> {
+    ) -> Result<(), shared::SimpleDbError> {
         transaction.increase_nwrites();
         match self.memtables.delete(&key, transaction) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
@@ -111,7 +109,7 @@ impl Keyspace {
         }
     }
 
-    fn flush_memtable(&self, memtable: Arc<MemTable>) -> Result<(), LsmError> {
+    fn flush_memtable(&self, memtable: Arc<MemTable>) -> Result<(), shared::SimpleDbError> {
         let sstable_builder_ready: SSTableBuilder = memtable.to_sst(&self.transaction_manager);
         let sstable_id = self.sstables.flush_memtable_to_disk(sstable_builder_ready)?;
         memtable.set_flushed();
@@ -119,7 +117,7 @@ impl Keyspace {
         Ok(())
     }
 
-    pub fn has_txn_id_been_written(&self, txn_id: TxnId) -> bool {
+    pub fn has_txn_id_been_written(&self, txn_id: shared::TxnId) -> bool {
         if self.memtables.has_txn_id_been_written(txn_id) {
             return true;
         }
@@ -131,7 +129,7 @@ impl Keyspace {
         self.compaction.start_compaction_thread();
     }
 
-    pub fn keyspace_id(&self) -> KeyspaceId {
+    pub fn keyspace_id(&self) -> shared::KeyspaceId {
         self.keyspace_id
     }
 

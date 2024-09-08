@@ -1,8 +1,6 @@
 use std::sync::Arc;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use crate::storage::KeyspaceId;
-use crate::lsm_error::LsmError;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
 use crate::transactions::transaction_manager::TransactionManager;
@@ -18,8 +16,8 @@ pub(crate) fn start_simple_leveled_compaction(
     transaction_manager: &Arc<TransactionManager>,
     options: &Arc<shared::SimpleDbOptions>,
     sstables: &Arc<SSTables>,
-    keyspace_id: KeyspaceId
-) -> Result<(), LsmError> {
+    keyspace_id: shared::KeyspaceId
+) -> Result<(), shared::SimpleDbError> {
     let level_to_compact = compaction_task.level;
 
     if level_to_compact > options.simple_leveled_compaction_options.max_levels {

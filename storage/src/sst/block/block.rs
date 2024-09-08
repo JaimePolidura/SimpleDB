@@ -4,8 +4,7 @@ use crate::sst::block::block_decoder::decode_block;
 use crate::sst::block::block_encoder::encode_block;
 use crate::key;
 use crate::key::Key;
-use crate::lsm_error::DecodeErrorType;
-use crate::transactions::transaction::{Transaction, TxnId};
+use crate::transactions::transaction::{Transaction};
 
 pub const PREFIX_COMPRESSED: u64 = 0x01;
 pub const NOT_COMPRESSED: u64 = 0x00;
@@ -25,7 +24,7 @@ impl Block {
         encode_block(&self, options)
     }
 
-    pub fn decode(encoded: &Vec<u8>, options: &Arc<shared::SimpleDbOptions>) -> Result<Block, DecodeErrorType> {
+    pub fn decode(encoded: &Vec<u8>, options: &Arc<shared::SimpleDbOptions>) -> Result<Block, shared::DecodeErrorType> {
         decode_block(encoded, options)
     }
 
@@ -81,7 +80,7 @@ impl Block {
     pub fn get_key_by_index(&self, n_entry_index: usize) -> Key {
         let entry_index = self.offsets[n_entry_index] as usize;
         let key_length = shared::u8_vec_to_u16_le(&self.entries, entry_index) as usize;
-        let key_txn_id = shared::u8_vec_to_u64_le(&self.entries, entry_index + 2) as TxnId;
+        let key_txn_id = shared::u8_vec_to_u64_le(&self.entries, entry_index + 2) as shared::TxnId;
 
         let key_slice: &[u8] = &self.entries[entry_index + 10..(key_length + entry_index + 10)];
         let key = String::from_utf8(key_slice.to_vec())

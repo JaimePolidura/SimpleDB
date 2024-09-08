@@ -1,5 +1,4 @@
 use crate::keyspace::keyspaces::Keyspaces;
-use crate::lsm_error::LsmError;
 use crate::memtables::memtable::MemtableIterator;
 use crate::sst::ssttable_iterator::SSTableIterator;
 use crate::transactions::transaction::Transaction;
@@ -11,8 +10,6 @@ use std::collections::HashSet;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
-pub type KeyspaceId = usize;
-
 pub struct Storage {
     transaction_manager: Arc<TransactionManager>,
     options: Arc<shared::SimpleDbOptions>,
@@ -20,13 +17,13 @@ pub struct Storage {
 }
 
 pub enum WriteBatch {
-    Put(KeyspaceId, String, Bytes),
-    Delete(KeyspaceId, String)
+    Put(shared::KeyspaceId, String, Bytes),
+    Delete(shared::KeyspaceId, String)
 }
 
 pub type StorageIterator = TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>;
 
-pub fn new(options: Arc<shared::SimpleDbOptions>) -> Result<Storage, LsmError> {
+pub fn new(options: Arc<shared::SimpleDbOptions>) -> Result<Storage, shared::SimpleDbError> {
     println!("Starting storage engine!");
     let transaction_manager = Arc::new(
         TransactionManager::create_recover_from_log(options.clone())?
@@ -51,80 +48,80 @@ pub fn new(options: Arc<shared::SimpleDbOptions>) -> Result<Storage, LsmError> {
 }
 
 impl Storage {
-    pub fn scan_all(&self, keyspace_id: KeyspaceId) -> Result<StorageIterator, LsmError> {
+    pub fn scan_all(&self, keyspace_id: shared::KeyspaceId) -> Result<StorageIterator, shared::SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         self.scan_all_with_transaction(keyspace_id, &transaction)
     }
 
     pub fn scan_all_with_transaction(
         &self,
-        keyspace_id: KeyspaceId,
+        keyspace_id: shared::KeyspaceId,
         transaction: &Transaction
-    ) -> Result<StorageIterator, LsmError> {
+    ) -> Result<StorageIterator, shared::SimpleDbError> {
         let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         Ok(keyspace.scan_all_with_transaction(transaction))
     }
 
     pub fn get(
         &self,
-        keyspace_id: KeyspaceId,
+        keyspace_id: shared::KeyspaceId,
         key: &str
-    ) -> Result<Option<bytes::Bytes>, LsmError> {
+    ) -> Result<Option<bytes::Bytes>, shared::SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         self.get_with_transaction(keyspace_id, &transaction, key)
     }
 
     pub fn get_with_transaction(
         &self,
-        keyspace_id: KeyspaceId,
+        keyspace_id: shared::KeyspaceId,
         transaction: &Transaction,
         key: &str,
-    ) -> Result<Option<bytes::Bytes>, LsmError> {
+    ) -> Result<Option<bytes::Bytes>, shared::SimpleDbError> {
         let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         keyspace.get_with_transaction(transaction, key)
     }
 
     pub fn set(
         &self,
-        keyspace_id: KeyspaceId,
+        keyspace_id: shared::KeyspaceId,
         key: &str,
         value: &[u8]
-    ) -> Result<(), LsmError> {
+    ) -> Result<(), shared::SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         self.set_with_transaction(keyspace_id, &transaction, key, value)
     }
 
     pub fn set_with_transaction(
         &self,
-        keyspace_id: KeyspaceId,
+        keyspace_id: shared::KeyspaceId,
         transaction: &Transaction,
         key: &str,
         value: &[u8],
-    ) -> Result<(), LsmError> {
+    ) -> Result<(), shared::SimpleDbError> {
         let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         keyspace.set_with_transaction(transaction, key, value)
     }
 
     pub fn delete(
         &self,
-        keyspace_id: KeyspaceId,
+        keyspace_id: shared::KeyspaceId,
         key: &str
-    ) -> Result<(), LsmError> {
+    ) -> Result<(), shared::SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::ReadUncommited);
         self.delete_with_transaction(keyspace_id, &transaction, key)
     }
 
     pub fn delete_with_transaction(
         &self,
-        keyspace_id: KeyspaceId,
+        keyspace_id: shared::KeyspaceId,
         transaction: &Transaction,
         key: &str,
-    ) -> Result<(), LsmError> {
+    ) -> Result<(), shared::SimpleDbError> {
         let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         keyspace.delete_with_transaction(transaction, key)
     }
 
-    pub fn write_batch(&self, batch: &[WriteBatch]) -> Result<(), LsmError> {
+    pub fn write_batch(&self, batch: &[WriteBatch]) -> Result<(), shared::SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         for write_batch_record in batch {
             match write_batch_record {
@@ -156,7 +153,7 @@ impl Storage {
         self.transaction_manager.rollback(transaction);
     }
 
-    pub fn create_keyspace(&self) -> Result<KeyspaceId, LsmError> {
+    pub fn create_keyspace(&self) -> Result<shared::KeyspaceId, shared::SimpleDbError> {
         let keyspace = self.keyspaces.create_keyspace()?;
         keyspace.start_compaction_thread();
         Ok(keyspace.keyspace_id())

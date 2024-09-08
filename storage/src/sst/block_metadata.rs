@@ -1,8 +1,7 @@
 use crate::key;
 use crate::key::Key;
-use crate::lsm_error::DecodeErrorType;
 use bytes::BufMut;
-use crate::transactions::transaction::{Transaction, TxnId};
+use crate::transactions::transaction::{Transaction};
 
 #[derive(Eq, PartialEq)]
 pub struct BlockMetadata {
@@ -15,7 +14,7 @@ impl BlockMetadata {
     pub fn decode_all(
         bytes: &Vec<u8>,
         start_index: usize,
-    ) -> Result<Vec<BlockMetadata>, DecodeErrorType> {
+    ) -> Result<Vec<BlockMetadata>, shared::DecodeErrorType> {
         let expected_crc = shared::u8_vec_to_u32_le(bytes, start_index);
         let n_blocks_metadata = shared::u8_vec_to_u32_le(bytes, start_index + 4);
 
@@ -31,7 +30,7 @@ impl BlockMetadata {
 
         let actual_crc = crc32fast::hash(&bytes[start_content_index..last_index]);
         if actual_crc != expected_crc {
-            return Err(DecodeErrorType::CorruptedCrc(expected_crc, actual_crc));
+            return Err(shared::DecodeErrorType::CorruptedCrc(expected_crc, actual_crc));
         }
 
         Ok(blocks_metadata_decoded)
@@ -51,23 +50,23 @@ impl BlockMetadata {
         encoded
     }
 
-    pub fn decode(bytes: &Vec<u8>, start_index: usize) -> Result<(usize, BlockMetadata), DecodeErrorType> {
+    pub fn decode(bytes: &Vec<u8>, start_index: usize) -> Result<(usize, BlockMetadata), shared::DecodeErrorType> {
         let mut current_index = start_index;
 
         let first_key_length = shared::u8_vec_to_u32_le(&bytes, current_index) as usize;
         current_index = current_index + 4;
-        let first_key_txn_id = shared::u8_vec_to_u64_le(&bytes, current_index) as TxnId;
+        let first_key_txn_id = shared::u8_vec_to_u64_le(&bytes, current_index) as shared::TxnId;
         current_index = current_index + 8;
         let first_key = String::from_utf8(bytes[current_index..(current_index + first_key_length)].to_vec())
-            .map_err(|e| DecodeErrorType::Utf8Decode(e))?;
+            .map_err(|e| shared::DecodeErrorType::Utf8Decode(e))?;
         current_index = current_index + first_key_length;
 
         let last_key_length = shared::u8_vec_to_u32_le(&bytes, current_index) as usize;
         current_index = current_index + 4;
-        let last_key_txn_id = shared::u8_vec_to_u64_le(&bytes, current_index) as TxnId;
+        let last_key_txn_id = shared::u8_vec_to_u64_le(&bytes, current_index) as shared::TxnId;
         current_index = current_index + 8;
         let last_key = String::from_utf8(bytes[current_index..(current_index + last_key_length)].to_vec())
-            .map_err(|e| DecodeErrorType::Utf8Decode(e))?;
+            .map_err(|e| shared::DecodeErrorType::Utf8Decode(e))?;
 
         current_index = current_index + last_key_length;
 

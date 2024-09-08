@@ -1,8 +1,4 @@
 use crate::keyspace::keyspace::Keyspace;
-use crate::storage::KeyspaceId;
-use crate::lsm_error::LsmError;
-use crate::lsm_error::LsmError::{CannotReadKeyspaceFile, CannotReadKeyspacesDirectories, KeyspaceNotFound};
-use crate::transactions::transaction::TxnId;
 use crate::transactions::transaction_manager::TransactionManager;
 use crossbeam_skiplist::SkipMap;
 use std::cmp::max;
@@ -13,7 +9,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 
 pub struct Keyspaces {
-    keyspaces: SkipMap<KeyspaceId, Arc<Keyspace>>,
+    keyspaces: SkipMap<shared::KeyspaceId, Arc<Keyspace>>,
     next_keyspace_id: AtomicUsize,
 
     transaction_manager: Arc<TransactionManager>,
@@ -24,18 +20,18 @@ impl Keyspaces {
     pub fn load_keyspaces(
         transaction_manager: Arc<TransactionManager>,
         options: Arc<shared::SimpleDbOptions>
-    ) -> Result<Keyspaces, LsmError> {
+    ) -> Result<Keyspaces, shared::SimpleDbError> {
         let keyspaces = SkipMap::new();
         let path = PathBuf::from(options.base_path.as_str());
         let path = path.as_path();
         let mut max_keyspace_id = 0;
 
-        for file in fs::read_dir(path).map_err(|e| CannotReadKeyspacesDirectories(e))? {
+        for file in fs::read_dir(path).map_err(|e| shared::SimpleDbError::CannotReadKeyspacesDirectories(e))? {
             let file = file.unwrap();
             if let Ok(keyspace_id) = file.file_name().to_str().unwrap().parse::<usize>() {
-                let keyspace_id = keyspace_id as KeyspaceId;
+                let keyspace_id = keyspace_id as shared::KeyspaceId;
                 let is_keyspace = file.metadata()
-                    .map_err(|e| CannotReadKeyspaceFile(keyspace_id, e))?
+                    .map_err(|e| shared::SimpleDbError::CannotReadKeyspaceFile(keyspace_id, e))?
                     .is_dir();
                 if is_keyspace {
                     let keyspace = Keyspace::load(
@@ -55,21 +51,21 @@ impl Keyspaces {
         })
     }
 
-    pub fn get_keyspace(&self, keyspace_id: KeyspaceId) -> Result<Arc<Keyspace>, LsmError> {
+    pub fn get_keyspace(&self, keyspace_id: shared::KeyspaceId) -> Result<Arc<Keyspace>, shared::SimpleDbError> {
         match self.keyspaces.get(&keyspace_id) {
             Some(entry) => Ok(entry.value().clone()),
-            None => Err(KeyspaceNotFound(keyspace_id))
+            None => Err(shared::SimpleDbError::KeyspaceNotFound(keyspace_id))
         }
     }
 
-    pub fn create_keyspace(&self) -> Result<Arc<Keyspace>, LsmError> {
-        let keyspace_id = self.next_keyspace_id.fetch_add(1, Relaxed) as KeyspaceId;
+    pub fn create_keyspace(&self) -> Result<Arc<Keyspace>, shared::SimpleDbError> {
+        let keyspace_id = self.next_keyspace_id.fetch_add(1, Relaxed) as shared::KeyspaceId;
         let keyspace = Keyspace::create_new(keyspace_id, self.transaction_manager.clone(), self.options.clone())?;
         self.keyspaces.insert(keyspace_id, keyspace.clone());
         Ok(keyspace)
     }
 
-    pub fn has_txn_id_been_written(&self, txn_id: TxnId) -> bool {
+    pub fn has_txn_id_been_written(&self, txn_id: shared::TxnId) -> bool {
         for keyspace in self.keyspaces.iter() {
             let keyspace = keyspace.value();
             if keyspace.has_txn_id_been_written(txn_id) {

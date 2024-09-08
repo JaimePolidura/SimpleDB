@@ -4,14 +4,12 @@ use std::sync::atomic::AtomicUsize;
 use std::collections::HashSet;
 use crate::key::Key;
 
-pub type TxnId = usize;
-
 pub struct Transaction {
-    pub(crate) active_transactions: HashSet<TxnId>,
+    pub(crate) active_transactions: HashSet<shared::TxnId>,
     pub(crate) isolation_level: IsolationLevel,
     pub(crate) n_writes_rolled_back: AtomicUsize,
     pub(crate) n_writes: AtomicUsize,
-    pub(crate) txn_id: TxnId,
+    pub(crate) txn_id: shared::TxnId,
 }
 
 impl Transaction {

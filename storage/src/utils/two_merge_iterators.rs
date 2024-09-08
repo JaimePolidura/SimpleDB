@@ -86,8 +86,6 @@ impl<A: StorageIterator, B: StorageIterator> StorageIterator for TwoMergeIterato
 mod test {
     use std::sync::Arc;
     use crate::key;
-    use crate::key::Key;
-    use crate::simpledb_options::LsmOptions;
     use crate::memtables::memtable::{MemTable, MemtableIterator};
     use crate::transactions::transaction::Transaction;
     use crate::utils::storage_iterator::StorageIterator;
@@ -95,13 +93,13 @@ mod test {
 
     #[test]
     fn two_merge_iterator() {
-        let memtable1 = Arc::new(MemTable::create_mock(Arc::new(LsmOptions::default()), 0).unwrap());
+        let memtable1 = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
         memtable1.set_active();
         memtable1.set(&Transaction::none(), "a", &vec![1]);
         memtable1.set(&Transaction::none(), "b", &vec![2]);
         memtable1.set(&Transaction::none(), "d", &vec![4]);
 
-        let memtable2 = Arc::new(MemTable::create_mock(Arc::new(LsmOptions::default()), 0).unwrap());
+        let memtable2 = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
         memtable2.set_active();
         memtable1.set(&Transaction::none(), "a", &vec![1]);
         memtable1.set(&Transaction::none(), "c", &vec![3]);

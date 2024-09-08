@@ -1,35 +1,32 @@
 use crate::key;
 use crate::key::Key;
-use crate::lsm_error::LsmError;
 use crate::memtables::memtable::MemtableState::{Active, Flushed, Flusing, Inactive, RecoveringFromWal};
 use crate::memtables::wal::Wal;
 use crate::sst::sstable_builder::SSTableBuilder;
-use crate::transactions::transaction::{Transaction, TxnId};
+use crate::transactions::transaction::{Transaction};
 use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_iterator::StorageIterator;
 use bytes::{Buf, Bytes};
 use crossbeam_skiplist::{SkipMap, SkipSet};
 use std::cell::UnsafeCell;
 use std::ops::Bound::Excluded;
+use std::ops::Shl;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
-use crate::storage::KeyspaceId;
 
 const TOMBSTONE: Bytes = Bytes::new();
-
-pub type MemtableId = usize;
 
 pub struct MemTable {
     data: Arc<SkipMap<Key, Bytes>>,
     current_size_bytes: AtomicUsize,
     max_size_bytes: usize,
-    memtable_id: MemtableId,
+    memtable_id: shared::MemtableId,
     state: UnsafeCell<MemtableState>,
     wal: UnsafeCell<Wal>,
     options: Arc<shared::SimpleDbOptions>,
-    txn_ids_written: SkipSet<TxnId>,
-    keyspace_id: KeyspaceId,
+    txn_ids_written: SkipSet<shared::TxnId>,
+    keyspace_id: shared::KeyspaceId,
 }
 
 enum MemtableState {
@@ -44,9 +41,9 @@ enum MemtableState {
 impl MemTable {
     pub fn create_new(
         options: Arc<shared::SimpleDbOptions>,
-        memtable_id: MemtableId,
-        keyspace_id: KeyspaceId
-    ) -> Result<MemTable, LsmError> {
+        memtable_id: shared::MemtableId,
+        keyspace_id: shared::KeyspaceId
+    ) -> Result<MemTable, shared::SimpleDbError> {
         Ok(MemTable {
             wal: UnsafeCell::new(Wal::create(options.clone(), keyspace_id, memtable_id)?),
             max_size_bytes: options.memtable_max_size_bytes,
@@ -62,8 +59,8 @@ impl MemTable {
 
     pub fn create_mock(
         options: Arc<shared::SimpleDbOptions>,
-        memtable_id: MemtableId
-    ) -> Result<MemTable, LsmError> {
+        memtable_id: shared::MemtableId
+    ) -> Result<MemTable, shared::SimpleDbError> {
         Ok(MemTable {
             wal: UnsafeCell::new(Wal::create_mock(options.clone(), memtable_id)?),
             max_size_bytes: options.memtable_max_size_bytes,
@@ -79,10 +76,10 @@ impl MemTable {
 
     pub fn create_and_recover_from_wal(
         options: Arc<shared::SimpleDbOptions>,
-        memtable_id: MemtableId,
-        keyspace_id: KeyspaceId,
+        memtable_id: shared::MemtableId,
+        keyspace_id: shared::KeyspaceId,
         wal: Wal
-    ) -> Result<MemTable, LsmError> {
+    ) -> Result<MemTable, shared::SimpleDbError> {
         let mut memtable = MemTable {
             max_size_bytes: options.memtable_max_size_bytes,
             current_size_bytes: AtomicUsize::new(0),
@@ -100,7 +97,7 @@ impl MemTable {
         Ok(memtable)
     }
 
-    pub fn has_txn_id_been_written(&self, txn_id: TxnId) -> bool {
+    pub fn has_txn_id_been_written(&self, txn_id: shared::TxnId) -> bool {
         self.txn_ids_written.contains(&txn_id)
     }
 
@@ -127,7 +124,7 @@ impl MemTable {
         }
     }
 
-    pub fn get_id(&self) -> MemtableId {
+    pub fn get_id(&self) -> shared::MemtableId {
         self.memtable_id
     }
 
@@ -150,7 +147,7 @@ impl MemTable {
         }
     }
 
-    pub fn set(&self, transaction: &Transaction, key: &str, value: &[u8]) -> Result<(), LsmError> {
+    pub fn set(&self, transaction: &Transaction, key: &str, value: &[u8]) -> Result<(), shared::SimpleDbError> {
         self.write_into_skip_list(
             &key::new(key, transaction.txn_id),
             Bytes::copy_from_slice(value),
@@ -158,7 +155,7 @@ impl MemTable {
         )
     }
 
-    pub fn delete(&self, transaction: &Transaction, key: &str) -> Result<(), LsmError> {
+    pub fn delete(&self, transaction: &Transaction, key: &str) -> Result<(), shared::SimpleDbError> {
         self.write_into_skip_list(
             &key::new(key, transaction.txn_id),
             TOMBSTONE,
@@ -166,12 +163,12 @@ impl MemTable {
         )
     }
 
-    fn write_into_skip_list(&self, key: &Key, value: Bytes, txn_id: TxnId) -> Result<(), LsmError> {
+    fn write_into_skip_list(&self, key: &Key, value: Bytes, txn_id: shared::TxnId) -> Result<(), shared::SimpleDbError> {
         if !self.can_memtable_be_written() {
             return Ok(());
         }
         if self.current_size_bytes.load(Relaxed) >= self.max_size_bytes {
-            return Err(LsmError::Internal);
+            return Err(shared::SimpleDbError::Internal);
         }
 
         self.write_wal(&key, &value)?;
@@ -187,7 +184,7 @@ impl MemTable {
         Ok(())
     }
 
-    fn write_wal(&self, key: &Key, value: &Bytes) -> Result<(), LsmError> {
+    fn write_wal(&self, key: &Key, value: &Bytes) -> Result<(), shared::SimpleDbError> {
         //Multiple threads can write to the WAL concurrently, since the kernel already makes sure
         //that there won't be race conditions when multiple threads are writing to an append only file
         //https://nullprogram.com/blog/2016/08/03/
@@ -219,7 +216,7 @@ impl MemTable {
         sstable_builder
     }
 
-    fn recover_from_wal(&mut self) -> Result<(), LsmError> {
+    fn recover_from_wal(&mut self) -> Result<(), shared::SimpleDbError> {
         self.set_recovering_from_wal();
         let wal: &Wal = unsafe { &*self.wal.get() };
         let mut entries = wal.read_entries()?;
@@ -406,7 +403,7 @@ impl<'a> StorageIterator for MemtableIterator {
 mod test {
     use crate::key;
     use crate::memtables::memtable::{MemTable, MemtableIterator};
-    use crate::transactions::transaction::{Transaction, TxnId};
+    use crate::transactions::transaction::{Transaction};
     use crate::transactions::transaction_manager::IsolationLevel;
     use crate::utils::storage_iterator::StorageIterator;
     use std::sync::Arc;
@@ -526,13 +523,13 @@ mod test {
         assert!(iterator.key().eq(&key::new("wili", 0)));
     }
 
-    fn transaction(txn_id: TxnId) -> Transaction {
+    fn transaction(txn_id: shared::TxnId) -> Transaction {
         let mut transaction = Transaction::none();
         transaction.txn_id = txn_id;
         transaction
     }
 
-    fn transaction_with_iso(txn_id: TxnId, isolation_level: IsolationLevel) -> Transaction {
+    fn transaction_with_iso(txn_id: shared::TxnId, isolation_level: IsolationLevel) -> Transaction {
         let mut transaction = Transaction::none();
         transaction.isolation_level = isolation_level;
         transaction.txn_id = txn_id;

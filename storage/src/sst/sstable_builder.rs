@@ -4,12 +4,8 @@ use bytes::{BufMut, Bytes};
 use crossbeam_skiplist::SkipSet;
 use crate::sst::block::block_builder::BlockBuilder;
 use crate::key::Key;
-use crate::storage::KeyspaceId;
-use crate::lsm_error::LsmError;
-use crate::lsm_error::LsmError::CannotCreateSSTableFile;
 use crate::sst::block_metadata::BlockMetadata;
 use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
-use crate::transactions::transaction::TxnId;
 use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::bloom_filter::BloomFilter;
 
@@ -21,7 +17,7 @@ pub struct SSTableBuilder {
     first_key_current_block: Option<Key>,
     last_key_current_block: Option<Key>,
 
-    active_txn_ids_written: SkipSet<TxnId>,
+    active_txn_ids_written: SkipSet<shared::TxnId>,
 
     builded_block_metadata: Vec<BlockMetadata>,
     builded_encoded_blocks: Vec<u8>,
@@ -34,14 +30,14 @@ pub struct SSTableBuilder {
     memtable_id: Option<usize>,
 
     transaction_manager: Arc<TransactionManager>,
-    keyspace_id: KeyspaceId,
+    keyspace_id: shared::KeyspaceId,
 }
 
 impl SSTableBuilder {
     pub fn create(
         options: Arc<shared::SimpleDbOptions>,
         transaction_manager: Arc<TransactionManager>,
-        keyspace_id: KeyspaceId,
+        keyspace_id: shared::KeyspaceId,
         level: u32
     ) -> SSTableBuilder {
         SSTableBuilder {
@@ -105,7 +101,7 @@ impl SSTableBuilder {
         mut self,
         id: usize,
         path: &Path
-    ) -> Result<SSTable, LsmError> {
+    ) -> Result<SSTable, shared::SimpleDbError> {
         self.build_current_block();
 
         let bloom_filter: BloomFilter = BloomFilter::new(
@@ -125,7 +121,7 @@ impl SSTableBuilder {
         let bloom_encoded = bloom_filter.encode();
         encoded.extend(bloom_encoded);
 
-        //TxnIds
+        //shared::TxnIds
         let active_txn_ids_offset = encoded.len();
         let txn_ids_encoded = Self::encode_active_txn_ids_written(&self.active_txn_ids_written);
         encoded.extend(txn_ids_encoded);
@@ -142,11 +138,11 @@ impl SSTableBuilder {
                 self.active_txn_ids_written, self.builded_block_metadata, self.options, bloom_filter, self.first_key.unwrap(),
                 self.last_key.unwrap(), lsm_file, self.level, id, SSTABLE_ACTIVE, self.keyspace_id,
             )),
-            Err(e) => Err(CannotCreateSSTableFile(self.keyspace_id, id, e))
+            Err(e) => Err(shared::SimpleDbError::   CannotCreateSSTableFile(self.keyspace_id, id, e))
         }
     }
 
-    pub fn encode_active_txn_ids_written(active_txn_ids_written: &SkipSet<TxnId>) -> Vec<u8> {
+    pub fn encode_active_txn_ids_written(active_txn_ids_written: &SkipSet<shared::TxnId>) -> Vec<u8> {
         let mut encoded = Vec::new();
 
         encoded.put_u32_le(active_txn_ids_written.len() as u32);

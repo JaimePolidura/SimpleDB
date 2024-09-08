@@ -5,15 +5,13 @@ use crate::sst::block::block;
 use crate::sst::block::block::Block;
 use crate::key;
 use crate::key::Key;
-use crate::lsm_error::DecodeErrorType;
-use crate::transactions::transaction::TxnId;
 
 pub(crate) fn decode_block(
     encoded: &Vec<u8>,
     options: &Arc<shared::SimpleDbOptions>
-) -> Result<Block, DecodeErrorType> {
+) -> Result<Block, shared::DecodeErrorType> {
     if encoded.len() != options.block_size_bytes {
-        return Err(DecodeErrorType::IllegalSize(options.block_size_bytes, encoded.len()));
+        return Err(shared::DecodeErrorType::IllegalSize(options.block_size_bytes, encoded.len()));
     }
 
     let flag: u64 = shared::u8_vec_to_u64_le(&encoded, options.block_size_bytes - 12);
@@ -23,7 +21,7 @@ pub(crate) fn decode_block(
     let (entries, new_offsets) = match flag {
         PREFIX_COMPRESSED => Ok(decode_entries_prefix_compressed(encoded, &offsets)),
         NOT_COMPRESSED => Ok((decode_entries_not_compressed(encoded, offsets_offset), offsets)),
-        _ => Err(DecodeErrorType::UnknownFlag(flag as usize)),
+        _ => Err(shared::DecodeErrorType::UnknownFlag(flag as usize)),
     }?;
 
     Ok(Block{ offsets: new_offsets, entries })
@@ -57,7 +55,7 @@ fn decode_entries_prefix_compressed(
         current_index = current_index + 2;
         let rest_key_size = shared::u8_vec_to_u16_le(encoded, current_index);
         current_index = current_index + 2;
-        let key_txn_id = shared::u8_vec_to_u64_le(encoded, current_index) as TxnId;
+        let key_txn_id = shared::u8_vec_to_u64_le(encoded, current_index) as shared::TxnId;
         current_index = current_index + 8;
         let rest_key_u8_vec = encoded[current_index..(current_index + rest_key_size as usize)].to_vec();
 

@@ -1,6 +1,3 @@
-use crate::lsm_error::LsmError::{CannotCreateTransactionLog, CannotDecodeTransactionLogEntry, CannotReadTransactionLogEntries, CannotResetTransacionLog, CannotWriteTransactionLogEntry};
-use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
-use crate::transactions::transaction::TxnId;
 use bytes::{Buf, BufMut};
 use std::cell::UnsafeCell;
 use std::path::PathBuf;
@@ -14,18 +11,18 @@ const START_BINARY_CODE: u8 = 0x01;
 
 pub enum TransactionLogEntry {
     //Transaction has been started
-    Start(TxnId),
+    Start(shared::TxnId),
     //Transaction has been commited
-    Commit(TxnId),
+    Commit(shared::TxnId),
     //Rollback has started. Writes done by the transaction will be discarded at memtable flush & SSTable compaction
     //usize is the number of writes that the transaction has done
-    StartRollback(TxnId, usize),
+    StartRollback(shared::TxnId, usize),
     //A write done by a rolledback transaction (marked in the log with StartRollback) has been discarded
-    RolledbackWrite(TxnId),
+    RolledbackWrite(shared::TxnId),
     //When the Lsm boots, if it finds an active transaction (not commited or rolledback) and there is no present write
     //in the lsm engine with that transaction ID. It will be marked with RolledbackActiveTransactionFailure
     //When the LSM reboots again the transaction will be ignored
-    RolledbackActiveTransactionFailure(TxnId)
+    RolledbackActiveTransactionFailure(shared::TxnId)
 }
 
 pub struct TransactionLog {
@@ -35,11 +32,11 @@ pub struct TransactionLog {
 }
 
 impl TransactionLog {
-    pub fn create(options: Arc<shared::SimpleDbOptions>) -> Result<TransactionLog, LsmError> {
+    pub fn create(options: Arc<shared::SimpleDbOptions>) -> Result<TransactionLog, shared::SimpleDbError> {
         Ok(TransactionLog {
             log_file: shared::SimpleDbFileWrapper {file: UnsafeCell::new(
                 shared::SimpleDbFile::open(to_transaction_log_file_path(&options).as_path(),
-                                           shared::SimpleDbFileMode::AppendOnly).map_err(|e| CannotCreateTransactionLog(e))?) },
+                                           shared::SimpleDbFileMode::AppendOnly).map_err(|e| shared::SimpleDbError::CannotCreateTransactionLog(e))?) },
             options
         })
     }
@@ -51,14 +48,14 @@ impl TransactionLog {
         }
     }
 
-    pub fn add_entry(&self, entry: TransactionLogEntry) -> Result<(), LsmError> {
+    pub fn add_entry(&self, entry: TransactionLogEntry) -> Result<(), shared::SimpleDbError> {
         //Multiple threads can write to the WAL concurrently, since the kernel already makes sure
         //that there won't be race conditions when multiple threads are writing to an append only file
         //https://nullprogram.com/blog/2016/08/03/
         let log_file = unsafe { &mut *self.log_file.file.get() };
 
         log_file.write(&entry.encode())
-            .map_err(|e| CannotWriteTransactionLogEntry(e))?;
+            .map_err(|e| shared::SimpleDbError::CannotWriteTransactionLogEntry(e))?;
 
         if matches!(self.options.durability_level, shared::DurabilityLevel::Strong) {
             log_file.fsync();
@@ -67,7 +64,7 @@ impl TransactionLog {
         Ok(())
     }
 
-    pub fn replace_entries(&self, new_active_txn_id: &Vec<TransactionLogEntry>) -> Result<(), LsmError> {
+    pub fn replace_entries(&self, new_active_txn_id: &Vec<TransactionLogEntry>) -> Result<(), shared::SimpleDbError> {
         let log_file = unsafe { &mut *self.log_file.file.get() };
         let new_entries_encoded: Vec<u8> = new_active_txn_id.iter()
             .map(|entry| entry.encode())
@@ -75,16 +72,16 @@ impl TransactionLog {
             .collect();
 
         log_file.save_write(&new_entries_encoded)
-            .map_err(|e| CannotResetTransacionLog(e));
+            .map_err(|e| shared::SimpleDbError::CannotResetTransacionLog(e));
 
         Ok(())
     }
 
-    pub fn read_entries(&self) -> Result<Vec<TransactionLogEntry>, LsmError> {
+    pub fn read_entries(&self) -> Result<Vec<TransactionLogEntry>, shared::SimpleDbError> {
         let mut entries: Vec<TransactionLogEntry> = Vec::new();
         let log_file = unsafe { &*self.log_file.file.get() };
         let entries_bytes = log_file.read_all()
-            .map_err(|e| CannotReadTransactionLogEntries(e))?;
+            .map_err(|e| shared::SimpleDbError::CannotReadTransactionLogEntries(e))?;
         let mut current_ptr = entries_bytes.as_slice();
         let mut current_offset = 0;
 
@@ -110,28 +107,28 @@ impl TransactionLogEntry {
         current_offset: usize,
         n_entry_to_decode: usize,
         options: &Arc<shared::SimpleDbOptions>,
-    ) -> Result<(TransactionLogEntry, usize), LsmError> {
+    ) -> Result<(TransactionLogEntry, usize), shared::SimpleDbError> {
         let expected_crc = current_ptr.get_u32_le();
         let encoded_size = Self::encoded_size(current_ptr[0])
-            .map_err(|_| CannotDecodeTransactionLogEntry(DecodeError {
+            .map_err(|_| shared::SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
                 path: to_transaction_log_file_path(options),
                 offset: current_offset,
                 index: n_entry_to_decode,
-                error_type: DecodeErrorType::UnknownFlag(current_ptr[0] as usize)
+                error_type: shared::DecodeErrorType::UnknownFlag(current_ptr[0] as usize)
             }))?;
         let actual_crc = crc32fast::hash(&current_ptr[0..encoded_size]);
 
         if actual_crc != expected_crc {
-            return Err(CannotDecodeTransactionLogEntry(DecodeError{
+            return Err(shared::SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
                 path: to_transaction_log_file_path(options),
                 offset: current_offset,
                 index: n_entry_to_decode,
-                error_type: DecodeErrorType::CorruptedCrc(expected_crc, actual_crc)
+                error_type: shared::DecodeErrorType::CorruptedCrc(expected_crc, actual_crc)
             }));
         }
 
         let binary_code = current_ptr.get_u8();
-        let txn_id = current_ptr.get_u64_le() as TxnId;
+        let txn_id = current_ptr.get_u64_le() as shared::TxnId;
 
         let decoded_entry = match binary_code {
             ROLLED_BACK_ACTIVE_TRANSACTION_FAILURE_BINARY_CODE => TransactionLogEntry::RolledbackActiveTransactionFailure(txn_id),
@@ -142,11 +139,11 @@ impl TransactionLogEntry {
             },
             COMMIT_BINARY_CODE => TransactionLogEntry::Commit(txn_id),
             START_BINARY_CODE => TransactionLogEntry::Start(txn_id),
-            _ => return Err(CannotDecodeTransactionLogEntry(DecodeError {
+            _ => return Err(shared::SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
                 path: to_transaction_log_file_path(options),
                 offset: current_offset,
                 index: n_entry_to_decode,
-                error_type: DecodeErrorType::UnknownFlag(current_ptr[0] as usize)
+                error_type: shared::DecodeErrorType::UnknownFlag(current_ptr[0] as usize)
             }))
         };
 
@@ -182,7 +179,7 @@ impl TransactionLogEntry {
         encoded_to_return
     }
 
-    pub fn txn_id(&self) -> TxnId {
+    pub fn txn_id(&self) -> shared::TxnId {
         match *self {
             TransactionLogEntry::RolledbackActiveTransactionFailure(txn_id) => txn_id,
             TransactionLogEntry::StartRollback(txn_id, _) => txn_id,

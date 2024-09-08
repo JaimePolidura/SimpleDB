@@ -6,15 +6,12 @@ use std::sync::atomic::Ordering::Relaxed;
 use bytes::{Buf, BufMut};
 use serde::{Deserialize, Deserializer, Serialize};
 use crate::compaction::compaction::CompactionTask;
-use crate::storage::KeyspaceId;
-use crate::lsm_error::{DecodeError, DecodeErrorType, LsmError};
-use crate::lsm_error::LsmError::{CannotCreateManifest, CannotDecodeManifest, CannotReadManifestOperations, CannotResetManifest};
 
 pub struct Manifest {
     file: Mutex<shared::SimpleDbFile>,
     last_manifest_record_id: AtomicUsize,
     options: Arc<shared::SimpleDbOptions>,
-    keyspace_id: KeyspaceId
+    keyspace_id: shared::KeyspaceId
 }
 
 #[derive(Serialize, Deserialize)]
@@ -39,8 +36,8 @@ pub struct MemtableFlushManifestOperation {
 impl Manifest {
     pub fn create(
         options: Arc<shared::SimpleDbOptions>,
-        keyspace_id: KeyspaceId
-    ) -> Result<Manifest, LsmError> {
+        keyspace_id: shared::KeyspaceId
+    ) -> Result<Manifest, shared::SimpleDbError> {
         match shared::SimpleDbFile::open(Self::manifest_path(&options, keyspace_id).as_path(), shared::SimpleDbFileMode::AppendOnly) {
             Ok(file) => Ok(Manifest {
                 last_manifest_record_id: AtomicUsize::new(0),
@@ -48,11 +45,11 @@ impl Manifest {
                 keyspace_id,
                 options
             }),
-            Err(e) => Err(CannotCreateManifest(keyspace_id, e))
+            Err(e) => Err(shared::SimpleDbError::CannotCreateManifest(keyspace_id, e))
         }
     }
 
-    pub fn read_uncompleted_operations(&self) -> Result<Vec<ManifestOperationContent>, LsmError> {
+    pub fn read_uncompleted_operations(&self) -> Result<Vec<ManifestOperationContent>, shared::SimpleDbError> {
         let mut all_records = self.read_all_operations_from_disk()?;
         let uncompleted_operations = self.get_uncompleted_operations(&mut all_records);
         self.rewrite_manifest(&uncompleted_operations)?;
@@ -60,7 +57,7 @@ impl Manifest {
         Ok(uncompleted_operations)
     }
 
-    fn rewrite_manifest(&self, uncompleted_operations: &Vec<ManifestOperationContent>) -> Result<(), LsmError> {
+    fn rewrite_manifest(&self, uncompleted_operations: &Vec<ManifestOperationContent>) -> Result<(), shared::SimpleDbError> {
         self.clear_manifest()?;
 
         for uncompleted_operation in uncompleted_operations {
@@ -70,13 +67,13 @@ impl Manifest {
         Ok(())
     }
 
-    fn clear_manifest(&self) -> Result<(), LsmError> {
+    fn clear_manifest(&self) -> Result<(), shared::SimpleDbError> {
         let path = Self::manifest_path(&self.options, self.keyspace_id);
         let mut file = shared::SimpleDbFile::open(path.as_path(), shared::SimpleDbFileMode::RandomWrites)
-            .map_err(|e| CannotResetManifest(self.keyspace_id, e))?;
+            .map_err(|e| shared::SimpleDbError::CannotResetManifest(self.keyspace_id, e))?;
 
         file.clear()
-            .map_err(|e| CannotResetManifest(self.keyspace_id, e))
+            .map_err(|e| shared::SimpleDbError::CannotResetManifest(self.keyspace_id, e))
     }
 
     fn get_uncompleted_operations(&self, all_operations: &mut Vec<ManifestOperation>) -> Vec<ManifestOperationContent> {
@@ -104,13 +101,13 @@ impl Manifest {
         to_return
     }
 
-    fn read_all_operations_from_disk(&self) -> Result<Vec<ManifestOperation>, LsmError> {
+    fn read_all_operations_from_disk(&self) -> Result<Vec<ManifestOperation>, shared::SimpleDbError> {
         let mut file_lock_result = self.file.lock();
         let mut file = file_lock_result
             .as_mut()
             .unwrap();
         let records_bytes = file.read_all()
-            .map_err(|e| CannotReadManifestOperations(self.keyspace_id, e))?;
+            .map_err(|e| shared::SimpleDbError::CannotReadManifestOperations(self.keyspace_id, e))?;
         let mut records_bytes_ptr = records_bytes.as_slice();
         let mut all_records: Vec<ManifestOperation> = Vec::new();
         let mut current_offset = 0;
@@ -122,8 +119,8 @@ impl Manifest {
             let actual_crc = crc32fast::hash(json_record_bytes);
 
             if expected_crc != actual_crc {
-                return Err(CannotDecodeManifest(self.keyspace_id, DecodeError {
-                    error_type: DecodeErrorType::CorruptedCrc(expected_crc, actual_crc),
+                return Err(shared::SimpleDbError::CannotDecodeManifest(self.keyspace_id, shared::DecodeError {
+                    error_type: shared::DecodeErrorType::CorruptedCrc(expected_crc, actual_crc),
                     index: all_records.len(),
                     offset: current_offset,
                     path: file.path(),
@@ -131,8 +128,8 @@ impl Manifest {
             }
 
             let deserialized_record = serde_json::from_slice::<ManifestOperation>(json_record_bytes)
-                .map_err(|e| CannotDecodeManifest(self.keyspace_id, DecodeError {
-                    error_type: DecodeErrorType::JsonSerdeDeserialization(e),
+                .map_err(|e| shared::SimpleDbError::CannotDecodeManifest(self.keyspace_id, shared::DecodeError {
+                    error_type: shared::DecodeErrorType::JsonSerdeDeserialization(e),
                     index: all_records.len(),
                     offset: current_offset,
                     path: file.path(),
@@ -146,11 +143,11 @@ impl Manifest {
         Ok(all_records)
     }
 
-    pub fn mark_as_completed(&self, operation_id: usize) -> Result<usize, LsmError> {
+    pub fn mark_as_completed(&self, operation_id: usize) -> Result<usize, shared::SimpleDbError> {
         self.append_operation(ManifestOperationContent::Completed(operation_id))
     }
 
-    pub fn append_operation(&self, content: ManifestOperationContent) -> Result<usize, LsmError> {
+    pub fn append_operation(&self, content: ManifestOperationContent) -> Result<usize, shared::SimpleDbError> {
         let manifest_record_id = self.last_manifest_record_id.fetch_add(1, Relaxed);
         let mut file_lock_result = self.file.lock();
         let file = file_lock_result
@@ -166,7 +163,7 @@ impl Manifest {
                 serialized.extend(record_json_serialized);
 
                 file.write(&serialized)
-                    .map_err(|e| LsmError::CannotWriteManifestOperation(self.keyspace_id, manifest_record.content.clone(), e))?;
+                    .map_err(|e| shared::SimpleDbError::CannotWriteManifestOperation(self.keyspace_id, e))?;
                 file.fsync();
                 Ok(manifest_record_id)
             }
@@ -176,7 +173,7 @@ impl Manifest {
         }
     }
 
-    fn manifest_path(options: &Arc<shared::SimpleDbOptions>, keyspace_id: KeyspaceId) -> PathBuf {
+    fn manifest_path(options: &Arc<shared::SimpleDbOptions>, keyspace_id: shared::KeyspaceId) -> PathBuf {
         shared::get_file_usize(&options.base_path, keyspace_id, "MANIFEST")
     }
 }

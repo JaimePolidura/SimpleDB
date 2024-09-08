@@ -1,4 +1,3 @@
-use crate::lsm_error::DecodeErrorType;
 use bytes::BufMut;
 
 pub struct BloomFilter {
@@ -23,7 +22,7 @@ impl BloomFilter {
         encoded
     }
 
-    pub fn decode(bytes: &Vec<u8>, start_offset: usize) -> Result<BloomFilter, DecodeErrorType> {
+    pub fn decode(bytes: &Vec<u8>, start_offset: usize) -> Result<BloomFilter, shared::DecodeErrorType> {
         let expected_crc = shared::u8_vec_to_u32_le(bytes, start_offset);
         let n_bytes = shared::u8_vec_to_u32_le(bytes, start_offset + 4);
 
@@ -33,7 +32,7 @@ impl BloomFilter {
         let actual_crc = crc32fast::hash(&bloom_bitmap);
 
         if actual_crc != expected_crc {
-            return Err(DecodeErrorType::CorruptedCrc(expected_crc, actual_crc));
+            return Err(shared::DecodeErrorType::CorruptedCrc(expected_crc, actual_crc));
         }
 
         Ok(Self::from_botmap(bloom_bitmap))

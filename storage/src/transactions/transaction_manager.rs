@@ -1,6 +1,5 @@
 use crate::key::Key;
-use crate::lsm_error::LsmError;
-use crate::transactions::transaction::{Transaction, TxnId};
+use crate::transactions::transaction::{Transaction};
 use crate::transactions::transaction_log::{TransactionLog, TransactionLogEntry};
 use crossbeam_skiplist::{SkipMap, SkipSet};
 use std::cmp::max;
@@ -16,14 +15,14 @@ pub enum IsolationLevel {
 }
 
 pub struct TransactionManager {
-    rolledback_transactions: SkipMap<TxnId, Arc<Transaction>>,
-    active_transactions: SkipSet<TxnId>,
+    rolledback_transactions: SkipMap<shared::TxnId, Arc<Transaction>>,
+    active_transactions: SkipSet<shared::TxnId>,
     next_txn_id: AtomicU64,
     log: TransactionLog,
 }
 
 impl TransactionManager {
-    pub fn create_recover_from_log(options: Arc<shared::SimpleDbOptions>) -> Result<TransactionManager, LsmError> {
+    pub fn create_recover_from_log(options: Arc<shared::SimpleDbOptions>) -> Result<TransactionManager, shared::SimpleDbError> {
         let mut log = TransactionLog::create(options)?;
         let transaction_log_entries = log.read_entries()?;
         let rolledback_transactions = Self::get_pending_transactions_to_rollback_from_log_entries(&transaction_log_entries);
@@ -39,7 +38,7 @@ impl TransactionManager {
         })
     }
 
-    pub fn get_active_transactions(&self) -> Vec<TxnId> {
+    pub fn get_active_transactions(&self) -> Vec<shared::TxnId> {
         let mut active_transactions = Vec::new();
 
         for active_transaction_id in &self.active_transactions {
@@ -63,7 +62,7 @@ impl TransactionManager {
         self.log.add_entry(TransactionLogEntry::Commit(transaction.txn_id));
     }
 
-    pub fn rollback_active_transaction_failure(&self, txn_id: TxnId) -> Result<(), LsmError> {
+    pub fn rollback_active_transaction_failure(&self, txn_id: shared::TxnId) -> Result<(), shared::SimpleDbError> {
         self.log.add_entry(TransactionLogEntry::RolledbackActiveTransactionFailure(txn_id))?;
         self.active_transactions.remove(&txn_id);
         Ok(())
@@ -98,7 +97,7 @@ impl TransactionManager {
 
     pub fn start_transaction(&self, isolation_level: IsolationLevel) -> Transaction {
         let active_transactions = self.copy_active_transactions();
-        let txn_id = self.next_txn_id.fetch_add(1, Relaxed) as TxnId;
+        let txn_id = self.next_txn_id.fetch_add(1, Relaxed) as shared::TxnId;
         self.active_transactions.insert(txn_id);
 
         Transaction {
@@ -110,12 +109,12 @@ impl TransactionManager {
         }
     }
 
-    pub fn is_active(&self, txn_id: TxnId) -> bool {
+    pub fn is_active(&self, txn_id: shared::TxnId) -> bool {
         self.active_transactions.contains(&txn_id)
     }
 
-    fn copy_active_transactions(&self) -> HashSet<TxnId> {
-        let mut active_transactions: HashSet<TxnId> = HashSet::new();
+    fn copy_active_transactions(&self) -> HashSet<shared::TxnId> {
+        let mut active_transactions: HashSet<shared::TxnId> = HashSet::new();
 
         for atctive_transactions in &self.active_transactions {
             active_transactions.insert(*atctive_transactions.value());
@@ -124,8 +123,8 @@ impl TransactionManager {
         active_transactions
     }
 
-    fn get_pending_transactions_to_rollback_from_log_entries(entries: &Vec<TransactionLogEntry>) -> SkipMap<TxnId, Arc<Transaction>> {
-        let mut rolledback_transactions: SkipMap<TxnId, Arc<Transaction>> = SkipMap::new();
+    fn get_pending_transactions_to_rollback_from_log_entries(entries: &Vec<TransactionLogEntry>) -> SkipMap<shared::TxnId, Arc<Transaction>> {
+        let mut rolledback_transactions: SkipMap<shared::TxnId, Arc<Transaction>> = SkipMap::new();
 
         for entry in entries.iter() {
             match entry {
@@ -156,9 +155,9 @@ impl TransactionManager {
         rolledback_transactions
     }
 
-    fn get_active_transactions_from_log_entries(entries: &Vec<TransactionLogEntry>) -> (SkipSet<TxnId>, TxnId) {
-        let mut active_transactions: SkipSet<TxnId> = SkipSet::new();
-        let mut max_txn_id: TxnId = 0;
+    fn get_active_transactions_from_log_entries(entries: &Vec<TransactionLogEntry>) -> (SkipSet<shared::TxnId>, shared::TxnId) {
+        let mut active_transactions: SkipSet<shared::TxnId> = SkipSet::new();
+        let mut max_txn_id: shared::TxnId = 0;
 
         for entry in entries.iter() {
             max_txn_id = max(max_txn_id as usize, entry.txn_id());
@@ -177,8 +176,8 @@ impl TransactionManager {
 
 
     fn create_new_transaction_log_entries(
-        rolledback_transactions: &SkipMap<TxnId, Arc<Transaction>>,
-        active_transactions: &SkipSet<TxnId>,
+        rolledback_transactions: &SkipMap<shared::TxnId, Arc<Transaction>>,
+        active_transactions: &SkipSet<shared::TxnId>,
     ) -> Vec<TransactionLogEntry> {
         let mut entries: Vec<TransactionLogEntry> = Vec::new();
 

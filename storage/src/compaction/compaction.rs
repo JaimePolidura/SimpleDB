@@ -4,8 +4,6 @@ use serde::{Deserialize, Serialize};
 use crate::sst::sstables::SSTables;
 use std::time::Duration;
 use std::sync::Arc;
-use crate::storage::KeyspaceId;
-use crate::lsm_error::LsmError;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent};
 use crate::transactions::transaction_manager::TransactionManager;
 
@@ -15,7 +13,7 @@ pub struct Compaction {
     sstables: Arc<SSTables>,
     manifest: Arc<Manifest>,
 
-    keyspace_id: KeyspaceId,
+    keyspace_id: shared::KeyspaceId,
 }
 
 struct CompactionThread {
@@ -24,7 +22,7 @@ struct CompactionThread {
     sstables: Arc<SSTables>,
     manifest: Arc<Manifest>,
 
-    keyspace_id: KeyspaceId,
+    keyspace_id: shared::KeyspaceId,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -39,7 +37,7 @@ impl Compaction {
         options: Arc<shared::SimpleDbOptions>,
         sstables: Arc<SSTables>,
         manifest: Arc<Manifest>,
-        keyspace_id: KeyspaceId,
+        keyspace_id: shared::KeyspaceId,
     ) -> Arc<Compaction> {
         Arc::new(Compaction {
             transaction_manager: transaction_manager.clone(),
@@ -66,7 +64,7 @@ impl Compaction {
         });
     }
 
-    pub fn compact(&self, compaction_task: CompactionTask) -> Result<(), LsmError> {
+    pub fn compact(&self, compaction_task: CompactionTask) -> Result<(), shared::SimpleDbError> {
         match compaction_task {
             CompactionTask::SimpleLeveled(simpleLeveledTask) => start_simple_leveled_compaction(
                 simpleLeveledTask, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id,
@@ -119,7 +117,7 @@ impl CompactionThread {
         None
     }
 
-    fn compact(&self, compaction_task: CompactionTask) -> Result<(), LsmError> {
+    fn compact(&self, compaction_task: CompactionTask) -> Result<(), shared::SimpleDbError> {
         match compaction_task {
             CompactionTask::SimpleLeveled(simpleLeveledTask) => start_simple_leveled_compaction(
                 simpleLeveledTask, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id

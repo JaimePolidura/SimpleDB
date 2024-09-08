@@ -1,11 +1,9 @@
 use crate::key;
 use crate::key::Key;
-use crate::lsm_error::LsmError::{CannotDecodeSSTable, CannotDeleteSSTable, CannotOpenSSTableFile, CannotReadSSTableFile};
-use crate::lsm_error::{DecodeError, LsmError, SSTableCorruptedPart};
 use crate::sst::block::block::Block;
 use crate::sst::block_cache::BlockCache;
 use crate::sst::block_metadata::BlockMetadata;
-use crate::transactions::transaction::{Transaction, TxnId};
+use crate::transactions::transaction::{Transaction};
 use crate::utils::bloom_filter::BloomFilter;
 use bytes::{Buf, BufMut};
 use crossbeam_skiplist::SkipSet;
@@ -13,15 +11,12 @@ use std::path::Path;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering::Release;
 use std::sync::{Arc, Mutex};
-use crate::storage::KeyspaceId;
-
-pub type SSTableId = usize;
 
 pub const SSTABLE_DELETED: u8 = 2;
 pub const SSTABLE_ACTIVE: u8 = 1;
 
 pub struct SSTable {
-    pub(crate) sstable_id: SSTableId,
+    pub(crate) sstable_id: shared::SSTableId,
     pub(crate) bloom_filter: BloomFilter,
     pub(crate) file: shared::SimpleDbFile,
     pub(crate) block_cache: Mutex<BlockCache>,
@@ -31,14 +26,14 @@ pub struct SSTable {
     pub(crate) state: AtomicU8,
     pub(crate) first_key: Key,
     pub(crate) last_key: Key,
-    pub(crate) active_txn_ids_written: SkipSet<TxnId>,
+    pub(crate) active_txn_ids_written: SkipSet<shared::TxnId>,
 
-    pub(crate) keyspace_id: KeyspaceId,
+    pub(crate) keyspace_id: shared::KeyspaceId,
 }
 
 impl SSTable {
     pub fn new(
-        active_txn_ids_written: SkipSet<TxnId>,
+        active_txn_ids_written: SkipSet<shared::TxnId>,
         block_metadata: Vec<BlockMetadata>,
         options: Arc<shared::SimpleDbOptions>,
         bloom_filter: BloomFilter,
@@ -46,9 +41,9 @@ impl SSTable {
         last_key: Key,
         file: shared::SimpleDbFile,
         level: u32,
-        sstable_id: SSTableId,
+        sstable_id: shared::SSTableId,
         state: u8,
-        keyspace_id: KeyspaceId
+        keyspace_id: shared::KeyspaceId
     ) -> SSTable {
         SSTable {
             block_cache: Mutex::new(BlockCache::new(options.clone())),
@@ -67,26 +62,26 @@ impl SSTable {
     }
 
     pub fn from_file(
-        sstable_id: SSTableId,
-        keyspace_id: KeyspaceId,
+        sstable_id: shared::SSTableId,
+        keyspace_id: shared::KeyspaceId,
         path: &Path,
         options: Arc<shared::SimpleDbOptions>
-    ) -> Result<Arc<SSTable>, LsmError> {
+    ) -> Result<Arc<SSTable>, shared::SimpleDbError> {
         let sst_file = shared::SimpleDbFile::open(path, shared::SimpleDbFileMode::RandomWrites)
-            .map_err(|e| CannotOpenSSTableFile(keyspace_id, sstable_id, e))?;
+            .map_err(|e| shared::SimpleDbError::CannotOpenSSTableFile(keyspace_id, sstable_id, e))?;
         let sst_bytes = sst_file.read_all()
-            .map_err(|e| CannotOpenSSTableFile(keyspace_id, sstable_id, e))?;
+            .map_err(|e| shared::SimpleDbError::CannotOpenSSTableFile(keyspace_id, sstable_id, e))?;
 
         Self::decode(&sst_bytes, sstable_id, keyspace_id, options, sst_file)
     }
 
     fn decode(
         bytes: &Vec<u8>,
-        sstable_id: SSTableId,
-        keyspace_id: KeyspaceId,
+        sstable_id: shared::SSTableId,
+        keyspace_id: shared::KeyspaceId,
         options: Arc<shared::SimpleDbOptions>,
         file: shared::SimpleDbFile,
-    ) -> Result<Arc<SSTable>, LsmError> {
+    ) -> Result<Arc<SSTable>, shared::SimpleDbError> {
         let meta_offset = shared::u8_vec_to_u32_le(bytes, bytes.len() - 4);
         let bloom_offset = shared::u8_vec_to_u32_le(bytes, bytes.len() - 8);
         let active_txn_ids_written_offset = shared::u8_vec_to_u32_le(bytes, bytes.len() - 12);
@@ -94,20 +89,30 @@ impl SSTable {
         let state = bytes[bytes.len() - 13];
 
         let block_metadata = BlockMetadata::decode_all(bytes, meta_offset as usize)
-            .map_err(|error_type| CannotDecodeSSTable(keyspace_id, sstable_id, SSTableCorruptedPart::BlockMetadata, DecodeError {
-                offset: meta_offset as usize,
-                path: file.path(),
-                error_type,
-                index: 0,
-            }))?;
+            .map_err(|error_type| shared::SimpleDbError::CannotDecodeSSTable(
+                keyspace_id,
+                sstable_id,
+                shared::SSTableCorruptedPart::BlockMetadata,
+                shared::DecodeError {
+                    offset: meta_offset as usize,
+                    path: file.path(),
+                    error_type,
+                    index: 0,
+                }
+            ))?;
 
         let bloom_filter = BloomFilter::decode(bytes, bloom_offset as usize)
-            .map_err(|error_type| CannotDecodeSSTable(keyspace_id, sstable_id, SSTableCorruptedPart::BloomFilter, DecodeError {
-                offset: bloom_offset as usize,
-                path: file.path(),
-                error_type,
-                index: 0,
-            }))?;
+            .map_err(|error_type| shared::SimpleDbError::CannotDecodeSSTable(
+                keyspace_id,
+                sstable_id,
+                shared::SSTableCorruptedPart::BloomFilter,
+                shared::DecodeError {
+                    offset: bloom_offset as usize,
+                    path: file.path(),
+                    error_type,
+                    index: 0,
+                }
+            ))?;
 
         let active_txn_ids_written = Self::decode_active_txn_ids_written(&bytes, active_txn_ids_written_offset);
 
@@ -129,13 +134,13 @@ impl SSTable {
         )))
     }
 
-    fn decode_active_txn_ids_written(bytes: &Vec<u8>, offset: u32) -> SkipSet<TxnId> {
+    fn decode_active_txn_ids_written(bytes: &Vec<u8>, offset: u32) -> SkipSet<shared::TxnId> {
         let mut decoded = SkipSet::new();
         let mut current_ptr = &bytes[offset as usize..];
 
         let n_entries = current_ptr.get_u32_le();
         for _ in 0..n_entries {
-            let txn_id = current_ptr.get_u64_le() as TxnId;
+            let txn_id = current_ptr.get_u64_le() as shared::TxnId;
             decoded.insert(txn_id);
         }
 
@@ -150,16 +155,16 @@ impl SSTable {
         block_metadata.get(0).unwrap().first_key.clone()
     }
 
-    pub fn delete(&self) -> Result<(), LsmError> {
+    pub fn delete(&self) -> Result<(), shared::SimpleDbError> {
         self.state.store(SSTABLE_DELETED, Release);
-        self.file.delete().map_err(|e| CannotDeleteSSTable(self.keyspace_id, self.sstable_id, e))
+        self.file.delete().map_err(|e| shared::SimpleDbError::CannotDeleteSSTable(self.keyspace_id, self.sstable_id, e))
     }
 
-    pub fn size(&self) -> SSTableId {
+    pub fn size(&self) -> shared::SSTableId {
         self.file.size()
     }
 
-    pub fn load_block(&self, block_id: SSTableId) -> Result<Arc<Block>, LsmError> {
+    pub fn load_block(&self, block_id: shared::SSTableId) -> Result<Arc<Block>, shared::SimpleDbError> {
         {
             //Try read from cache
             let mut block_cache = self.block_cache.lock()
@@ -167,22 +172,27 @@ impl SSTable {
             let block_entry_from_cache = block_cache.get(block_id);
 
             if block_entry_from_cache.is_some() {
-                return Ok::<Arc<Block>, LsmError>(block_entry_from_cache.unwrap());
+                return Ok::<Arc<Block>, shared::SimpleDbError>(block_entry_from_cache.unwrap());
             }
         }
 
         //Read from disk
         let metadata: &BlockMetadata = &self.block_metadata[block_id];
         let encoded_block = self.file.read(metadata.offset, self.options.block_size_bytes)
-            .map_err(|e| CannotReadSSTableFile(self.keyspace_id, self.sstable_id, e))?;
+            .map_err(|e| shared::SimpleDbError::CannotReadSSTableFile(self.keyspace_id, self.sstable_id, e))?;
 
         let block = Block::decode(&encoded_block, &self.options)
-            .map_err(|error_type| CannotDecodeSSTable(self.keyspace_id, self.sstable_id, SSTableCorruptedPart::Block(block_id), DecodeError {
-                offset: metadata.offset,
-                path: self.file.path(),
-                error_type,
-                index: 0,
-            }))?;
+            .map_err(|error_type| shared::SimpleDbError::CannotDecodeSSTable(
+                self.keyspace_id,
+                self.sstable_id,
+                shared::SSTableCorruptedPart::Block(block_id),
+                shared::DecodeError {
+                    offset: metadata.offset,
+                    path: self.file.path(),
+                    error_type,
+                    index: 0,
+                }
+            ))?;
 
         let block = Arc::new(block);
 
@@ -196,7 +206,7 @@ impl SSTable {
         Ok(block)
     }
     
-    pub fn get(&self, key: &str, transaction: &Transaction) -> Result<Option<bytes::Bytes>, LsmError> {
+    pub fn get(&self, key: &str, transaction: &Transaction) -> Result<Option<bytes::Bytes>, shared::SimpleDbError> {
         if self.first_key.as_str().gt(key) || self.last_key.as_str().lt(key) {
             return Ok(None);
         }
@@ -237,7 +247,7 @@ impl SSTable {
         }
     }
 
-    pub fn has_has_txn_id_been_written(&self, txn_id: TxnId) -> bool {
+    pub fn has_has_txn_id_been_written(&self, txn_id: shared::TxnId) -> bool {
         self.active_txn_ids_written.contains(&txn_id)
     }
 }

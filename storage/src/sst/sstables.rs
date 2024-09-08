@@ -1,5 +1,4 @@
 use std::cmp::max;
-use crate::sst::sstable::{SSTable, SSTableId, SSTABLE_ACTIVE};
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables_files::{extract_sstable_id_from_file, is_sstable_file, to_sstable_file_name};
 use crate::sst::ssttable_iterator::SSTableIterator;
@@ -9,16 +8,14 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
-use crate::storage::KeyspaceId;
-use crate::lsm_error::LsmError;
-use crate::lsm_error::LsmError::CannotReadSSTablesFiles;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
-use crate::transactions::transaction::{Transaction, TxnId};
+use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
+use crate::transactions::transaction::Transaction;
 
 pub struct SSTables {
     //For each level one index entry
     sstables: Vec<RwLock<Vec<Arc<SSTable>>>>,
-    keyspace_id: KeyspaceId,
+    keyspace_id: shared::KeyspaceId,
     next_sstable_id: AtomicUsize,
     options: Arc<shared::SimpleDbOptions>,
     manifest: Arc<Manifest>,
@@ -28,9 +25,9 @@ pub struct SSTables {
 impl SSTables {
     pub fn open(
         options: Arc<shared::SimpleDbOptions>,
-        keyspace_id: KeyspaceId,
+        keyspace_id: shared::KeyspaceId,
         manifest: Arc<Manifest>
-    ) -> Result<SSTables, LsmError> {
+    ) -> Result<SSTables, shared::SimpleDbError> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
@@ -49,8 +46,8 @@ impl SSTables {
 
     fn load_sstables(
         options: &Arc<shared::SimpleDbOptions>,
-        keyspace_id: KeyspaceId
-    ) -> Result<(Vec<RwLock<Vec<Arc<SSTable>>>>, SSTableId), LsmError> {
+        keyspace_id: shared::KeyspaceId
+    ) -> Result<(Vec<RwLock<Vec<Arc<SSTable>>>>, shared::SSTableId), shared::SimpleDbError> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
@@ -58,9 +55,9 @@ impl SSTables {
 
         let path = shared::get_directory_usize(&options.base_path, keyspace_id);
         let path = path.as_path();
-        let mut max_sstable_id: SSTableId = 0;
+        let mut max_sstable_id: shared::SSTableId = 0;
 
-        for file in fs::read_dir(path).map_err(|e| CannotReadSSTablesFiles(keyspace_id, e))? {
+        for file in fs::read_dir(path).map_err(|e| shared::SimpleDbError::CannotReadSSTablesFiles(keyspace_id, e))? {
             let file = file.unwrap();
 
             if !is_sstable_file(&file) {
@@ -119,7 +116,7 @@ impl SSTables {
         MergeIterator::create(iterators)
     }
 
-    pub fn get(&self, key: &str, transaction: &Transaction) -> Result<Option<bytes::Bytes>, LsmError> {
+    pub fn get(&self, key: &str, transaction: &Transaction) -> Result<Option<bytes::Bytes>, shared::SimpleDbError> {
         for sstables_in_level_lock in self.sstables.iter() {
             let lock_result = sstables_in_level_lock.read();
             let sstable_in_level = lock_result.as_ref().unwrap();
@@ -135,7 +132,7 @@ impl SSTables {
         Ok(None)
     }
 
-    pub fn has_has_txn_id_been_written(&self, txn_id: TxnId) -> bool {
+    pub fn has_has_txn_id_been_written(&self, txn_id: shared::TxnId) -> bool {
         for sstables_in_level_lock in self.sstables.iter() {
             let lock_result = sstables_in_level_lock.read();
             let sstable_in_level = lock_result.as_ref().unwrap();
@@ -161,7 +158,7 @@ impl SSTables {
         };
     }
 
-    pub fn contains_sstable_id(&self, sstable_id: SSTableId) -> bool {
+    pub fn contains_sstable_id(&self, sstable_id: shared::SSTableId) -> bool {
         for lock_sstables_level in &self.sstables {
             let read_lock_result = lock_sstables_level.read().unwrap();
             for sstable_in_level in read_lock_result.iter() {
@@ -174,7 +171,7 @@ impl SSTables {
         false
     }
 
-    pub fn delete_sstables(&self, level: usize, sstables_id: Vec<SSTableId>) -> Result<(), LsmError> {
+    pub fn delete_sstables(&self, level: usize, sstables_id: Vec<shared::SSTableId>) -> Result<(), shared::SimpleDbError> {
         match self.sstables.get(level) {
             Some(sstables_lock) => {
                 let mut lock_result = sstables_lock.write();
@@ -217,7 +214,7 @@ impl SSTables {
         }
     }
 
-    pub fn get_sstables_id(&self, level: usize) -> Vec<SSTableId> {
+    pub fn get_sstables_id(&self, level: usize) -> Vec<shared::SSTableId> {
         match self.sstables.get(level) {
             Some(sstables) => sstables.read().unwrap()
                 .iter()
@@ -238,7 +235,7 @@ impl SSTables {
         self.n_current_levels
     }
 
-    pub fn flush_memtable_to_disk(&self, sstable_builder: SSTableBuilder) -> Result<usize, LsmError> {
+    pub fn flush_memtable_to_disk(&self, sstable_builder: SSTableBuilder) -> Result<usize, shared::SimpleDbError> {
         let sstable_id: usize = self.next_sstable_id.fetch_add(1, Relaxed);
         let flush_operation = self.manifest.append_operation(ManifestOperationContent::MemtableFlush(MemtableFlushManifestOperation{
             memtable_id: sstable_builder.get_memtable_id().unwrap(),
@@ -252,12 +249,12 @@ impl SSTables {
         flush_result
     }
 
-    pub fn flush_to_disk(&self, sstable_builder: SSTableBuilder) -> Result<usize, LsmError> {
+    pub fn flush_to_disk(&self, sstable_builder: SSTableBuilder) -> Result<usize, shared::SimpleDbError> {
         let sstable_id: usize = self.next_sstable_id.fetch_add(1, Relaxed);
         self.do_flush_to_disk(sstable_builder, sstable_id)
     }
 
-    fn do_flush_to_disk(&self, sstable_builder: SSTableBuilder, sstable_id: SSTableId) -> Result<usize, LsmError> {
+    fn do_flush_to_disk(&self, sstable_builder: SSTableBuilder, sstable_id: shared::SSTableId) -> Result<usize, shared::SimpleDbError> {
         let sstable_build_result = sstable_builder.build(
             sstable_id,
             self.to_sstable_file_path(sstable_id, self.keyspace_id).as_path(),
@@ -275,7 +272,7 @@ impl SSTables {
         }
     }
 
-    fn to_sstable_file_path(&self, sstable_id: SSTableId, keyspace_id: KeyspaceId) -> PathBuf {
+    fn to_sstable_file_path(&self, sstable_id: shared::SSTableId, keyspace_id: shared::KeyspaceId) -> PathBuf {
         shared::get_file_usize(&self.options.base_path, keyspace_id, to_sstable_file_name(sstable_id).as_str())
     }
 
