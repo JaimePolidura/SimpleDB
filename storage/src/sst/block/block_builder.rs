@@ -15,7 +15,7 @@ struct Entry {
 }
 
 impl BlockBuilder {
-    pub fn new(options: Arc<shared::SimpleDbOptions>) -> BlockBuilder {
+    pub fn create(options: Arc<shared::SimpleDbOptions>) -> BlockBuilder {
         BlockBuilder {
             entries: Vec::new(),
             current_size: BLOCK_FOOTER_LENGTH,
@@ -78,9 +78,9 @@ mod test {
 
     #[test]
     fn build() {
-        let mut block_builder = BlockBuilder::new(Arc::new(shared::SimpleDbOptions::default()));
-        block_builder.add_entry(key::new("Jaime", 1), Bytes::from(vec![1, 2, 3]));
-        block_builder.add_entry(key::new("Pedro", 1), Bytes::from(vec![4, 5, 6]));
+        let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
+        block_builder.add_entry(key::create("Jaime", 1), Bytes::from(vec![1, 2, 3]));
+        block_builder.add_entry(key::create("Pedro", 1), Bytes::from(vec![4, 5, 6]));
         let block = block_builder.build();
 
         assert_eq!(block.get_value_by_index(0), vec![1, 2, 3]);

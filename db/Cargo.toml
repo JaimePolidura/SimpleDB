@@ -6,4 +6,6 @@ edition = "2021"
 [dependencies]
 crossbeam-skiplist = "0.1"
 storage = {path = "../storage" }
+shared = {path = "../shared" }
 rand = "0.9.0-alpha.2"
+bytes = "1.6.1"

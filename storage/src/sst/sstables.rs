@@ -94,7 +94,7 @@ impl SSTables {
             let sstables_in_level = lock.as_ref().unwrap();
 
             for sstable in sstables_in_level.iter() {
-                iterators.push(Box::new(SSTableIterator::new(sstable.clone(), &Transaction::none())))
+                iterators.push(Box::new(SSTableIterator::create(sstable.clone(), &Transaction::none())))
             }
         }
 
@@ -109,7 +109,7 @@ impl SSTables {
             let sstable_in_level = lock_result.as_ref().unwrap();
 
             for sstable in sstable_in_level.iter() {
-                iterators.push(Box::new(SSTableIterator::new(sstable.clone(), transaction)));
+                iterators.push(Box::new(SSTableIterator::create(sstable.clone(), transaction)));
             }
         }
 

@@ -1,3 +1,4 @@
+use std::ffi::c_short;
 use crate::types;
 use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
@@ -26,6 +27,17 @@ pub enum SSTableCorruptedPart {
 }
 
 pub enum SimpleDbError {
+    //Table Descriptor
+    CannotOpenTableDescriptor(types::KeyspaceId, std::io::Error),
+    CannotReadTableDescriptor(types::KeyspaceId, std::io::Error),
+    CannotDecodeTableDescriptor(types::KeyspaceId, DecodeError),
+
+    //Database descriptor
+    CannotReadDatabases(std::io::Error),
+    CannotOpenDatabaseDescriptor(String, std::io::Error),
+    CannotReaDatabaseDescriptor(String, std::io::Error),
+    CannotDecodeDatabaseDescriptor(String, DecodeError),
+
     //Keyspaces
     KeyspaceNotFound(types::KeyspaceId),
     CannotReadKeyspacesDirectories(std::io::Error),
@@ -69,6 +81,24 @@ pub enum SimpleDbError {
 impl Debug for SimpleDbError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            SimpleDbError::CannotOpenTableDescriptor(keyspace_id, io_error) => {
+                write!(f, "Cannot open Table descriptor. Error: {}. Keyspace ID: {}", io_error, keyspace_id)
+            },
+            SimpleDbError::CannotReadTableDescriptor(keyspace_id, io_error) => {
+                write!(f, "Cannot read table descriptor. IO Error: {}. Keyspace ID: {}", io_error, keyspace_id)
+            },
+            SimpleDbError::CannotDecodeTableDescriptor(keyspace_id, decode_error) => {
+                write!(f, "Cannot decode table descriptor. Error: {}. Keyspace ID: {}", decode_error_to_message(&decode_error), keyspace_id)
+            },
+            SimpleDbError::CannotOpenDatabaseDescriptor(database_name, io_error) => {
+                write!(f, "Cannot open Database descriptor. Error: {}. Database ID: {}", io_error, database_name)
+            },
+            SimpleDbError::CannotReaDatabaseDescriptor(database_name, io_error) => {
+                write!(f, "Cannot read table descriptor. IO Error: {}. Database: {}", io_error, database_name)
+            },
+            SimpleDbError::CannotDecodeDatabaseDescriptor(database_name, descode_error) => {
+                write!(f, "Cannot database descriptor. Error: {}. Database: {}", decode_error_to_message(&descode_error), database_name)
+            },
             SimpleDbError::CannotCreateWal(keyspace_id, memtable_id, io_error) => {
                 write!(f, "Cannot create WAL file. Memtable ID: {}. IO Error: {}. Keyspace ID: {}", memtable_id, io_error, keyspace_id)
             }
@@ -146,6 +176,9 @@ impl Debug for SimpleDbError {
             }
             SimpleDbError::CannotCreateKeyspaceDirectory(keyspace_id, io_error) => {
                 write!(f, "Cannot create keyspace directory. IO Error: {}. Keyspace ID: {}", io_error, keyspace_id)
+            }
+            SimpleDbError::CannotReadDatabases(io_error) => {
+                write!(f, "Cannot list database files in base path. IO Error: {}", io_error)
             }
         }
     }

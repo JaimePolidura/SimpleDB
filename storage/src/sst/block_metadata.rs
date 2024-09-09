@@ -74,8 +74,8 @@ impl BlockMetadata {
         current_index = current_index + 4;
 
         Ok((current_index, BlockMetadata{
-            first_key: key::new(first_key.as_str(), first_key_txn_id),
-            last_key: key::new(last_key.as_str(), last_key_txn_id),
+            first_key: key::create(first_key.as_str(), first_key_txn_id),
+            last_key: key::create(last_key.as_str(), last_key_txn_id),
             offset
         }))
     }
@@ -100,7 +100,7 @@ impl BlockMetadata {
     }
 
     pub fn contains(&self, key: &str, transaction: &Transaction) -> bool {
-        let key_to_be_checked = key::new(key, transaction.txn_id);
+        let key_to_be_checked = key::create(key, transaction.txn_id);
         self.first_key.le(&key_to_be_checked) && self.last_key.gt(&key_to_be_checked)
     }
 }
@@ -123,10 +123,10 @@ mod test {
     #[test]
     fn encode_decode() {
         let metadata = vec![
-            BlockMetadata{offset: 0, first_key: key::new("a", 1), last_key: key::new("b", 1)},
-            BlockMetadata{offset: 1, first_key: key::new("b", 1), last_key: key::new("c", 1)},
-            BlockMetadata{offset: 2, first_key: key::new("c", 1), last_key: key::new("d", 1)},
-            BlockMetadata{offset: 3, first_key: key::new("d", 1), last_key: key::new("z", 1)},
+            BlockMetadata{offset: 0, first_key: key::create("a", 1), last_key: key::create("b", 1)},
+            BlockMetadata{offset: 1, first_key: key::create("b", 1), last_key: key::create("c", 1)},
+            BlockMetadata{offset: 2, first_key: key::create("c", 1), last_key: key::create("d", 1)},
+            BlockMetadata{offset: 3, first_key: key::create("d", 1), last_key: key::create("z", 1)},
         ];
         let encoded = BlockMetadata::encode_all(&metadata);
         let decoded = BlockMetadata::decode_all(&encoded, 0);
@@ -136,9 +136,9 @@ mod test {
 
         assert_eq!(decoded.len(), 4);
 
-        assert!(decoded[0].offset == 0 && decoded[0].first_key == key::new("a", 1) && decoded[0].last_key == key::new("b", 1));
-        assert!(decoded[1].offset == 1 && decoded[1].first_key == key::new("b", 1) && decoded[1].last_key == key::new("c", 1));
-        assert!(decoded[2].offset == 2 && decoded[2].first_key == key::new("c", 1) && decoded[2].last_key == key::new("d", 1));
-        assert!(decoded[3].offset == 3 && decoded[3].first_key == key::new("d", 1) && decoded[3].last_key == key::new("z", 1));
+        assert!(decoded[0].offset == 0 && decoded[0].first_key == key::create("a", 1) && decoded[0].last_key == key::create("b", 1));
+        assert!(decoded[1].offset == 1 && decoded[1].first_key == key::create("b", 1) && decoded[1].last_key == key::create("c", 1));
+        assert!(decoded[2].offset == 2 && decoded[2].first_key == key::create("c", 1) && decoded[2].last_key == key::create("d", 1));
+        assert!(decoded[3].offset == 3 && decoded[3].first_key == key::create("d", 1) && decoded[3].last_key == key::create("z", 1));
     }
 }

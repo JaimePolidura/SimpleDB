@@ -10,7 +10,7 @@ pub struct TwoMergeIterator<A: StorageIterator, B: StorageIterator> {
 }
 
 impl<A: StorageIterator, B: StorageIterator> TwoMergeIterator<A, B> {
-    pub fn new(mut a: A, mut b: B) -> TwoMergeIterator<A, B> {
+    pub fn create(mut a: A, mut b: B) -> TwoMergeIterator<A, B> {
         a.next();
         b.next();
         let choose_a = Self::choose_a(&a, &b);
@@ -106,34 +106,34 @@ mod test {
         memtable1.set(&Transaction::none(), "d", &vec![4]);
         memtable1.set(&Transaction::none(), "f", &vec![5]);
 
-        let mut two_merge_iterators = TwoMergeIterator::new(
+        let mut two_merge_iterators = TwoMergeIterator::create(
             MemtableIterator::create(&memtable1, &Transaction::none()),
             MemtableIterator::create(&memtable2, &Transaction::none()),
         );
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&key::new("a", 0)));
+        assert!(two_merge_iterators.key().eq(&key::create("a", 0)));
         assert!(two_merge_iterators.value().eq(&vec![1]));
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&key::new("b", 0)));
+        assert!(two_merge_iterators.key().eq(&key::create("b", 0)));
         assert!(two_merge_iterators.value().eq(&vec![2]));
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&key::new("c", 0)));
+        assert!(two_merge_iterators.key().eq(&key::create("c", 0)));
         assert!(two_merge_iterators.value().eq(&vec![3]));
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&key::new("d", 0)));
+        assert!(two_merge_iterators.key().eq(&key::create("d", 0)));
         assert!(two_merge_iterators.value().eq(&vec![4]));
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&key::new("f", 0)));
+        assert!(two_merge_iterators.key().eq(&key::create("f", 0)));
         assert!(two_merge_iterators.value().eq(&vec![5]));
 
         assert!(!two_merge_iterators.has_next());

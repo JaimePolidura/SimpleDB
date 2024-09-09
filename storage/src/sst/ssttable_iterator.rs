@@ -18,7 +18,7 @@ pub struct SSTableIterator {
 }
 
 impl SSTableIterator {
-    pub fn new(sstable: Arc<SSTable>, transaction: &Transaction) -> SSTableIterator {
+    pub fn create(sstable: Arc<SSTable>, transaction: &Transaction) -> SSTableIterator {
         SSTableIterator {
             pending_blocks: sstable.block_metadata.clone(),
             transaction: transaction.clone(),
@@ -75,7 +75,7 @@ impl SSTableIterator {
     fn set_iterating_block(&mut self, block_metadata: BlockMetadata) {
         let block = self.load_block(self.current_block_id as usize);
         self.current_block_metadata = Some(block_metadata);
-        self.current_block_iterator = Some(BlockIterator::new(block));
+        self.current_block_iterator = Some(BlockIterator::create(block));
     }
 
     fn load_block(&mut self, block_id: usize) -> Arc<Block> {
@@ -139,54 +139,54 @@ mod test {
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::new("Alberto", 1)));
+        assert!(sstable_iteator.key().eq(&key::create("Alberto", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::new("Berto", 1)));
+        assert!(sstable_iteator.key().eq(&key::create("Berto", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::new("Cigu", 1)));
+        assert!(sstable_iteator.key().eq(&key::create("Cigu", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::new("De", 1)));
+        assert!(sstable_iteator.key().eq(&key::create("De", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::new("Estonia", 1)));
+        assert!(sstable_iteator.key().eq(&key::create("Estonia", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::new("Gibraltar", 1)));
+        assert!(sstable_iteator.key().eq(&key::create("Gibraltar", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::new("Zi", 1)));
+        assert!(sstable_iteator.key().eq(&key::create("Zi", 1)));
 
         assert!(!sstable_iteator.next());
         assert!(!sstable_iteator.has_next());
     }
 
     fn build_sstable_iterator() -> SSTableIterator {
-        let mut block1 = BlockBuilder::new(Arc::new(shared::SimpleDbOptions::default()));
-        block1.add_entry(key::new("Alberto", 1), Bytes::from(vec![1]));
-        block1.add_entry(key::new("Berto", 1), Bytes::from(vec![1]));
+        let mut block1 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
+        block1.add_entry(key::create("Alberto", 1), Bytes::from(vec![1]));
+        block1.add_entry(key::create("Berto", 1), Bytes::from(vec![1]));
         let block1 = Arc::new(block1.build());
 
-        let mut block2 = BlockBuilder::new(Arc::new(shared::SimpleDbOptions::default()));
-        block2.add_entry(key::new("Cigu", 1), Bytes::from(vec![1]));
-        block2.add_entry(key::new("De", 1), Bytes::from(vec![1]));
+        let mut block2 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
+        block2.add_entry(key::create("Cigu", 1), Bytes::from(vec![1]));
+        block2.add_entry(key::create("De", 1), Bytes::from(vec![1]));
         let block2 = Arc::new(block2.build());
 
-        let mut block3 = BlockBuilder::new(Arc::new(shared::SimpleDbOptions::default()));
-        block3.add_entry(key::new("Estonia", 1), Bytes::from(vec![1]));
-        block3.add_entry(key::new("Gibraltar", 1), Bytes::from(vec![1]));
-        block3.add_entry(key::new("Zi", 1), Bytes::from(vec![1]));
+        let mut block3 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
+        block3.add_entry(key::create("Estonia", 1), Bytes::from(vec![1]));
+        block3.add_entry(key::create("Gibraltar", 1), Bytes::from(vec![1]));
+        block3.add_entry(key::create("Zi", 1), Bytes::from(vec![1]));
         let block3 = Arc::new(block3.build());
 
-        let mut block_cache = BlockCache::new(Arc::new(shared::SimpleDbOptions::default()));
+        let mut block_cache = BlockCache::create(Arc::new(shared::SimpleDbOptions::default()));
         block_cache.put(0, block1);
         block_cache.put(1, block2);
         block_cache.put(2, block3);
@@ -195,21 +195,21 @@ mod test {
             keyspace_id: 0,
             active_txn_ids_written: SkipSet::new(),
             sstable_id: 1,
-            bloom_filter: BloomFilter::new(&Vec::new(), 8),
+            bloom_filter: BloomFilter::create(&Vec::new(), 8),
             file: shared::SimpleDbFile::mock(),
             block_cache: Mutex::new(block_cache),
             block_metadata: vec![
-                BlockMetadata{offset: 0, first_key: key::new("Alberto", 1), last_key: key::new("Berto", 1)},
-                BlockMetadata{offset: 8, first_key: key::new("Cigu", 1), last_key: key::new("De", 1)},
-                BlockMetadata{offset: 16, first_key: key::new("Estonia", 1), last_key: key::new("Zi", 1)},
+                BlockMetadata{offset: 0, first_key: key::create("Alberto", 1), last_key: key::create("Berto", 1)},
+                BlockMetadata{offset: 8, first_key: key::create("Cigu", 1), last_key: key::create("De", 1)},
+                BlockMetadata{offset: 16, first_key: key::create("Estonia", 1), last_key: key::create("Zi", 1)},
             ],
             options: Arc::new(shared::SimpleDbOptions::default()),
             level: 0,
             state: AtomicU8::new(SSTABLE_ACTIVE),
-            first_key: key::new("Alberto", 1),
-            last_key: key::new("Zi", 1),
+            first_key: key::create("Alberto", 1),
+            last_key: key::create("Zi", 1),
         });
 
-        SSTableIterator::new(sstable, &Transaction::none())
+        SSTableIterator::create(sstable, &Transaction::none())
     }
 }

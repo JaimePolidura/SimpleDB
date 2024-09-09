@@ -15,10 +15,10 @@ pub struct SharedRef<T> {
 }
 
 impl<T> AtomicSharedRef<T> {
-    pub fn new(ptr: T) -> AtomicSharedRef<T> {
+    pub fn create(ptr: T) -> AtomicSharedRef<T> {
         AtomicSharedRef {
             state: AtomicI8::new(ACTIVE),
-            shared: AtomicPtr::new(Box::into_raw(Box::new(SharedRef::new(ptr))))
+            shared: AtomicPtr::new(Box::into_raw(Box::new(SharedRef::create(ptr))))
         }
     }
 
@@ -47,7 +47,7 @@ impl<T> AtomicSharedRef<T> {
         let old_ptr: * mut SharedRef<T> = self.shared.load(Acquire);
 
         self.shared.store(
-            Box::into_raw(Box::new(SharedRef::new(new_ptr))),
+            Box::into_raw(Box::new(SharedRef::create(new_ptr))),
             Release
         );
 
@@ -62,7 +62,7 @@ impl<T> AtomicSharedRef<T> {
 }
 
 impl<T> SharedRef<T> {
-    pub fn new(value: T) -> SharedRef<T> {
+    pub fn create(value: T) -> SharedRef<T> {
         return SharedRef {
             users: AtomicUsize::new(0),
             shared_ref: value

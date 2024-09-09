@@ -21,9 +21,9 @@ pub enum WriteBatch {
     Delete(shared::KeyspaceId, String)
 }
 
-pub type StorageIterator = TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>;
+pub type SimpleDbStorageIterator = TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>;
 
-pub fn new(options: Arc<shared::SimpleDbOptions>) -> Result<Storage, shared::SimpleDbError> {
+pub fn create(options: Arc<shared::SimpleDbOptions>) -> Result<Storage, shared::SimpleDbError> {
     println!("Starting storage engine!");
     let transaction_manager = Arc::new(
         TransactionManager::create_recover_from_log(options.clone())?
@@ -48,7 +48,7 @@ pub fn new(options: Arc<shared::SimpleDbOptions>) -> Result<Storage, shared::Sim
 }
 
 impl Storage {
-    pub fn scan_all(&self, keyspace_id: shared::KeyspaceId) -> Result<StorageIterator, shared::SimpleDbError> {
+    pub fn scan_all(&self, keyspace_id: shared::KeyspaceId) -> Result<SimpleDbStorageIterator, shared::SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         self.scan_all_with_transaction(keyspace_id, &transaction)
     }
@@ -57,7 +57,7 @@ impl Storage {
         &self,
         keyspace_id: shared::KeyspaceId,
         transaction: &Transaction
-    ) -> Result<StorageIterator, shared::SimpleDbError> {
+    ) -> Result<SimpleDbStorageIterator, shared::SimpleDbError> {
         let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         Ok(keyspace.scan_all_with_transaction(transaction))
     }
@@ -175,5 +175,9 @@ impl Storage {
                 self.transaction_manager.rollback_active_transaction_failure(active_transaction_id);
             }
         }
+    }
+
+    pub fn get_keyspaces_id(&self) -> Vec<shared::KeyspaceId> {
+        unimplemented!()
     }
 }

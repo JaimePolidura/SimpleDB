@@ -129,7 +129,7 @@ impl MemTable {
     }
 
     pub fn get(&self, key_lookup: &str, transaction: &Transaction) -> Option<Bytes> {
-        let mut current_key = key::new(key_lookup, transaction.txn_id + 1);
+        let mut current_key = key::create(key_lookup, transaction.txn_id + 1);
 
         loop {
             if let Some(entry) = self.data.upper_bound(Excluded(&current_key)) {
@@ -149,7 +149,7 @@ impl MemTable {
 
     pub fn set(&self, transaction: &Transaction, key: &str, value: &[u8]) -> Result<(), shared::SimpleDbError> {
         self.write_into_skip_list(
-            &key::new(key, transaction.txn_id),
+            &key::create(key, transaction.txn_id),
             Bytes::copy_from_slice(value),
             transaction.txn_id
         )
@@ -157,7 +157,7 @@ impl MemTable {
 
     pub fn delete(&self, transaction: &Transaction, key: &str) -> Result<(), shared::SimpleDbError> {
         self.write_into_skip_list(
-            &key::new(key, transaction.txn_id),
+            &key::create(key, transaction.txn_id),
             TOMBSTONE,
             transaction.txn_id
         )
@@ -471,19 +471,19 @@ mod test {
         assert!(iterator.has_next());
         iterator.next();
 
-        assert!(iterator.key().eq(&key::new("alberto", 3)));
+        assert!(iterator.key().eq(&key::create("alberto", 3)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::new("gonchi", 1)));
+        assert!(iterator.key().eq(&key::create("gonchi", 1)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::new("jaime", 5)));
+        assert!(iterator.key().eq(&key::create("jaime", 5)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::new("wili", 0)));
+        assert!(iterator.key().eq(&key::create("wili", 0)));
 
         assert!(!iterator.has_next());
     }
@@ -508,19 +508,19 @@ mod test {
         assert!(iterator.has_next());
         iterator.next();
 
-        assert!(iterator.key().eq(&key::new("alberto", 3)));
+        assert!(iterator.key().eq(&key::create("alberto", 3)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::new("gonchi", 1)));
+        assert!(iterator.key().eq(&key::create("gonchi", 1)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::new("jaime", 1)));
+        assert!(iterator.key().eq(&key::create("jaime", 1)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::new("wili", 0)));
+        assert!(iterator.key().eq(&key::create("wili", 0)));
     }
 
     fn transaction(txn_id: shared::TxnId) -> Transaction {

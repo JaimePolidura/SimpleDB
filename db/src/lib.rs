@@ -1,2 +1,3 @@
-pub mod database;
+pub mod simple_db;
+mod database;
 mod table;

@@ -162,7 +162,7 @@ impl TransactionLogEntry {
 
     pub fn encode(&self) -> Vec<u8> {
         let mut entry_encoded = Vec::new();
-        entry_encoded.put_u8(self.get_binary_code());
+        entry_encoded.put_u8(self.serialize());
         match *self {
             TransactionLogEntry::StartRollback(txn_id, n_writes) => {
                 entry_encoded.put_u64_le(txn_id as u64);
@@ -189,7 +189,7 @@ impl TransactionLogEntry {
         }
     }
 
-    pub fn get_binary_code(&self) -> u8 {
+    pub fn serialize(&self) -> u8 {
         match *self {
             TransactionLogEntry::RolledbackActiveTransactionFailure(_) => ROLLED_BACK_ACTIVE_TRANSACTION_FAILURE_BINARY_CODE,
             TransactionLogEntry::RolledbackWrite(_) => ROLLEDBACK_WRITE_BINARY_CODE,

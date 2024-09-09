@@ -9,6 +9,7 @@ use crate::transactions::transaction::{Transaction};
 use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use std::sync::Arc;
+use crate::SimpleDbStorageIterator;
 use crate::utils::storage_iterator::StorageIterator;
 
 pub struct Keyspace {
@@ -30,10 +31,10 @@ impl Keyspace {
         let path = shared::get_directory_usize(&options.base_path, keyspace_id);
         fs::create_dir(path.as_path())
             .map_err(|e| shared::SimpleDbError::CannotCreateKeyspaceDirectory(keyspace_id, e))?;
-        Self::load(keyspace_id, transaction_manager, options)
+        Self::create_and_load(keyspace_id, transaction_manager, options)
     }
 
-    pub fn load(
+    pub fn create_and_load(
         keyspace_id: shared::KeyspaceId,
         transaction_manager: Arc<TransactionManager>,
         options: Arc<shared::SimpleDbOptions>
@@ -58,8 +59,8 @@ impl Keyspace {
     pub fn scan_all_with_transaction(
         &self,
         transaction: &Transaction
-    ) -> StorageIterator {
-        TwoMergeIterator::new(
+    ) -> SimpleDbStorageIterator {
+        TwoMergeIterator::create(
             self.memtables.iterator(&transaction),
             self.sstables.iterator(&transaction),
         )

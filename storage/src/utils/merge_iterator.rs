@@ -181,27 +181,27 @@ mod test {
         assert!(merge_iterator.has_next());
         merge_iterator.next();
 
-        assert!(merge_iterator.key().eq(&key::new("a", 0)));
+        assert!(merge_iterator.key().eq(&key::create("a", 0)));
         assert!(merge_iterator.value().eq(&vec![1]));
 
         assert!(merge_iterator.has_next());
         merge_iterator.next();
-        assert!(merge_iterator.key().eq(&key::new("b", 0)));
+        assert!(merge_iterator.key().eq(&key::create("b", 0)));
         assert!(merge_iterator.value().eq(&vec![1]));
 
         assert!(merge_iterator.has_next());
         merge_iterator.next();
-        assert!(merge_iterator.key().eq(&key::new("c", 0)));
+        assert!(merge_iterator.key().eq(&key::create("c", 0)));
         assert!(merge_iterator.value().eq(&vec![3]));
 
         assert!(merge_iterator.has_next());
         merge_iterator.next();
-        assert!(merge_iterator.key().eq(&key::new("d", 0)));
+        assert!(merge_iterator.key().eq(&key::create("d", 0)));
         assert!(merge_iterator.value().eq(&vec![1]));
 
         assert!(merge_iterator.has_next());
         merge_iterator.next();
-        assert!(merge_iterator.key().eq(&key::new("e", 0)));
+        assert!(merge_iterator.key().eq(&key::create("e", 0)));
         assert!(merge_iterator.value().eq(&vec![2]));
 
         assert!(!merge_iterator.has_next());

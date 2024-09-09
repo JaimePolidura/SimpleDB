@@ -9,7 +9,7 @@ pub struct Key {
     txn_id: shared::TxnId,
 }
 
-pub fn new(string: &str, txn_id: shared::TxnId) -> Key {
+pub fn create(string: &str, txn_id: shared::TxnId) -> Key {
     Key {
         string: string.to_string(),
         txn_id
@@ -60,7 +60,7 @@ impl Key {
     //"Juan".split(2) -> ("Ju", "an")
     pub fn split(&self, index: usize) -> (Key, Key) {
         let (h1, h2) = self.string.split_at(index);
-        (key::new(h1, self.txn_id), key::new(h2, self.txn_id))
+        (key::create(h1, self.txn_id), key::create(h2, self.txn_id))
     }
 
     pub fn merge(a: &Key, b: &Key, txn_id: shared::TxnId) -> Key {

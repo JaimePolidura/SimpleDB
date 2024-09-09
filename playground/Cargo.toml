@@ -7,3 +7,4 @@ edition = "2021"
 storage = {path = "../storage" }
 shared = {path = "../shared" }
 rand = "0.9.0-alpha.2"
+db = {path = "../db" }

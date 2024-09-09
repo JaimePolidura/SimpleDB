@@ -41,7 +41,7 @@ impl SSTableBuilder {
         level: u32
     ) -> SSTableBuilder {
         SSTableBuilder {
-            current_block_builder: BlockBuilder::new(options.clone()),
+            current_block_builder: BlockBuilder::create(options.clone()),
             level,
             keyspace_id,
             key_hashes: Vec::new(),
@@ -104,7 +104,7 @@ impl SSTableBuilder {
     ) -> Result<SSTable, shared::SimpleDbError> {
         self.build_current_block();
 
-        let bloom_filter: BloomFilter = BloomFilter::new(
+        let bloom_filter: BloomFilter = BloomFilter::create(
             &self.key_hashes,
             self.options.bloom_filter_n_entries
         );
@@ -134,7 +134,7 @@ impl SSTableBuilder {
         encoded.put_u32_le(meta_offset as u32);
 
         match shared::SimpleDbFile::create(path, &encoded, shared::SimpleDbFileMode::ReadOnly) {
-            Ok(lsm_file) => Ok(SSTable::new(
+            Ok(lsm_file) => Ok(SSTable::create(
                 self.active_txn_ids_written, self.builded_block_metadata, self.options, bloom_filter, self.first_key.unwrap(),
                 self.last_key.unwrap(), lsm_file, self.level, id, SSTABLE_ACTIVE, self.keyspace_id,
             )),
@@ -165,7 +165,7 @@ impl SSTableBuilder {
 
         let encoded_block: Vec<u8> = self.current_block_builder.build()
             .encode(&self.options);
-        self.current_block_builder = BlockBuilder::new(self.options.clone());
+        self.current_block_builder = BlockBuilder::create(self.options.clone());
 
         self.builded_block_metadata.push(BlockMetadata {
             first_key: self.first_key_current_block.take().unwrap(),

@@ -1,8 +1,8 @@
 use rand::Rng;
 
 fn main() {
-    let mut lsm = storage::new(shared::builder_options()
-        .base_path(String::from("C:\\programacion\\mini-lsm\\playground\\resources"))
+    let mut lsm = storage::create(shared::start_simpledb_options_builder()
+        .base_path("C:\\programacion\\mini-lsm\\playground\\resources")
         .compaction_strategy(shared::CompactionStrategy::SimpleLeveled)
         .durability_level(shared::DurabilityLevel::Strong)
         .memtable_max_size_bytes(8192)
@@ -52,13 +52,13 @@ fn transactions(lsm: &mut storage::Storage) {
     assert_eq!(value1.unwrap(), vec![1]);
 }
 
-fn read(lsm: &mut storage::Storage, keyspace_id: storage::KeyspaceId) {
+fn read(lsm: &mut storage::Storage, keyspace_id: shared::KeyspaceId) {
     let value = lsm.get(keyspace_id, "AAB").unwrap();
     if value.is_some() {
     }
 }
 
-fn write(lsm: &mut storage::Storage, keyspace_id: storage::KeyspaceId)  {
+fn write(lsm: &mut storage::Storage, keyspace_id: shared::KeyspaceId)  {
     loop {
         let value = next_value();
         let key = next_key();

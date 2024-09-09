@@ -32,7 +32,7 @@ pub struct SSTable {
 }
 
 impl SSTable {
-    pub fn new(
+    pub fn create(
         active_txn_ids_written: SkipSet<shared::TxnId>,
         block_metadata: Vec<BlockMetadata>,
         options: Arc<shared::SimpleDbOptions>,
@@ -46,7 +46,7 @@ impl SSTable {
         keyspace_id: shared::KeyspaceId
     ) -> SSTable {
         SSTable {
-            block_cache: Mutex::new(BlockCache::new(options.clone())),
+            block_cache: Mutex::new(BlockCache::create(options.clone())),
             state: AtomicU8::new(state),
             active_txn_ids_written,
             block_metadata,
@@ -119,7 +119,7 @@ impl SSTable {
         let first_key = Self::get_first_key(&block_metadata);
         let last_key = Self::get_last_key(&block_metadata);
 
-        Ok(Arc::new(SSTable::new(
+        Ok(Arc::new(SSTable::create(
             active_txn_ids_written,
             block_metadata,
             options,
@@ -224,7 +224,7 @@ impl SSTable {
     }
 
     fn get_blocks_metadata(&self, key: &str, transaction: &Transaction) -> Option<usize> {
-        let lookup_key = key::new(key, transaction.txn_id);
+        let lookup_key = key::create(key, transaction.txn_id);
         let mut right = self.block_metadata.len() - 1;
         let mut left = 0;
 

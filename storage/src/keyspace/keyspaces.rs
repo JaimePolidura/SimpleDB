@@ -34,7 +34,7 @@ impl Keyspaces {
                     .map_err(|e| shared::SimpleDbError::CannotReadKeyspaceFile(keyspace_id, e))?
                     .is_dir();
                 if is_keyspace {
-                    let keyspace = Keyspace::load(
+                    let keyspace = Keyspace::create_and_load(
                         keyspace_id, transaction_manager.clone(), options.clone()
                     )?;
                     keyspaces.insert(keyspace_id, keyspace);

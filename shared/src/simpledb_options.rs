@@ -61,9 +61,15 @@ impl Default for SimpleDbOptions {
     }
 }
 
-pub fn builder_options() -> SimpleDbOptionsBuilder {
+pub fn start_simpledb_options_builder() -> SimpleDbOptionsBuilder {
     SimpleDbOptionsBuilder {
         options: SimpleDbOptions::default()
+    }
+}
+
+pub fn start_simpledb_options_builder_from(options: &SimpleDbOptions) -> SimpleDbOptionsBuilder {
+    SimpleDbOptionsBuilder {
+        options: options.clone()
     }
 }
 
@@ -127,8 +133,8 @@ impl SimpleDbOptionsBuilder {
         self
     }
 
-    pub fn base_path(&mut self, value: String) -> &mut SimpleDbOptionsBuilder {
-        self.options.base_path = value;
+    pub fn base_path(&mut self, value: &str) -> &mut SimpleDbOptionsBuilder {
+        self.options.base_path = value.to_string();
         self
     }
 

@@ -14,7 +14,7 @@ pub struct BlockIterator {
 }
 
 impl BlockIterator {
-    pub fn new(block: Arc<Block>) -> BlockIterator {
+    pub fn create(block: Arc<Block>) -> BlockIterator {
         BlockIterator {
             block,
             current_value: None,
@@ -69,23 +69,23 @@ mod test {
 
     #[test]
     fn iterator() {
-        let mut block_builder = BlockBuilder::new(Arc::new(LsmOptions::default()));
-        block_builder.add_entry(key::new("Jaime", 1), Bytes::from(vec![1, 2, 3]));
-        block_builder.add_entry(key::new("Pedro", 1), Bytes::from(vec![4, 5, 6]));
+        let mut block_builder = BlockBuilder::create(Arc::new(LsmOptions::default()));
+        block_builder.add_entry(key::create("Jaime", 1), Bytes::from(vec![1, 2, 3]));
+        block_builder.add_entry(key::create("Pedro", 1), Bytes::from(vec![4, 5, 6]));
         let block = Arc::new(block_builder.build());
 
-        let mut block_iterator = BlockIterator::new(block);
+        let mut block_iterator = BlockIterator::create(block);
 
         assert!(block_iterator.has_next());
         block_iterator.next();
 
-        assert!(block_iterator.key().eq(&key::new("Jaime", 1)));
+        assert!(block_iterator.key().eq(&key::create("Jaime", 1)));
         assert!(block_iterator.value().eq(&vec![1, 2, 3]));
 
         assert!(block_iterator.has_next());
         block_iterator.next();
 
-        assert!(block_iterator.key().eq(&key::new("Pedro", 1)));
+        assert!(block_iterator.key().eq(&key::create("Pedro", 1)));
         assert!(block_iterator.value().eq(&vec![4, 5, 6]));
 
         assert!(!block_iterator.has_next());

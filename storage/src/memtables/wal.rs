@@ -84,7 +84,7 @@ impl Wal {
                     error_type: shared::DecodeErrorType::Utf8Decode(e)
                 }))?;
 
-            let key = key::new(key_string.as_str(), key_timestmap);
+            let key = key::create(key_string.as_str(), key_timestmap);
 
             let value_len = current_ptr.get_u32_le() as usize;
             entry_bytes_size = entry_bytes_size + 4;

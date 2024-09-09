@@ -86,7 +86,7 @@ impl Block {
         let key = String::from_utf8(key_slice.to_vec())
             .expect("Error while parsing with UTF-8");
 
-        key::new(key.as_str(), key_txn_id)
+        key::create(key.as_str(), key_txn_id)
     }
 
     //Expect n_entry_index to be an index to block::offsets aray
@@ -111,14 +111,14 @@ mod test {
 
     #[test]
     fn encode_and_decode() {
-        let mut block_builder = BlockBuilder::new(Arc::new(shared::SimpleDbOptions::default()));
-        block_builder.add_entry(key::new("Jaime", 1), Bytes::from(vec![1]));
-        block_builder.add_entry(key::new("Javier", 1), Bytes::from(vec![2]));
-        block_builder.add_entry(key::new("Jose", 1), Bytes::from(vec![3]));
-        block_builder.add_entry(key::new("Juan", 1), Bytes::from(vec![4]));
-        block_builder.add_entry(key::new("Justo", 1), Bytes::from(vec![5]));
-        block_builder.add_entry(key::new("Justoo", 1), Bytes::from(vec![6]));
-        block_builder.add_entry(key::new("Kia", 1), Bytes::from(vec![7]));
+        let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
+        block_builder.add_entry(key::create("Jaime", 1), Bytes::from(vec![1]));
+        block_builder.add_entry(key::create("Javier", 1), Bytes::from(vec![2]));
+        block_builder.add_entry(key::create("Jose", 1), Bytes::from(vec![3]));
+        block_builder.add_entry(key::create("Juan", 1), Bytes::from(vec![4]));
+        block_builder.add_entry(key::create("Justo", 1), Bytes::from(vec![5]));
+        block_builder.add_entry(key::create("Justoo", 1), Bytes::from(vec![6]));
+        block_builder.add_entry(key::create("Kia", 1), Bytes::from(vec![7]));
         let block = block_builder.build();
 
         let encoded = block.encode(&Arc::new(shared::SimpleDbOptions::default()));
