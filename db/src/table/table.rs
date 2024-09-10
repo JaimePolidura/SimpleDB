@@ -1,4 +1,4 @@
-use crate::table::table_descriptor::TableDescriptor;
+use crate::table::table_descriptor::{ColumnType, TableDescriptor};
 use shared::SimpleDbError;
 use std::sync::Arc;
 
@@ -9,6 +9,14 @@ pub struct Table {
 }
 
 impl Table {
+    pub fn add_column(
+        &self,
+        column_name: &str,
+        column_type: ColumnType
+    ) -> Result<(), SimpleDbError> {
+        self.table_descriptor.add_column(self.storage_keyspace_id, column_name, column_type)
+    }
+
     pub fn create(
         table_name: &str,
         options: &Arc<shared::SimpleDbOptions>,
@@ -28,7 +36,7 @@ impl Table {
         }))
     }
 
-    pub fn load_tables(
+    pub fn load_tables (
         options: &Arc<shared::SimpleDbOptions>,
         storage: &Arc<storage::Storage>,
     ) -> Result<Vec<Arc<Table>>, SimpleDbError> {

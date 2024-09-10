@@ -1,4 +1,3 @@
-use std::ffi::c_short;
 use crate::types;
 use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
@@ -35,6 +34,7 @@ pub enum SimpleDbError {
     CannotOpenTableDescriptor(types::KeyspaceId, std::io::Error),
     CannotReadTableDescriptor(types::KeyspaceId, std::io::Error),
     CannotDecodeTableDescriptor(types::KeyspaceId, DecodeError),
+    CannotWriteTableDescriptor(types::KeyspaceId, std::io::Error),
 
     //Database descriptor
     CannotReadDatabases(std::io::Error),
@@ -193,6 +193,9 @@ impl Debug for SimpleDbError {
             }
             SimpleDbError::CannotCreateTableDescriptor(keyspace_id, io_error) => {
                 write!(f, "Cannot create table descriptor. Keyspace ID: {}, Error: {}", keyspace_id, io_error)
+            }
+            SimpleDbError::CannotWriteTableDescriptor(keyspace_id, io_error) => {
+                write!(f, "Cannot write table descriptor. IO Error: {}. Keyspace ID: {}", io_error, keyspace_id)
             }
         }
     }

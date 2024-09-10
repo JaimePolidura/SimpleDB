@@ -1,23 +1,49 @@
+use std::cell::UnsafeCell;
+use std::cmp::max;
 use bytes::{Buf, BufMut};
-use shared::{KeyspaceId, SimpleDbError, SimpleDbFile};
-use std::collections::HashMap;
+use shared::{ColumnId, KeyspaceId, SimpleDbError, SimpleDbFile, SimpleDbFileWrapper};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::Relaxed;
 use crossbeam_skiplist::SkipMap;
 
 pub struct TableDescriptor {
     columns: SkipMap<shared::ColumnId, ColumnDescriptor>,
+    next_column_id: AtomicUsize,
     table_name: String,
-    file: SimpleDbFile,
+    //Append only, concurrency safety is guaranteed by OS
+    file: SimpleDbFileWrapper,
 }
 
 pub struct ColumnDescriptor {
     column_id: shared::ColumnId,
     column_type: ColumnType,
-    name: String,
+    column_name: String,
 }
 
 impl TableDescriptor {
+    pub fn add_column(
+        &self,
+        keyspace_id: KeyspaceId,
+        column_name: &str,
+        column_type: ColumnType
+    ) -> Result<(), SimpleDbError> {
+        let column_descriptor = ColumnDescriptor {
+            column_id: self.next_column_id.fetch_add(1, Relaxed) as shared::ColumnId,
+            column_name: column_name.to_string(),
+            column_type,
+        };
+
+        let file = unsafe { &mut *self.file.file.get() };
+        file.write(&column_descriptor.serialize())
+            .map_err(|e| SimpleDbError::CannotWriteTableDescriptor(keyspace_id, e))?;
+
+        self.columns.insert(column_descriptor.column_id, column_descriptor);
+
+        Ok(())
+    }
+
     pub fn name(&self) -> String {
         self.table_name.clone()
     }
@@ -35,13 +61,14 @@ impl TableDescriptor {
         let table_descriptor_file = SimpleDbFile::create(
             Self::table_descriptor_file_path(options, keyspace_id).as_path(),
             &table_descriptor_file_bytes,
-            shared::SimpleDbFileMode::RandomWrites
+            shared::SimpleDbFileMode::AppendOnly
         ).map_err(|e| shared::SimpleDbError::CannotCreateTableDescriptor(keyspace_id, e))?;
 
-        Ok(TableDescriptor{
+        Ok(TableDescriptor {
+            next_column_id: AtomicUsize::new(0),
             table_name: table_name.to_string(),
             columns: SkipMap::new(),
-            file: table_descriptor_file
+            file: SimpleDbFileWrapper { file: UnsafeCell::new(table_descriptor_file) }
         })
     }
 
@@ -52,7 +79,7 @@ impl TableDescriptor {
         let path = Self::table_descriptor_file_path(options, keyspace_id);
         let table_descriptor_file = SimpleDbFile::open(
             path.as_path(),
-            shared::SimpleDbFileMode::RandomWrites
+            shared::SimpleDbFileMode::AppendOnly
         ).map_err(|e| SimpleDbError::CannotOpenTableDescriptor(keyspace_id, e))?;
 
         let table_descriptor_bytes = table_descriptor_file.read_all()
@@ -63,11 +90,21 @@ impl TableDescriptor {
             &path
         )?;
 
-        Ok(TableDescriptor{
+        Ok(TableDescriptor {
+            next_column_id: AtomicUsize::new(Self::max_column_id(&column_descriptors) as usize + 1),
             columns: Self::index_by_column_name(&mut column_descriptors),
-            file: table_descriptor_file,
+            file: SimpleDbFileWrapper {file: UnsafeCell::new(table_descriptor_file) },
             table_name,
         })
+    }
+
+    fn max_column_id(column_descriptors: &Vec<ColumnDescriptor>) -> ColumnId {
+        let mut max_column_id = 0;
+        for column_descriptor in column_descriptors {
+            max_column_id = max(column_descriptor.column_id, max_column_id);
+        }
+
+        max_column_id
     }
 
     fn decode_table_descriptor_bytes(
@@ -100,7 +137,7 @@ impl TableDescriptor {
             let column_name = Self::decode_string(name_bytes, keyspace_id, path, columns_descriptor.len())?;
 
             columns_descriptor.push(ColumnDescriptor {
-                name: column_name,
+                column_name: column_name,
                 column_type,
                 column_id,
             });
@@ -137,6 +174,18 @@ impl TableDescriptor {
         let filename = format!("{}.desc", keyspace_id);
         path.push(filename);
         path
+    }
+}
+
+impl ColumnDescriptor {
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut serialized = Vec::new();
+        serialized.put_u16_le(self.column_id);
+        serialized.put_u8(self.column_type.serialize());
+        let name_bytes = self.column_name.bytes();
+        serialized.put_u64_le(name_bytes.len() as u64);
+        serialized.extend(name_bytes);
+        serialized
     }
 }
 
