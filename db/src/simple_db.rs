@@ -22,6 +22,16 @@ impl SimpleDb {
         })
     }
 
+    pub fn create_database(&self, name: &str) -> Result<Arc<Database>, SimpleDbError> {
+        if self.databases.contains_key(name) {
+            return Err(SimpleDbError::DatabaseAlreadyExists(name.to_string()));
+        }
+
+        let database = Database::create(&self.options, name)?;
+        self.databases.insert(name.to_string(), database.clone());
+        Ok(database)
+    }
+
     fn index_databases_by_name(databases: &mut Vec<Arc<Database>>) -> SkipMap<String, Arc<Database>> {
         let mut indexed = SkipMap::new();
 

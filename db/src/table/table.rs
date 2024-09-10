@@ -25,4 +25,8 @@ impl Table {
 
         Ok(tables)
     }
+
+    pub fn name(&self) -> String {
+        self.table_descriptor.name()
+    }
 }

@@ -281,6 +281,8 @@ dependencies = [
 name = "shared"
 version = "0.1.0"
 dependencies = [
+ "bytes",
+ "farmhash",
  "serde_json",
 ]
 

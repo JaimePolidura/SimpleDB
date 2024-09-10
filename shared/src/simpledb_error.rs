@@ -27,6 +27,9 @@ pub enum SSTableCorruptedPart {
 }
 
 pub enum SimpleDbError {
+    //Databases
+    DatabaseAlreadyExists(String),
+
     //Table Descriptor
     CannotOpenTableDescriptor(types::KeyspaceId, std::io::Error),
     CannotReadTableDescriptor(types::KeyspaceId, std::io::Error),
@@ -37,6 +40,7 @@ pub enum SimpleDbError {
     CannotOpenDatabaseDescriptor(String, std::io::Error),
     CannotReaDatabaseDescriptor(String, std::io::Error),
     CannotDecodeDatabaseDescriptor(String, DecodeError),
+    CannotCreateDatabaseDescriptor(String, std::io::Error),
 
     //Keyspaces
     KeyspaceNotFound(types::KeyspaceId),
@@ -179,6 +183,12 @@ impl Debug for SimpleDbError {
             }
             SimpleDbError::CannotReadDatabases(io_error) => {
                 write!(f, "Cannot list database files in base path. IO Error: {}", io_error)
+            }
+            SimpleDbError::DatabaseAlreadyExists(database_name) => {
+                write!(f, "Database {} already exists", database_name)
+            }
+            SimpleDbError::CannotCreateDatabaseDescriptor(database_name, io_error) => {
+                write!(f, "Cannot create database descriptor. Database name: {}, Error: {}", database_name, io_error)
             }
         }
     }

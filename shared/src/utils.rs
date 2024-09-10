@@ -1,4 +1,6 @@
 use std::fs::DirEntry;
+use crate::SimpleDbError;
+use bytes::{Buf, BufMut};
 
 pub fn u16_vec_to_u8_vec(u16_vec: &Vec<u16>) -> Vec<u8> {
     let mut u8_vec: Vec<u8> = Vec::with_capacity(u16_vec.len() * 2);
@@ -95,8 +97,7 @@ pub fn pop_front<T>(vec: &mut Vec<T>) -> Option<T> {
 }
 
 pub fn hash(key: &[u8]) -> u32 {
-    //farmhash::hash32(key)
-    todo!()
+    farmhash::hash32(key)
 }
 
 pub fn fill_vec<T>(vec: &mut Vec<T>, size: usize, value: T)
