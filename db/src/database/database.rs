@@ -14,6 +14,23 @@ pub struct Database {
 }
 
 impl Database {
+    pub fn create_table(&self, table_name: &str) -> Result<Arc<Table>, SimpleDbError> {
+        Table::create(
+            table_name,
+            &self.options,
+            &self.storage,
+        )
+    }
+
+    pub fn get_table(&self, table_name: &str) -> Option<Arc<Table>> {
+        self.tables.get(table_name)
+            .map(|entry| entry.value().clone())
+    }
+
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+
     pub fn create(
         options: &Arc<SimpleDbOptions>,
         database_name: &str
@@ -55,9 +72,5 @@ impl Database {
         }
 
         indexed
-    }
-
-    pub fn name(&self) -> String {
-        self.name.clone()
     }
 }

@@ -1,12 +1,12 @@
-use std::collections::HashMap;
-use std::net::Shutdown;
+use bytes::{Buf, BufMut};
 use shared::{KeyspaceId, SimpleDbError, SimpleDbFile};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use bytes::{Buf, BufMut};
+use crossbeam_skiplist::SkipMap;
 
 pub struct TableDescriptor {
-    columns: HashMap<shared::ColumnId, ColumnDescriptor>,
+    columns: SkipMap<shared::ColumnId, ColumnDescriptor>,
     table_name: String,
     file: SimpleDbFile,
 }
@@ -20,6 +20,29 @@ pub struct ColumnDescriptor {
 impl TableDescriptor {
     pub fn name(&self) -> String {
         self.table_name.clone()
+    }
+
+    pub fn create(
+        keyspace_id: KeyspaceId,
+        options: &Arc<shared::SimpleDbOptions>,
+        table_name: &str
+    ) -> Result<TableDescriptor, SimpleDbError> {
+        let mut table_descriptor_file_bytes: Vec<u8> = Vec::new();
+        let table_name_butes = table_name.bytes();
+        table_descriptor_file_bytes.put_u16_le(table_name_butes.len() as u16);
+        table_descriptor_file_bytes.extend(table_name_butes);
+
+        let table_descriptor_file = SimpleDbFile::create(
+            Self::table_descriptor_file_path(options, keyspace_id).as_path(),
+            &table_descriptor_file_bytes,
+            shared::SimpleDbFileMode::RandomWrites
+        ).map_err(|e| shared::SimpleDbError::CannotCreateTableDescriptor(keyspace_id, e))?;
+
+        Ok(TableDescriptor{
+            table_name: table_name.to_string(),
+            columns: SkipMap::new(),
+            file: table_descriptor_file
+        })
     }
 
     pub fn load_table_descriptor(
@@ -96,8 +119,8 @@ impl TableDescriptor {
             }))
     }
 
-    fn index_by_column_name(column_descriptors: &mut Vec<ColumnDescriptor>) -> HashMap<shared::ColumnId, ColumnDescriptor> {
-        let mut indexed = HashMap::new();
+    fn index_by_column_name(column_descriptors: &mut Vec<ColumnDescriptor>) -> SkipMap<shared::ColumnId, ColumnDescriptor> {
+        let mut indexed = SkipMap::new();
 
         while let Some(column_descriptor) = column_descriptors.pop() {
             indexed.insert(column_descriptor.column_id, column_descriptor);

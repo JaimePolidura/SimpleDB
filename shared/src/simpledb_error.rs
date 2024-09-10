@@ -31,6 +31,7 @@ pub enum SimpleDbError {
     DatabaseAlreadyExists(String),
 
     //Table Descriptor
+    CannotCreateTableDescriptor(types::KeyspaceId, std::io::Error),
     CannotOpenTableDescriptor(types::KeyspaceId, std::io::Error),
     CannotReadTableDescriptor(types::KeyspaceId, std::io::Error),
     CannotDecodeTableDescriptor(types::KeyspaceId, DecodeError),
@@ -189,6 +190,9 @@ impl Debug for SimpleDbError {
             }
             SimpleDbError::CannotCreateDatabaseDescriptor(database_name, io_error) => {
                 write!(f, "Cannot create database descriptor. Database name: {}, Error: {}", database_name, io_error)
+            }
+            SimpleDbError::CannotCreateTableDescriptor(keyspace_id, io_error) => {
+                write!(f, "Cannot create table descriptor. Keyspace ID: {}, Error: {}", keyspace_id, io_error)
             }
         }
     }

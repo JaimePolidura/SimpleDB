@@ -22,6 +22,11 @@ impl SimpleDb {
         })
     }
 
+    pub fn get_database(&self, name: &str) -> Option<Arc<Database>> {
+        self.databases.get(name)
+            .map(|entry| entry.value().clone())
+    }
+
     pub fn create_database(&self, name: &str) -> Result<Arc<Database>, SimpleDbError> {
         if self.databases.contains_key(name) {
             return Err(SimpleDbError::DatabaseAlreadyExists(name.to_string()));

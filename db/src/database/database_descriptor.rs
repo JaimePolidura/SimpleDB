@@ -1,10 +1,9 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::Arc;
-use shared::{SimpleDbError, SimpleDbFile, SimpleDbFileMode, SimpleDbOptions};
-use bytes::{Buf, BufMut};
+use bytes::Buf;
 use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::CannotCreateDatabaseDescriptor;
+use shared::{SimpleDbError, SimpleDbFile, SimpleDbFileMode, SimpleDbOptions};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 pub struct DatabaseDescriptor {
     keyspace_id_by_table_name: SkipMap<String, shared::KeyspaceId>,

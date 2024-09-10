@@ -4,11 +4,30 @@ use std::sync::Arc;
 
 pub struct Table {
     storage_keyspace_id: shared::KeyspaceId,
-    storage: Arc<storage::Storage>,
     table_descriptor: TableDescriptor,
+    storage: Arc<storage::Storage>,
 }
 
 impl Table {
+    pub fn create(
+        table_name: &str,
+        options: &Arc<shared::SimpleDbOptions>,
+        storage: &Arc<storage::Storage>,
+    ) -> Result<Arc<Table>, SimpleDbError> {
+        let table_keyspace_id = storage.create_keyspace()?;
+        let table_descriptor = TableDescriptor::create(
+            table_keyspace_id,
+            options,
+            table_name
+        )?;
+
+        Ok(Arc::new(Table{
+            storage_keyspace_id: table_keyspace_id,
+            storage: storage.clone(),
+            table_descriptor,
+        }))
+    }
+
     pub fn load_tables(
         options: &Arc<shared::SimpleDbOptions>,
         storage: &Arc<storage::Storage>,
