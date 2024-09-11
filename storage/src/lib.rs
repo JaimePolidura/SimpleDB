@@ -1,12 +1,13 @@
 mod memtables;
-mod utils;
 mod sst;
 mod compaction;
 mod manifest;
-mod transactions;
 mod keyspace;
 
+pub mod transactions;
 pub mod storage;
 pub mod key;
+pub mod utils;
 
 pub use storage::*;
+

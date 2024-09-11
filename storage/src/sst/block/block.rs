@@ -28,7 +28,7 @@ impl Block {
         decode_block(encoded, options)
     }
 
-    pub fn get_value(&self, key_lookup: &str, transaction: &Transaction) -> Option<Bytes> {
+    pub fn get_value(&self, key_lookup: &Bytes, transaction: &Transaction) -> Option<Bytes> {
         let mut right = self.offsets.len() / 2;
         let mut left = 0;
 
@@ -39,13 +39,13 @@ impl Block {
             if left == right {
                 return None;
             }
-            if current_key.as_str().eq(key_lookup) {
+            if current_key.bytes_eq_bytes(key_lookup) {
                 return self.get_value_in_multiple_key_versions(transaction, key_lookup, current_index);
             }
-            if current_key.as_str().gt(key_lookup) {
+            if current_key.bytes_gt_bytes(key_lookup) {
                 right = current_index;
             }
-            if current_key.as_str().lt(key_lookup) {
+            if current_key.bytes_lt_bytes(key_lookup) {
                 left = current_index;
             }
         }
@@ -55,17 +55,17 @@ impl Block {
     fn get_value_in_multiple_key_versions(
         &self,
         transaction: &Transaction,
-        key: &str,
+        key: &Bytes,
         index: usize
     ) -> Option<Bytes> {
         let mut current_index = index;
-        while current_index > 0 && self.get_key_by_index(current_index).as_str().eq(key) {
+        while current_index > 0 && self.get_key_by_index(current_index).bytes_eq_bytes(key) {
             current_index = current_index - 1;
         }
 
         while current_index < self.entries.len() {
             let current_key = self.get_key_by_index(current_index);
-            if current_key.as_str().eq(key) {
+            if current_key.bytes_eq_bytes(key) {
                 return None;
             }
             if transaction.can_read(&current_key) {
@@ -81,12 +81,9 @@ impl Block {
         let entry_index = self.offsets[n_entry_index] as usize;
         let key_length = shared::u8_vec_to_u16_le(&self.entries, entry_index) as usize;
         let key_txn_id = shared::u8_vec_to_u64_le(&self.entries, entry_index + 2) as shared::TxnId;
+        let key_bytes = self.entries[entry_index + 10..(key_length + entry_index + 10)].to_vec();
 
-        let key_slice: &[u8] = &self.entries[entry_index + 10..(key_length + entry_index + 10)];
-        let key = String::from_utf8(key_slice.to_vec())
-            .expect("Error while parsing with UTF-8");
-
-        key::create(key.as_str(), key_txn_id)
+        key::create(Bytes::from(key_bytes), key_txn_id)
     }
 
     //Expect n_entry_index to be an index to block::offsets aray
@@ -112,13 +109,13 @@ mod test {
     #[test]
     fn encode_and_decode() {
         let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
-        block_builder.add_entry(key::create("Jaime", 1), Bytes::from(vec![1]));
-        block_builder.add_entry(key::create("Javier", 1), Bytes::from(vec![2]));
-        block_builder.add_entry(key::create("Jose", 1), Bytes::from(vec![3]));
-        block_builder.add_entry(key::create("Juan", 1), Bytes::from(vec![4]));
-        block_builder.add_entry(key::create("Justo", 1), Bytes::from(vec![5]));
-        block_builder.add_entry(key::create("Justoo", 1), Bytes::from(vec![6]));
-        block_builder.add_entry(key::create("Kia", 1), Bytes::from(vec![7]));
+        block_builder.add_entry(key::create_from_str("Jaime", 1), Bytes::from(vec![1]));
+        block_builder.add_entry(key::create_from_str("Javier", 1), Bytes::from(vec![2]));
+        block_builder.add_entry(key::create_from_str("Jose", 1), Bytes::from(vec![3]));
+        block_builder.add_entry(key::create_from_str("Juan", 1), Bytes::from(vec![4]));
+        block_builder.add_entry(key::create_from_str("Justo", 1), Bytes::from(vec![5]));
+        block_builder.add_entry(key::create_from_str("Justoo", 1), Bytes::from(vec![6]));
+        block_builder.add_entry(key::create_from_str("Kia", 1), Bytes::from(vec![7]));
         let block = block_builder.build();
 
         let encoded = block.encode(&Arc::new(shared::SimpleDbOptions::default()));

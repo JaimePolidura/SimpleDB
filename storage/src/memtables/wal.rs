@@ -76,15 +76,7 @@ impl Wal {
             let key_bytes = &current_ptr[..key_len];
             current_ptr.advance(key_len);
             entry_bytes_size = entry_bytes_size + key_len;
-            let key_string = String::from_utf8(key_bytes.to_vec())
-                .map_err(|e| shared::SimpleDbError::CannotDecodeWal(self.keyspace_id, self.memtable_id, shared::DecodeError {
-                    path: self.file.path(),
-                    offset: current_offset,
-                    index: entries.len(),
-                    error_type: shared::DecodeErrorType::Utf8Decode(e)
-                }))?;
-
-            let key = key::create(key_string.as_str(), key_timestmap);
+            let key = key::create(Bytes::from(key_bytes.to_vec()), key_timestmap);
 
             let value_len = current_ptr.get_u32_le() as usize;
             entry_bytes_size = entry_bytes_size + 4;
@@ -106,8 +98,8 @@ impl Wal {
             }
 
             entries.push(WalEntry{
-                value: Bytes::copy_from_slice(value_bytes),
-                key,
+                value: Bytes::copy_from_slice(value_bytes.clone()),
+                key: key::create_from_str("ho", 1),
             });
 
             current_offset = current_offset + entry_bytes_size;

@@ -3,6 +3,8 @@ use crate::table::table::Table;
 use crossbeam_skiplist::SkipMap;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::{Arc, Mutex};
+use storage::transactions::transaction::Transaction;
+use crate::table::table_descriptor::ColumnType;
 
 pub struct Database {
     name: String,
@@ -14,17 +16,43 @@ pub struct Database {
 }
 
 impl Database {
-    pub fn create_table(&self, table_name: &str) -> Result<Arc<Table>, SimpleDbError> {
-        Table::create(
+    pub fn create_table(
+        &self,
+        table_name: &str,
+        columns: Vec<(String, ColumnType, bool)>
+    ) -> Result<Arc<Table>, SimpleDbError> {
+        let table = Table::create(
             table_name,
             &self.options,
             &self.storage,
-        )
+        )?;
+
+        for (column_name, column_type, is_primary) in columns {
+            table.add_column(
+                column_name.as_str(),
+                column_type,
+                is_primary
+            )?;
+        }
+
+        Ok(table)
     }
 
     pub fn get_table(&self, table_name: &str) -> Option<Arc<Table>> {
         self.tables.get(table_name)
             .map(|entry| entry.value().clone())
+    }
+
+    pub fn start_transaction(&self) -> Transaction {
+        self.storage.start_transaction()
+    }
+
+    pub fn rollback_transaction(&self, transaction: Transaction) {
+        self.storage.rollback_transaction(transaction)
+    }
+
+    pub fn commit_transaction(&self, transaction: Transaction) {
+        self.storage.commit_transaction(transaction)
     }
 
     pub fn name(&self) -> String {

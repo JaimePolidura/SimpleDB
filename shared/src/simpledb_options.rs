@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use bytes::Bytes;
 
 #[derive(Clone, Copy)]
 pub enum CompactionStrategy {
@@ -14,6 +15,7 @@ pub enum DurabilityLevel {
 
 #[derive(Clone)]
 pub struct SimpleDbOptions {
+    pub value_merger: Option<fn(&Bytes, &Bytes) -> Bytes>,
     pub simple_leveled_compaction_options: SimpleLeveledCompactionOptions,
     pub tiered_compaction_options: TieredCompactionOptions,
     pub compaction_strategy: CompactionStrategy,
@@ -49,14 +51,15 @@ impl Default for SimpleDbOptions {
             tiered_compaction_options: TieredCompactionOptions::default(),
             compaction_strategy: CompactionStrategy::SimpleLeveled,
             durability_level: DurabilityLevel::Strong,
+            base_path: String::from("ignored"),
             compaction_task_frequency_ms: 100, //100ms
             memtable_max_size_bytes: 1048576, //1Mb
-            bloom_filter_n_entries: 32768, //4kb of bloom filter so it fits in a page
-            block_size_bytes: 4096, //4kb
-            sst_size_bytes: 268435456, //256 MB ~ 64 blocks
             n_cached_blocks_per_sstable: 8, //Expect power of two
+            bloom_filter_n_entries: 32768, //4kb of bloom filter so it fits in a page
+            sst_size_bytes: 268435456, //256 MB ~ 64 blocks
+            block_size_bytes: 4096, //4kb
             max_memtables_inactive: 8,
-            base_path: String::from("ignored"),
+            value_merger: None,
         }
     }
 }
@@ -85,6 +88,11 @@ impl SimpleDbOptionsBuilder {
 
     pub fn tiered_compaction_options(&mut self, value: TieredCompactionOptions) -> &mut SimpleDbOptionsBuilder {
         self.options.tiered_compaction_options = value;
+        self
+    }
+
+    pub fn value_merger(&mut self, value_merger_fn: fn(&Bytes, &Bytes) -> Bytes) -> &mut SimpleDbOptionsBuilder {
+        self.options.value_merger = Some(value_merger_fn);
         self
     }
 

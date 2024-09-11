@@ -1,2 +1,3 @@
 pub mod table;
-mod table_descriptor;
+pub mod table_descriptor;
+mod tuple;

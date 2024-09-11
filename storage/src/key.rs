@@ -1,47 +1,67 @@
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::Formatter;
+use bytes::Bytes;
 use crate::key;
 
 #[derive(Debug)]
 pub struct Key {
-    string: String,
+    bytes: Bytes,
     txn_id: shared::TxnId,
 }
 
-pub fn create(string: &str, txn_id: shared::TxnId) -> Key {
+pub fn create_from_str(string: &str, txn_id: shared::TxnId) -> Key {
     Key {
-        string: string.to_string(),
+        bytes: Bytes::from(string.to_string()),
+        txn_id
+    }
+}
+
+pub fn create(bytes: Bytes, txn_id: shared::TxnId) -> Key {
+    Key {
+        bytes,
         txn_id
     }
 }
 
 impl Key {
     pub fn len(&self) -> usize {
-        self.string.len()
+        self.bytes.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.string.is_empty()
+        self.bytes.is_empty()
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        self.string.as_bytes()
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.string.as_str()
+        self.bytes.as_ref()
     }
 
     pub fn txn_id(&self) -> shared::TxnId {
         self.txn_id
     }
 
+    pub fn bytes_eq_bytes(&self, other: &Bytes) -> bool {
+        unimplemented!()
+    }
+
+    pub fn bytes_gt_bytes(&self, other: &Bytes) -> bool {
+        unimplemented!()
+    }
+
+    pub fn bytes_lt_bytes(&self, other: &Bytes) -> bool {
+        unimplemented!()
+    }
+
+    pub fn bytes_eq(&self, other: &Key) -> bool {
+        unimplemented!()
+    }
+
     //"Juan".prefix_difference("Justo") -> (2, 2)
     pub fn prefix_difference(&self, other: &Key) -> (usize, usize) {
         let mut same_chars_count = 0;
-        let mut current_char_self = self.string.chars();
-        let mut current_char_other = other.string.chars();
+        let mut current_char_self = self.bytes.iter();
+        let mut current_char_other = other.bytes.iter();
 
         while let (
             Some(char_self), Some(char_other)) =
@@ -59,32 +79,35 @@ impl Key {
 
     //"Juan".split(2) -> ("Ju", "an")
     pub fn split(&self, index: usize) -> (Key, Key) {
-        let (h1, h2) = self.string.split_at(index);
-        (key::create(h1, self.txn_id), key::create(h2, self.txn_id))
+        let (h1, h2) = self.bytes.split_at(index);
+        (key::create(Bytes::from(h1.to_vec()), self.txn_id), key::create(Bytes::from(h2.to_vec()), self.txn_id))
     }
 
     pub fn merge(a: &Key, b: &Key, txn_id: shared::TxnId) -> Key {
-        let mut result = String::from(&a.string);
-        result.extend(b.string.chars());
-        Key {string: result, txn_id }
+        let mut result = Vec::from(a.bytes.as_ref());
+        result.extend(b.bytes.as_ref());
+        Key { bytes: Bytes::from(result), txn_id }
     }
 }
 
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.string)
+        match String::from_utf8(self.bytes.as_ref().to_vec()) {
+            Ok(string) => write!(f, "{}", string),
+            Err(_) => write!(f, "Key cannot be converted to UTF-8 string")
+        }
     }
 }
 
 impl Default for Key {
     fn default() -> Self {
-        Key{ string: String::from(""), txn_id: 0 }
+        Key{ bytes: Bytes::from(vec![]), txn_id: 0 }
     }
 }
 
 impl PartialEq for Key {
     fn eq(&self, other: &Self) -> bool {
-        self.string.eq(&other.string) && self.txn_id == other.txn_id
+        self.bytes.eq(&other.bytes) && self.txn_id == other.txn_id
     }
 }
 
@@ -92,14 +115,14 @@ impl Eq for Key {}
 
 impl Clone for Key {
     fn clone(&self) -> Self {
-        let cloned = self.string.clone();
-        Key { string: cloned, txn_id: self.txn_id }
+        let cloned = self.bytes.clone();
+        Key { bytes: cloned, txn_id: self.txn_id }
     }
 }
 
 impl PartialOrd for Key {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.string.partial_cmp(&other.string) {
+        match self.bytes.partial_cmp(&other.bytes) {
             Some(Ordering::Equal) => self.txn_id.partial_cmp(&other.txn_id),
             other => other,
         }
@@ -108,7 +131,7 @@ impl PartialOrd for Key {
 
 impl Ord for Key {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.string.cmp(&other.string) {
+        match self.bytes.cmp(&other.bytes) {
             Ordering::Equal => self.txn_id.cmp(&other.txn_id),
             other => other,
         }

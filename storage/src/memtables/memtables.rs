@@ -1,6 +1,7 @@
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
+use bytes::Bytes;
 use crate::memtables::memtable::{MemTable, MemtableIterator};
 use crate::memtables::wal::Wal;
 use crate::transactions::transaction::{Transaction};
@@ -67,7 +68,7 @@ impl Memtables {
         }
     }
 
-    pub fn get(&self, key: &str, transaction: &Transaction) -> Option<bytes::Bytes> {
+    pub fn get(&self, key: &Bytes, transaction: &Transaction) -> Option<bytes::Bytes> {
         unsafe {
             let memtable_ref =  (*self.current_memtable.load(Acquire)).clone();
             let value = memtable_ref.get(key, transaction);
@@ -79,7 +80,7 @@ impl Memtables {
         }
     }
 
-    pub fn set(&self, key: &str, value: &[u8], transaction: &Transaction) -> Option<Arc<MemTable>> {
+    pub fn set(&self, key: Bytes, value: &[u8], transaction: &Transaction) -> Option<Arc<MemTable>> {
         unsafe {
             let memtable_ref = (*self.current_memtable.load(Acquire)).clone();
             let set_result = memtable_ref.set(transaction, key, value);
@@ -91,7 +92,7 @@ impl Memtables {
         }
     }
 
-    pub fn delete(&self, key: &str, transaction: &Transaction) -> Option<Arc<MemTable>> {
+    pub fn delete(&self, key: Bytes, transaction: &Transaction) -> Option<Arc<MemTable>> {
         unsafe {
             let memtable_ref = (*self.current_memtable.load(Acquire)).clone();
             let delete_result = memtable_ref.delete(transaction, key);
@@ -122,7 +123,7 @@ impl Memtables {
         }
     }
 
-    fn find_value_in_inactive_memtables(&self, key: &str, transaction: &Transaction) -> Option<bytes::Bytes> {
+    fn find_value_in_inactive_memtables(&self, key: &Bytes, transaction: &Transaction) -> Option<bytes::Bytes> {
         unsafe {
             let inactive_memtables_rw_lock = &*self.inactive_memtables.load(Acquire);
             let inactive_memtables = inactive_memtables_rw_lock.read()

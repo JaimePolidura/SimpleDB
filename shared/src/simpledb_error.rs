@@ -26,6 +26,9 @@ pub enum SSTableCorruptedPart {
 }
 
 pub enum SimpleDbError {
+    //General db layer errors
+    ColumnNotFound(types::KeyspaceId, String),
+
     //Databases
     DatabaseAlreadyExists(String),
 
@@ -196,6 +199,9 @@ impl Debug for SimpleDbError {
             }
             SimpleDbError::CannotWriteTableDescriptor(keyspace_id, io_error) => {
                 write!(f, "Cannot write table descriptor. IO Error: {}. Keyspace ID: {}", io_error, keyspace_id)
+            }
+            SimpleDbError::ColumnNotFound(keyspace_id, column_nmae) => {
+                write!(f, "Column {} not found. KeyspaceID: {}", column_nmae, keyspace_id)
             }
         }
     }

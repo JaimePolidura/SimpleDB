@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use rand::Rng;
 
 fn main() {
@@ -25,35 +26,35 @@ fn transactions(lsm: &mut storage::Storage) {
     let transaction1 = lsm.start_transaction();
     let transaction2 = lsm.start_transaction();
 
-    lsm.set_with_transaction(keyspace, &transaction1, "aaa", &vec![1]);
+    lsm.set_with_transaction(keyspace, &transaction1, string("aaa"), &vec![1]);
 
-    let value1 = lsm.get_with_transaction(keyspace, &transaction1, "aaa")
+    let value1 = lsm.get_with_transaction(keyspace, &transaction1, &string("aaa"))
         .unwrap();
     assert!(value1.is_some());
     assert_eq!(value1.unwrap(), vec![1]);
 
-    let value2 = lsm.get_with_transaction(keyspace, &transaction2, "aaa")
+    let value2 = lsm.get_with_transaction(keyspace, &transaction2, &string("aaa"))
         .unwrap();
     assert!(value2.is_none());
 
     lsm.commit_transaction(transaction1);
 
-    let value2 = lsm.get_with_transaction(keyspace, &transaction2, "aaa")
+    let value2 = lsm.get_with_transaction(keyspace, &transaction2, &string("aaa"))
         .unwrap();
     assert!(value2.is_none());
 
-    lsm.delete_with_transaction(keyspace, &transaction2, "aaa");
+    lsm.delete_with_transaction(keyspace, &transaction2, string("aaa"));
 
     lsm.rollback_transaction(transaction2);
 
-    let value1 = lsm.get(keyspace, "aaa")
+    let value1 = lsm.get(keyspace, &string("aaa"))
         .unwrap();
     assert!(value1.is_some());
     assert_eq!(value1.unwrap(), vec![1]);
 }
 
 fn read(lsm: &mut storage::Storage, keyspace_id: shared::KeyspaceId) {
-    let value = lsm.get(keyspace_id, "AAB").unwrap();
+    let value = lsm.get(keyspace_id, &string("AAB")).unwrap();
     if value.is_some() {
     }
 }
@@ -63,18 +64,22 @@ fn write(lsm: &mut storage::Storage, keyspace_id: shared::KeyspaceId)  {
         let value = next_value();
         let key = next_key();
 
-        lsm.set(keyspace_id, &key, &value)
+        lsm.set(keyspace_id, key, &value)
             .expect("Failed to write key in LSM");
 
         // std::thread::sleep(Duration::from_millis(1));
     }
 }
 
-fn next_key() -> String {
+fn string(str :&str) -> Bytes {
+    Bytes::from(str.to_string())
+}
+
+fn next_key() -> Bytes {
     let mut rng = rand::thread_rng();
-    (0..3)
+    Bytes::from((0..3)
         .map(|_| rng.gen_range(65..90) as u8 as char) // Generate a random ASCII character
-        .collect()
+        .collect::<String>())
 }
 
 fn next_value() -> Vec<u8> {

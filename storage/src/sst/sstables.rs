@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
+use bytes::Bytes;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
 use crate::transactions::transaction::Transaction;
@@ -116,7 +117,7 @@ impl SSTables {
         MergeIterator::create(iterators)
     }
 
-    pub fn get(&self, key: &str, transaction: &Transaction) -> Result<Option<bytes::Bytes>, shared::SimpleDbError> {
+    pub fn get(&self, key: &Bytes, transaction: &Transaction) -> Result<Option<bytes::Bytes>, shared::SimpleDbError> {
         for sstables_in_level_lock in self.sstables.iter() {
             let lock_result = sstables_in_level_lock.read();
             let sstable_in_level = lock_result.as_ref().unwrap();

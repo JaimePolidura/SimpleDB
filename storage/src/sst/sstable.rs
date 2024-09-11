@@ -5,7 +5,7 @@ use crate::sst::block_cache::BlockCache;
 use crate::sst::block_metadata::BlockMetadata;
 use crate::transactions::transaction::{Transaction};
 use crate::utils::bloom_filter::BloomFilter;
-use bytes::{Buf, BufMut};
+use bytes::{Buf, BufMut, Bytes};
 use crossbeam_skiplist::SkipSet;
 use std::path::Path;
 use std::sync::atomic::AtomicU8;
@@ -206,11 +206,11 @@ impl SSTable {
         Ok(block)
     }
     
-    pub fn get(&self, key: &str, transaction: &Transaction) -> Result<Option<bytes::Bytes>, shared::SimpleDbError> {
-        if self.first_key.as_str().gt(key) || self.last_key.as_str().lt(key) {
+    pub fn get(&self, key: &Bytes, transaction: &Transaction) -> Result<Option<bytes::Bytes>, shared::SimpleDbError> {
+        if self.first_key.bytes_gt_bytes(key) || self.last_key.bytes_lt_bytes(key) {
             return Ok(None);
         }
-        if !self.bloom_filter.may_contain(shared::hash(key.as_bytes())) {
+        if !self.bloom_filter.may_contain(shared::hash(key.as_ref())) {
             return Ok(None);
         }
 
@@ -223,8 +223,8 @@ impl SSTable {
         }
     }
 
-    fn get_blocks_metadata(&self, key: &str, transaction: &Transaction) -> Option<usize> {
-        let lookup_key = key::create(key, transaction.txn_id);
+    fn get_blocks_metadata(&self, key: &Bytes, transaction: &Transaction) -> Option<usize> {
+        let lookup_key = key::create(key.clone(), transaction.txn_id);
         let mut right = self.block_metadata.len() - 1;
         let mut left = 0;
 

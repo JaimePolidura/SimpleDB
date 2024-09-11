@@ -1,16 +1,16 @@
-use std::fs;
 use crate::compaction::compaction::{Compaction, CompactionTask};
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::memtables::memtable::MemTable;
 use crate::memtables::memtables::Memtables;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
-use crate::transactions::transaction::{Transaction};
+use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
 use crate::utils::two_merge_iterators::TwoMergeIterator;
-use std::sync::Arc;
 use crate::SimpleDbStorageIterator;
-use crate::utils::storage_iterator::StorageIterator;
+use bytes::Bytes;
+use std::fs;
+use std::sync::Arc;
 
 pub struct Keyspace {
     keyspace_id: shared::KeyspaceId,
@@ -69,8 +69,8 @@ impl Keyspace {
     pub fn get_with_transaction(
         &self,
         transaction: &Transaction,
-        key: &str,
-    ) -> Result<Option<bytes::Bytes>, shared::SimpleDbError> {
+        key: &Bytes,
+    ) -> Result<Option<Bytes>, shared::SimpleDbError> {
         match self.memtables.get(&key, transaction) {
             Some(value_from_memtable) => Ok(Some(value_from_memtable)),
             None => self.sstables.get(&key, &transaction),
@@ -80,11 +80,11 @@ impl Keyspace {
     pub fn set_with_transaction(
         &self,
         transaction: &Transaction,
-        key: &str,
+        key: Bytes,
         value: &[u8],
     ) -> Result<(), shared::SimpleDbError> {
         transaction.increase_nwrites();
-        match self.memtables.set(&key, value, transaction) {
+        match self.memtables.set(key, value, transaction) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(())
         }
@@ -92,7 +92,7 @@ impl Keyspace {
 
     pub fn delete(
         &self,
-        key: &str
+        key: Bytes
     ) -> Result<(), shared::SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::ReadUncommited);
         self.delete_with_transaction(&transaction, key)
@@ -101,10 +101,10 @@ impl Keyspace {
     pub fn delete_with_transaction(
         &self,
         transaction: &Transaction,
-        key: &str,
+        key: Bytes,
     ) -> Result<(), shared::SimpleDbError> {
         transaction.increase_nwrites();
-        match self.memtables.delete(&key, transaction) {
+        match self.memtables.delete(key, transaction) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(()),
         }

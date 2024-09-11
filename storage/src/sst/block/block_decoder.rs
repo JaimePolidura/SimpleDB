@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use bytes::BufMut;
+use bytes::{BufMut, Bytes};
 use block::{NOT_COMPRESSED, PREFIX_COMPRESSED};
 use crate::sst::block::block;
 use crate::sst::block::block::Block;
@@ -62,10 +62,10 @@ fn decode_entries_prefix_compressed(
         let current_key = match prev_key.as_ref() {
             Some(prev_key) => {
                 let (overlaps, _) = prev_key.split(key_overlap_size as usize);
-                let rest_key = key::create(String::from_utf8(rest_key_u8_vec).unwrap().as_str(), key_txn_id);
+                let rest_key = key::create(Bytes::from(rest_key_u8_vec), key_txn_id);
                 Key::merge(&overlaps, &rest_key, key_txn_id)
             },
-            None => key::create(String::from_utf8(rest_key_u8_vec).unwrap().as_str(), key_txn_id)
+            None => key::create(Bytes::from(rest_key_u8_vec), key_txn_id)
         };
         current_index = current_index + rest_key_size as usize;
         entries_decoded.put_u16_le(current_key.len() as u16);

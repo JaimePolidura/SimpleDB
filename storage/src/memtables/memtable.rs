@@ -128,12 +128,12 @@ impl MemTable {
         self.memtable_id
     }
 
-    pub fn get(&self, key_lookup: &str, transaction: &Transaction) -> Option<Bytes> {
-        let mut current_key = key::create(key_lookup, transaction.txn_id + 1);
+    pub fn get(&self, key_lookup: &Bytes, transaction: &Transaction) -> Option<Bytes> {
+        let mut current_key = key::create(key_lookup.clone(), transaction.txn_id + 1);
 
         loop {
             if let Some(entry) = self.data.upper_bound(Excluded(&current_key)) {
-                if !entry.key().as_str().eq(key_lookup) {
+                if !entry.key().bytes_eq_bytes(&key_lookup) {
                     return None;
                 }
                 if transaction.can_read(entry.key()) {
@@ -147,7 +147,7 @@ impl MemTable {
         }
     }
 
-    pub fn set(&self, transaction: &Transaction, key: &str, value: &[u8]) -> Result<(), shared::SimpleDbError> {
+    pub fn set(&self, transaction: &Transaction, key: Bytes, value: &[u8]) -> Result<(), shared::SimpleDbError> {
         self.write_into_skip_list(
             &key::create(key, transaction.txn_id),
             Bytes::copy_from_slice(value),
@@ -155,7 +155,7 @@ impl MemTable {
         )
     }
 
-    pub fn delete(&self, transaction: &Transaction, key: &str) -> Result<(), shared::SimpleDbError> {
+    pub fn delete(&self, transaction: &Transaction, key: Bytes) -> Result<(), shared::SimpleDbError> {
         self.write_into_skip_list(
             &key::create(key, transaction.txn_id),
             TOMBSTONE,
@@ -177,9 +177,17 @@ impl MemTable {
 
         self.current_size_bytes.fetch_add(key.len() + value.len(), Relaxed);
 
-        self.data.insert(
-            key.clone(), value
-        );
+        if self.options.value_merger.is_none() {
+            self.data.insert(key.clone(), value);
+        } else {
+            if let Some(already_existing_value) = self.data.get(key) {
+                let value_merger_fn = self.options.value_merger.as_ref().unwrap();
+                let merged_value = value_merger_fn(already_existing_value.value(), &value);
+                self.data.insert(key.clone(), merged_value);
+            } else {
+                self.data.insert(key.clone(), value);
+            }
+        }
 
         Ok(())
     }
@@ -303,7 +311,7 @@ impl MemtableIterator {
                 while let Some(next_entry) = self.memtable.data.lower_bound(Excluded(&last_key)) {
                     let next_key = next_entry.key().clone();
 
-                    if !next_key.as_str().eq(last_key.as_str()) {
+                    if !next_key.bytes_eq(&last_key) {
                         return Some((next_key, next_entry.value().clone()));
                     } else {
                         last_key = next_key;
@@ -325,10 +333,9 @@ impl MemtableIterator {
         let mut selected_value: Option<Bytes> = None;
         let mut selected_key: Option<Key> = None;
 
-
         while let Some(next_entry) = self.memtable.data.lower_bound(Excluded(&current_key)) {
             let next_key = next_entry.key();
-            if !current_key.as_str().eq(next_key.as_str()) {
+            if !current_key.bytes_eq(next_key) {
                 break;
             }
 
@@ -407,6 +414,7 @@ mod test {
     use crate::transactions::transaction_manager::IsolationLevel;
     use crate::utils::storage_iterator::StorageIterator;
     use std::sync::Arc;
+    use bytes::Bytes;
 
     #[test]
     fn get_set_delete_no_transactions() {
@@ -414,41 +422,41 @@ mod test {
             .unwrap();
         let value: Vec<u8> = vec![10, 12];
 
-        assert!(memtable.get("nombre", &Transaction::none()).is_none());
+        assert!(memtable.get(&Bytes::from("nombre"), &Transaction::none()).is_none());
 
-        memtable.set(&Transaction::none(), "nombre", &value);
-        memtable.set(&Transaction::none(), "edad", &value);
+        memtable.set(&Transaction::none(), Bytes::from("nombre"), &value);
+        memtable.set(&Transaction::none(), Bytes::from("edad"), &value);
 
-        assert!(memtable.get("nombre", &Transaction::none()).is_some());
-        assert!(memtable.get("edad", &Transaction::none()).is_some());
+        assert!(memtable.get(&Bytes::from("nombre"), &Transaction::none()).is_some());
+        assert!(memtable.get(&Bytes::from("edad"), &Transaction::none()).is_some());
 
-        memtable.delete(&Transaction::none(), "nombre");
+        memtable.delete(&Transaction::none(), &Bytes::from("nombre"));
 
-        assert!(memtable.get("nombre", &Transaction::none()).is_some());
+        assert!(memtable.get(&Bytes::from("nombre"), &Transaction::none()).is_some());
     }
 
     #[test]
     fn get_set_delete_transactions() {
         let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
         memtable.set_active();
-        memtable.set(&transaction(10), "aa", &vec![1]); //Cannot be read by the transaction, should be ignored
-        memtable.set(&transaction(1), "alberto", &vec![2]);
-        memtable.set(&transaction(2), "alberto", &vec![3]);
-        memtable.set(&transaction(3), "alberto", &vec![4]);
-        memtable.set(&transaction(1), "gonchi", &vec![5]);
-        memtable.set(&transaction(5), "javier", &vec![6]); //Cannot be read by the transaction, should be ignored
-        memtable.set(&transaction(1), "jaime", &vec![7]);
-        memtable.set(&transaction(5), "jaime", &vec![8]);
-        memtable.set(&transaction(0), "wili", &vec![9]);
+        memtable.set(&transaction(10), Bytes::from("aa"), &vec![1]); //Cannot be read by the transaction, should be ignored
+        memtable.set(&transaction(1), Bytes::from("alberto"), &vec![2]);
+        memtable.set(&transaction(2), Bytes::from("alberto"), &vec![3]);
+        memtable.set(&transaction(3), Bytes::from("alberto"), &vec![4]);
+        memtable.set(&transaction(1), Bytes::from("gonchi"), &vec![5]);
+        memtable.set(&transaction(5), Bytes::from("javier"), &vec![6]); //Cannot be read by the transaction, should be ignored
+        memtable.set(&transaction(1), Bytes::from("jaime"), &vec![7]);
+        memtable.set(&transaction(5), Bytes::from("jaime"), &vec![8]);
+        memtable.set(&transaction(0), Bytes::from("wili"), &vec![9]);
 
-        let to_test = memtable.get("alberto", &transaction(2));
+        let to_test = memtable.get(&Bytes::from("alberto"), &transaction(2));
         assert!(to_test.is_some());
         assert!(to_test.unwrap().eq(&vec![3]));
 
-        let to_test = memtable.get("aa", &transaction(9));
+        let to_test = memtable.get(&Bytes::from("aa"), &transaction(9));
         assert!(to_test.is_none());
 
-        let to_test = memtable.get("jaime", &transaction(6));
+        let to_test = memtable.get(&Bytes::from("jaime"), &transaction(6));
         assert!(to_test.is_some());
         assert!(to_test.unwrap().eq(&vec![8]));
     }
@@ -458,32 +466,32 @@ mod test {
         let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
         memtable.set_active();
         let value: Vec<u8> = vec![10, 12];
-        memtable.set(&transaction(1), "alberto", &value);
-        memtable.set(&transaction(2), "alberto", &value);
-        memtable.set(&transaction(3), "alberto", &value);
-        memtable.set(&transaction(1), "jaime", &value);
-        memtable.set(&transaction(5), "jaime", &value);
-        memtable.set(&transaction(1), "gonchi", &value);
-        memtable.set(&transaction(0), "wili", &value);
+        memtable.set(&transaction(1), Bytes::from("alberto"), &value);
+        memtable.set(&transaction(2), Bytes::from("alberto"), &value);
+        memtable.set(&transaction(3), Bytes::from("alberto"), &value);
+        memtable.set(&transaction(1), Bytes::from("jaime"), &value);
+        memtable.set(&transaction(5), Bytes::from("jaime"), &value);
+        memtable.set(&transaction(1), Bytes::from("gonchi"), &value);
+        memtable.set(&transaction(0), Bytes::from("wili"), &value);
 
         let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
 
         assert!(iterator.has_next());
         iterator.next();
 
-        assert!(iterator.key().eq(&key::create("alberto", 3)));
+        assert!(iterator.key().eq(&key::create_from_str("alberto", 3)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create("gonchi", 1)));
+        assert!(iterator.key().eq(&key::create_from_str("gonchi", 1)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create("jaime", 5)));
+        assert!(iterator.key().eq(&key::create_from_str("jaime", 5)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create("wili", 0)));
+        assert!(iterator.key().eq(&key::create_from_str("wili", 0)));
 
         assert!(!iterator.has_next());
     }
@@ -493,34 +501,34 @@ mod test {
         let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
         memtable.set_active();
         let value: Vec<u8> = vec![10, 12];
-        memtable.set(&transaction(10), "aa", &value); //Cannot be read by the transaction, should be ignored
-        memtable.set(&transaction(1), "alberto", &value);
-        memtable.set(&transaction(2), "alberto", &value);
-        memtable.set(&transaction(3), "alberto", &value);
-        memtable.set(&transaction(1), "gonchi", &value);
-        memtable.set(&transaction(5), "javier", &value); //Cannot be read by the transaction, should be ignored
-        memtable.set(&transaction(1), "jaime", &value);
-        memtable.set(&transaction(5), "jaime", &value);
-        memtable.set(&transaction(0), "wili", &value);
+        memtable.set(&transaction(10), Bytes::from("aa"), &value); //Cannot be read by the transaction, should be ignored
+        memtable.set(&transaction(1), Bytes::from("alberto"), &value);
+        memtable.set(&transaction(2), Bytes::from("alberto"), &value);
+        memtable.set(&transaction(3), Bytes::from("alberto"), &value);
+        memtable.set(&transaction(1), Bytes::from("gonchi"), &value);
+        memtable.set(&transaction(5), Bytes::from("javier"), &value); //Cannot be read by the transaction, should be ignored
+        memtable.set(&transaction(1), Bytes::from("jaime"), &value);
+        memtable.set(&transaction(5), Bytes::from("jaime"), &value);
+        memtable.set(&transaction(0), Bytes::from("wili"), &value);
 
         let mut iterator = MemtableIterator::create(&memtable, &transaction_with_iso(3, IsolationLevel::SnapshotIsolation));
 
         assert!(iterator.has_next());
         iterator.next();
 
-        assert!(iterator.key().eq(&key::create("alberto", 3)));
+        assert!(iterator.key().eq(&key::create_from_str("alberto", 3)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create("gonchi", 1)));
+        assert!(iterator.key().eq(&key::create_from_str("gonchi", 1)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create("jaime", 1)));
+        assert!(iterator.key().eq(&key::create_from_str("jaime", 1)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create("wili", 0)));
+        assert!(iterator.key().eq(&key::create_from_str("wili", 0)));
     }
 
     fn transaction(txn_id: shared::TxnId) -> Transaction {

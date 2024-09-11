@@ -8,3 +8,4 @@ storage = {path = "../storage" }
 shared = {path = "../shared" }
 rand = "0.9.0-alpha.2"
 db = {path = "../db" }
+bytes = "1.6.1"
