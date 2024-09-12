@@ -13,9 +13,11 @@ pub enum DurabilityLevel {
     Weak, //Writes to memtable without waiting for WAL write to complete
 }
 
+pub type StorageValueMergerFn = fn(&Bytes, &Bytes) -> StorageValueMergeResult;
+
 #[derive(Clone)]
 pub struct SimpleDbOptions {
-    pub value_merger: Option<fn(&Bytes, &Bytes) -> Bytes>,
+    pub storage_value_merger: Option<StorageValueMergerFn>,
     pub simple_leveled_compaction_options: SimpleLeveledCompactionOptions,
     pub tiered_compaction_options: TieredCompactionOptions,
     pub compaction_strategy: CompactionStrategy,
@@ -44,6 +46,11 @@ pub struct SimpleLeveledCompactionOptions {
     pub max_levels: usize,
 }
 
+pub enum StorageValueMergeResult {
+    Ok(Bytes),
+    DiscardPrevious
+}
+
 impl Default for SimpleDbOptions {
     fn default() -> Self {
         SimpleDbOptions {
@@ -59,7 +66,7 @@ impl Default for SimpleDbOptions {
             sst_size_bytes: 268435456, //256 MB ~ 64 blocks
             block_size_bytes: 4096, //4kb
             max_memtables_inactive: 8,
-            value_merger: None,
+            storage_value_merger: None,
         }
     }
 }
@@ -91,8 +98,8 @@ impl SimpleDbOptionsBuilder {
         self
     }
 
-    pub fn value_merger(&mut self, value_merger_fn: fn(&Bytes, &Bytes) -> Bytes) -> &mut SimpleDbOptionsBuilder {
-        self.options.value_merger = Some(value_merger_fn);
+    pub fn storage_value_merger(&mut self, storage_value_merger_fn: StorageValueMergerFn) -> &mut SimpleDbOptionsBuilder {
+        self.options.storage_value_merger = Some(storage_value_merger_fn);
         self
     }
 

@@ -16,7 +16,7 @@ impl SimpleDb {
         options: SimpleDbOptions,
     ) -> Result<SimpleDb, SimpleDbError> {
         let options = shared::start_simpledb_options_builder_from(&Arc::new(options))
-            .value_merger(|prev, new| Self::merge(prev, new))
+            .storage_value_merger(|prev, new| Self::merge(prev, new))
             .build();
 
         let mut databases = Self::load_databases(&options)?;
