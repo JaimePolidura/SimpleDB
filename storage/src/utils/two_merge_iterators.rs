@@ -85,6 +85,7 @@ impl<A: StorageIterator, B: StorageIterator> StorageIterator for TwoMergeIterato
 #[cfg(test)]
 mod test {
     use std::sync::Arc;
+    use bytes::Bytes;
     use crate::key;
     use crate::memtables::memtable::{MemTable, MemtableIterator};
     use crate::transactions::transaction::Transaction;
@@ -95,16 +96,16 @@ mod test {
     fn two_merge_iterator() {
         let memtable1 = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
         memtable1.set_active();
-        memtable1.set(&Transaction::none(), "a", &vec![1]);
-        memtable1.set(&Transaction::none(), "b", &vec![2]);
-        memtable1.set(&Transaction::none(), "d", &vec![4]);
+        memtable1.set(&Transaction::none(), Bytes::from("a"), &vec![1]);
+        memtable1.set(&Transaction::none(), Bytes::from("b"), &vec![2]);
+        memtable1.set(&Transaction::none(), Bytes::from("d"), &vec![4]);
 
         let memtable2 = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
         memtable2.set_active();
-        memtable1.set(&Transaction::none(), "a", &vec![1]);
-        memtable1.set(&Transaction::none(), "c", &vec![3]);
-        memtable1.set(&Transaction::none(), "d", &vec![4]);
-        memtable1.set(&Transaction::none(), "f", &vec![5]);
+        memtable1.set(&Transaction::none(), Bytes::from("a"), &vec![1]);
+        memtable1.set(&Transaction::none(), Bytes::from("c"), &vec![3]);
+        memtable1.set(&Transaction::none(), Bytes::from("d"), &vec![4]);
+        memtable1.set(&Transaction::none(), Bytes::from("f"), &vec![5]);
 
         let mut two_merge_iterators = TwoMergeIterator::create(
             MemtableIterator::create(&memtable1, &Transaction::none()),
@@ -113,27 +114,27 @@ mod test {
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&key::create("a", 0)));
+        assert!(two_merge_iterators.key().eq(&key::create_from_str("a", 0)));
         assert!(two_merge_iterators.value().eq(&vec![1]));
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&key::create("b", 0)));
+        assert!(two_merge_iterators.key().eq(&key::create_from_str("b", 0)));
         assert!(two_merge_iterators.value().eq(&vec![2]));
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&key::create("c", 0)));
+        assert!(two_merge_iterators.key().eq(&key::create_from_str("c", 0)));
         assert!(two_merge_iterators.value().eq(&vec![3]));
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&key::create("d", 0)));
+        assert!(two_merge_iterators.key().eq(&key::create_from_str("d", 0)));
         assert!(two_merge_iterators.value().eq(&vec![4]));
 
         assert!(two_merge_iterators.has_next());
         two_merge_iterators.next();
-        assert!(two_merge_iterators.key().eq(&key::create("f", 0)));
+        assert!(two_merge_iterators.key().eq(&key::create_from_str("f", 0)));
         assert!(two_merge_iterators.value().eq(&vec![5]));
 
         assert!(!two_merge_iterators.has_next());

@@ -42,19 +42,19 @@ impl Key {
     }
 
     pub fn bytes_eq_bytes(&self, other: &Bytes) -> bool {
-        unimplemented!()
+        self.bytes.eq(other)
     }
 
     pub fn bytes_gt_bytes(&self, other: &Bytes) -> bool {
-        unimplemented!()
+        self.bytes.gt(other)
     }
 
     pub fn bytes_lt_bytes(&self, other: &Bytes) -> bool {
-        unimplemented!()
+        self.bytes.lt(other)
     }
 
     pub fn bytes_eq(&self, other: &Key) -> bool {
-        unimplemented!()
+        self.bytes == other.bytes
     }
 
     //"Juan".prefix_difference("Justo") -> (2, 2)

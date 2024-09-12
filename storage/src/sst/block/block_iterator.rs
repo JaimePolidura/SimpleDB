@@ -63,15 +63,13 @@ mod test {
     use crate::sst::block::block_builder::BlockBuilder;
     use crate::sst::block::block_iterator::BlockIterator;
     use crate::key;
-    use crate::key::Key;
-    use crate::simpledb_options::LsmOptions;
     use crate::utils::storage_iterator::StorageIterator;
 
     #[test]
     fn iterator() {
-        let mut block_builder = BlockBuilder::create(Arc::new(LsmOptions::default()));
-        block_builder.add_entry(key::create("Jaime", 1), Bytes::from(vec![1, 2, 3]));
-        block_builder.add_entry(key::create("Pedro", 1), Bytes::from(vec![4, 5, 6]));
+        let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
+        block_builder.add_entry(key::create_from_str("Jaime", 1), Bytes::from(vec![1, 2, 3]));
+        block_builder.add_entry(key::create_from_str("Pedro", 1), Bytes::from(vec![4, 5, 6]));
         let block = Arc::new(block_builder.build());
 
         let mut block_iterator = BlockIterator::create(block);
@@ -79,13 +77,13 @@ mod test {
         assert!(block_iterator.has_next());
         block_iterator.next();
 
-        assert!(block_iterator.key().eq(&key::create("Jaime", 1)));
+        assert!(block_iterator.key().eq(&key::create_from_str("Jaime", 1)));
         assert!(block_iterator.value().eq(&vec![1, 2, 3]));
 
         assert!(block_iterator.has_next());
         block_iterator.next();
 
-        assert!(block_iterator.key().eq(&key::create("Pedro", 1)));
+        assert!(block_iterator.key().eq(&key::create_from_str("Pedro", 1)));
         assert!(block_iterator.value().eq(&vec![4, 5, 6]));
 
         assert!(!block_iterator.has_next());

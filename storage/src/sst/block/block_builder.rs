@@ -79,8 +79,8 @@ mod test {
     #[test]
     fn build() {
         let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
-        block_builder.add_entry(key::create("Jaime", 1), Bytes::from(vec![1, 2, 3]));
-        block_builder.add_entry(key::create("Pedro", 1), Bytes::from(vec![4, 5, 6]));
+        block_builder.add_entry(key::create_from_str("Jaime", 1), Bytes::from(vec![1, 2, 3]));
+        block_builder.add_entry(key::create_from_str("Pedro", 1), Bytes::from(vec![4, 5, 6]));
         let block = block_builder.build();
 
         assert_eq!(block.get_value_by_index(0), vec![1, 2, 3]);
