@@ -17,6 +17,12 @@ pub struct SSTableIterator {
     current_block_id: i32 //Index to SSTable block_metadata
 }
 
+//This iterators fulfills:
+// - The returned keys are readble/visible by the current transaction.
+// - The returned key's bytes might be returned multiple times.
+//
+//   For example (byess, txn_id): (A, 1), (A, 2), (A, 3) with iterator txn_id = 2,
+//   the iterator will return: (A, 1) and (A, 2)
 impl SSTableIterator {
     pub fn create(sstable: Arc<SSTable>, transaction: &Transaction) -> SSTableIterator {
         SSTableIterator {

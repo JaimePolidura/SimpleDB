@@ -47,6 +47,15 @@ impl Table {
         Ok(())
     }
 
+    pub fn insert(
+        &self,
+        transaction: &Transaction,
+        id: Bytes,
+        to_insert_data: &Vec<(String, Bytes)>
+    ) -> Result<(), SimpleDbError> {
+        self.update(transaction, id, to_insert_data)
+    }
+
     pub fn update(
         &self,
         transaction: &Transaction,

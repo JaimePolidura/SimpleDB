@@ -177,17 +177,7 @@ impl MemTable {
 
         self.current_size_bytes.fetch_add(key.len() + value.len(), Relaxed);
 
-        if self.options.value_merger.is_none() {
-            self.data.insert(key.clone(), value);
-        } else {
-            if let Some(already_existing_value) = self.data.get(key) {
-                let value_merger_fn = self.options.value_merger.as_ref().unwrap();
-                let merged_value = value_merger_fn(already_existing_value.value(), &value);
-                self.data.insert(key.clone(), merged_value);
-            } else {
-                self.data.insert(key.clone(), value);
-            }
-        }
+        self.data.insert(key.clone(), value);
 
         Ok(())
     }
