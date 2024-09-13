@@ -99,7 +99,7 @@ impl Wal {
 
             entries.push(WalEntry{
                 value: Bytes::copy_from_slice(value_bytes.clone()),
-                key: key::create_from_str("ho", 1),
+                key
             });
 
             current_offset = current_offset + entry_bytes_size;

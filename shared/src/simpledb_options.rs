@@ -13,7 +13,8 @@ pub enum DurabilityLevel {
     Weak, //Writes to memtable without waiting for WAL write to complete
 }
 
-pub type StorageValueMergerFn = fn(&Bytes, &Bytes) -> StorageValueMergeResult;
+//a is before b, b has greater timestamp (txn_id)
+pub type StorageValueMergerFn = fn(a: &Bytes, b: &Bytes) -> StorageValueMergeResult;
 
 #[derive(Clone)]
 pub struct SimpleDbOptions {

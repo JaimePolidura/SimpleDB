@@ -14,19 +14,20 @@ use std::ops::Shl;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
+use crate::memtables::memtable_iterator::MemtableIterator;
 
 const TOMBSTONE: Bytes = Bytes::new();
 
 pub struct MemTable {
-    data: Arc<SkipMap<Key, Bytes>>,
-    current_size_bytes: AtomicUsize,
-    max_size_bytes: usize,
-    memtable_id: shared::MemtableId,
-    state: UnsafeCell<MemtableState>,
-    wal: UnsafeCell<Wal>,
-    options: Arc<shared::SimpleDbOptions>,
-    txn_ids_written: SkipSet<shared::TxnId>,
-    keyspace_id: shared::KeyspaceId,
+    pub(crate) data: Arc<SkipMap<Key, Bytes>>,
+    pub(crate) current_size_bytes: AtomicUsize,
+    pub(crate) max_size_bytes: usize,
+    pub(crate) memtable_id: shared::MemtableId,
+    pub(crate) state: UnsafeCell<MemtableState>,
+    pub(crate) wal: UnsafeCell<Wal>,
+    pub(crate) options: Arc<shared::SimpleDbOptions>,
+    pub(crate) txn_ids_written: SkipSet<shared::TxnId>,
+    pub(crate) keyspace_id: shared::KeyspaceId,
 }
 
 enum MemtableState {
@@ -248,103 +249,6 @@ impl MemTable {
     }
 }
 
-//This iterators fulfills:
-// - The returned keys are readble/visible by the current transaction.
-// - The returned key's bytes might be returned multiple times.
-//
-//   For example (byess, txn_id): (A, 1), (A, 2), (A, 3) with iterator txn_id = 2,
-//   the iterator will return: (A, 1) and (A, 2)
-pub struct MemtableIterator {
-    memtable: Arc<MemTable>,
-
-    current_value: Option<Bytes>,
-    current_key: Option<Key>,
-
-    transaction: Transaction,
-}
-
-impl MemtableIterator {
-    pub fn create(memtable: &Arc<MemTable>, transaction: &Transaction) -> MemtableIterator {
-        MemtableIterator {
-            transaction: transaction.clone(),
-            memtable: memtable.clone(),
-            current_value: None,
-            current_key: None,
-        }
-    }
-
-    fn get_next_readable_key(&self) -> Option<(Key, Bytes)> {
-        let mut current_key = self.current_key.clone();
-
-        loop {
-            match self.get_next_key(&current_key) {
-                Some((key, value)) => {
-                    if self.transaction.can_read(&key) {
-                        return Some((key, value));
-                    } else {
-                        current_key = Some(key);
-                    }
-                },
-                None => {
-                    return None
-                }
-            }
-        }
-    }
-
-    fn get_next_key(&self, prev_key: &Option<Key>) -> Option<(Key, Bytes)> {
-        if self.memtable.data.is_empty() {
-            return None;
-        }
-
-        match prev_key {
-            Some(current_key) => {
-                if let Some(entry) = self.memtable.data.lower_bound(Excluded(&current_key)) {
-                    Some((entry.key().clone(), entry.value().clone()))
-                } else {
-                    None
-                }
-            },
-            None => {
-                let entry = self.memtable.data.iter().next()
-                    .unwrap();
-                Some((entry.key().clone(), entry.value().clone()))
-            },
-        }
-    }
-}
-
-impl<'a> StorageIterator for MemtableIterator {
-    fn next(&mut self) -> bool {
-        match self.get_next_readable_key() {
-            Some((next_key, next_value)) => {
-                self.current_key = Some(next_key);
-                self.current_value = Some(next_value);
-                return true;
-            },
-            None => {
-                return false;
-            }
-        }
-    }
-
-    fn has_next(&self) -> bool {
-        self.get_next_readable_key().is_some()
-    }
-
-    fn key(&self) -> &Key {
-        self.current_key
-            .as_ref()
-            .expect("Illegal iterator state")
-    }
-
-    fn value(&self) -> &[u8] {
-        self.current_value
-            .as_ref()
-            .expect("Illegal iterator state")
-    }
-}
-
 #[cfg(test)]
 mod test {
     use crate::key;
@@ -398,90 +302,6 @@ mod test {
         let to_test = memtable.get(&Bytes::from("jaime"), &transaction(6));
         assert!(to_test.is_some());
         assert!(to_test.unwrap().eq(&vec![8]));
-    }
-
-    #[test]
-    fn iterators_readuncommited() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
-        memtable.set_active();
-        let value: Vec<u8> = vec![10, 12];
-        memtable.set(&transaction(1), Bytes::from("alberto"), &value);
-        memtable.set(&transaction(2), Bytes::from("alberto"), &value);
-        memtable.set(&transaction(3), Bytes::from("alberto"), &value);
-        memtable.set(&transaction(1), Bytes::from("jaime"), &value);
-        memtable.set(&transaction(5), Bytes::from("jaime"), &value);
-        memtable.set(&transaction(1), Bytes::from("gonchi"), &value);
-        memtable.set(&transaction(0), Bytes::from("wili"), &value);
-
-        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("alberto", 1)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("alberto", 2)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("alberto", 3)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("gonchi", 1)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("jaime", 1)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("jaime", 5)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("wili", 0)));
-
-        assert!(!iterator.has_next());
-    }
-
-    #[test]
-    fn iterators_snapshotisolation() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
-        memtable.set_active();
-        let value: Vec<u8> = vec![10, 12];
-        memtable.set(&transaction(10), Bytes::from("aa"), &value); //Cannot be read by the transaction, should be ignored
-        memtable.set(&transaction(1), Bytes::from("alberto"), &value);
-        memtable.set(&transaction(2), Bytes::from("alberto"), &value);
-        memtable.set(&transaction(4), Bytes::from("alberto"), &value); //Cannot be read by the transaction, should be ignored
-        memtable.set(&transaction(1), Bytes::from("gonchi"), &value);
-        memtable.set(&transaction(5), Bytes::from("javier"), &value); //Cannot be read by the transaction, should be ignored
-        memtable.set(&transaction(1), Bytes::from("jaime"), &value);
-        memtable.set(&transaction(5), Bytes::from("jaime"), &value); //Cannot be read by the transaction, should be ignored
-        memtable.set(&transaction(0), Bytes::from("wili"), &value);
-
-        let mut iterator = MemtableIterator::create(&memtable, &transaction_with_iso(3, IsolationLevel::SnapshotIsolation));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("alberto", 1)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("alberto", 2)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("gonchi", 1)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("jaime", 1)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("wili", 0)));
     }
 
     fn transaction(txn_id: shared::TxnId) -> Transaction {

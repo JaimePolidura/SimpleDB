@@ -121,7 +121,8 @@ mod test {
     use bytes::Bytes;
     use shared::StorageValueMergeResult;
     use crate::key;
-    use crate::memtables::memtable::{MemTable, MemtableIterator};
+    use crate::memtables::memtable::{MemTable};
+    use crate::memtables::memtable_iterator::MemtableIterator;
     use crate::transactions::transaction::Transaction;
     use crate::utils::merge_values_iterator::MergeValuesIterator;
     use crate::utils::storage_iterator::StorageIterator;

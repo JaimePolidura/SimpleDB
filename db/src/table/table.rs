@@ -47,6 +47,18 @@ impl Table {
         Ok(())
     }
 
+    pub fn scan_at(
+        &self,
+        key: &Bytes,
+        transaction: &Transaction,
+    ) -> Result<SimpleDbStorageIterator, SimpleDbError> {
+        unimplemented!()
+    }
+
+    pub fn scan_all(&self, transaction: &Transaction) -> Result<SimpleDbStorageIterator, SimpleDbError> {
+        self.storage.scan_all_with_transaction(self.storage_keyspace_id, transaction)
+    }
+
     pub fn insert(
         &self,
         transaction: &Transaction,
@@ -62,7 +74,7 @@ impl Table {
         id: Bytes,
         to_update_data: &Vec<(String, Bytes)>
     ) -> Result<(), SimpleDbError> {
-        let tuple = self.build_tuple(&id, to_update_data)?;
+        let tuple = self.build_tuple(to_update_data)?;
         let value = tuple.serialize();
 
         self.storage.set_with_transaction(
@@ -73,7 +85,7 @@ impl Table {
         )
     }
 
-    fn build_tuple(&self, id: &Bytes, data_records: &Vec<(String, Bytes)>) -> Result<Tuple, SimpleDbError> {
+    fn build_tuple(&self, data_records: &Vec<(String, Bytes)>) -> Result<Tuple, SimpleDbError> {
         let mut data_records_to_return: Vec<(ColumnId, Bytes)> = Vec::new();
 
         for (column_name, column_value) in data_records.iter() {
@@ -83,14 +95,7 @@ impl Table {
             };
         }
 
-        Ok(Tuple{
-            data_records: data_records_to_return,
-            id: id.clone(),
-        })
-    }
-
-    pub fn scan_all(&self, transaction: &Transaction) -> Result<SimpleDbStorageIterator, SimpleDbError> {
-        self.storage.scan_all_with_transaction(self.storage_keyspace_id, transaction)
+        Ok(Tuple{ data_records: data_records_to_return, })
     }
 
     pub fn create(

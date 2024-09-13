@@ -1,5 +1,4 @@
 use crate::keyspace::keyspaces::Keyspaces;
-use crate::memtables::memtable::MemtableIterator;
 use crate::sst::ssttable_iterator::SSTableIterator;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
@@ -9,6 +8,8 @@ use bytes::Bytes;
 use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
+use crate::memtables::memtable_iterator::MemtableIterator;
+use crate::utils::merge_values_iterator::MergeValuesIterator;
 
 pub struct Storage {
     transaction_manager: Arc<TransactionManager>,
@@ -22,7 +23,7 @@ pub enum WriteBatch {
     Delete(shared::KeyspaceId, Bytes)
 }
 
-pub type SimpleDbStorageIterator = TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>;
+pub type SimpleDbStorageIterator = MergeValuesIterator<TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>>;
 
 pub fn create(options: Arc<shared::SimpleDbOptions>) -> Result<Storage, shared::SimpleDbError> {
     println!("Starting storage engine!");

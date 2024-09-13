@@ -3,8 +3,9 @@ use std::path::Path;
 use std::sync::Arc;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
-use shared::{SimpleDbError, SimpleDbOptions};
+use shared::{SimpleDbError, SimpleDbOptions, StorageValueMergeResult};
 use crate::database::database::Database;
+use crate::table::tuple::Tuple;
 
 pub struct SimpleDb {
     databases: SkipMap<String, Arc<Database>>,
@@ -16,7 +17,7 @@ impl SimpleDb {
         options: SimpleDbOptions,
     ) -> Result<SimpleDb, SimpleDbError> {
         let options = shared::start_simpledb_options_builder_from(&Arc::new(options))
-            .storage_value_merger(|prev, new| Self::merge(prev, new))
+            .storage_value_merger(|prev, new| Self::merge_storage_tables(prev, new))
             .build();
 
         let mut databases = Self::load_databases(&options)?;
@@ -74,15 +75,16 @@ impl SimpleDb {
         Ok(databases)
     }
 
-    fn merge(prev: &Bytes, new: &Bytes) -> Bytes {
+    fn merge_storage_tables(prev: &Bytes, new: &Bytes) -> StorageValueMergeResult {
         let tombstone = Bytes::new();
         if prev.eq(&tombstone) || new.eq(&tombstone) {
-            new.clone()
+            StorageValueMergeResult::DiscardPrevious
         } else {
-            let mut bytes = Vec::new();
-            bytes.extend(prev);
-            bytes.extend(new);
-            Bytes::copy_from_slice(bytes.as_slice())
+            let mut prev = Tuple::deserialize(prev.to_vec());
+            let new = Tuple::deserialize(new.to_vec());
+            prev.merge(new);
+
+            StorageValueMergeResult::Ok(Bytes::from(prev.serialize()))
         }
     }
 }

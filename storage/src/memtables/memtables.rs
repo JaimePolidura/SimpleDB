@@ -2,7 +2,8 @@ use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use bytes::Bytes;
-use crate::memtables::memtable::{MemTable, MemtableIterator};
+use crate::memtables::memtable::{MemTable};
+use crate::memtables::memtable_iterator::MemtableIterator;
 use crate::memtables::wal::Wal;
 use crate::transactions::transaction::{Transaction};
 use crate::utils::merge_iterator::MergeIterator;
@@ -50,22 +51,17 @@ impl Memtables {
         }
     }
 
-    pub fn iterator(&self, transaction: &Transaction) -> MergeIterator<MemtableIterator> {
-        unsafe {
-            let mut memtable_iterators: Vec<Box<MemtableIterator>> = Vec::new();
-
-            memtable_iterators.push(Box::from(MemtableIterator::create(&(*self.current_memtable.load(Acquire)), transaction)));
-
-            let inactive_memtables_rw_lock = &*self.inactive_memtables.load(Acquire);
-            let inactive_memtables_rw_result = inactive_memtables_rw_lock.read().unwrap();
-
-            for memtable in inactive_memtables_rw_result.iter() {
-                let cloned = Arc::clone(memtable);
-                memtable_iterators.push(Box::new(MemtableIterator::create(&cloned, transaction)));
-            }
-
-            MergeIterator::create(memtable_iterators)
+    pub fn scan_at(&self, transaction: &Transaction, key: &Bytes)  -> MergeIterator<MemtableIterator> {
+        let mut iterators = self.create_memtable_iterators(transaction);
+        for iterator in &mut iterators {
+            iterator.seek_key(key);
         }
+        MergeIterator::create(iterators)
+    }
+
+    pub fn scan_all(&self, transaction: &Transaction) -> MergeIterator<MemtableIterator> {
+        let iterators = self.create_memtable_iterators(transaction);
+        MergeIterator::create(iterators)
     }
 
     pub fn get(&self, key: &Bytes, transaction: &Transaction) -> Option<bytes::Bytes> {
@@ -120,6 +116,24 @@ impl Memtables {
                 },
                 None => None
             }
+        }
+    }
+
+    fn create_memtable_iterators(&self, transaction: &Transaction) -> Vec<Box<MemtableIterator>> {
+        unsafe {
+            let mut memtable_iterators: Vec<Box<MemtableIterator>> = Vec::new();
+
+            memtable_iterators.push(Box::from(MemtableIterator::create(&(*self.current_memtable.load(Acquire)), transaction)));
+
+            let inactive_memtables_rw_lock = &*self.inactive_memtables.load(Acquire);
+            let inactive_memtables_rw_result = inactive_memtables_rw_lock.read().unwrap();
+
+            for memtable in inactive_memtables_rw_result.iter() {
+                let cloned = Arc::clone(memtable);
+                memtable_iterators.push(Box::new(MemtableIterator::create(&cloned, transaction)));
+            }
+
+            memtable_iterators
         }
     }
 

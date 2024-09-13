@@ -147,7 +147,8 @@ mod test {
     use std::sync::Arc;
     use bytes::Bytes;
     use crate::key;
-    use crate::memtables::memtable::{MemTable, MemtableIterator};
+    use crate::memtables::memtable::{MemTable};
+    use crate::memtables::memtable_iterator::MemtableIterator;
     use crate::transactions::transaction::Transaction;
     use crate::utils::merge_iterator::MergeIterator;
     use crate::utils::storage_iterator::StorageIterator;
