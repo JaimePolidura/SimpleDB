@@ -57,6 +57,20 @@ impl Keyspace {
         }))
     }
 
+    pub fn scan_from_key_with_transaction(
+        &self,
+        transaction: &Transaction,
+        key: &Bytes,
+    ) -> SimpleDbStorageIterator {
+        MergeValuesIterator::create(
+            &self.options,
+            TwoMergeIterator::create(
+                self.memtables.scan_from_key(&transaction, key),
+                self.sstables.scan_from_key(&transaction, key),
+            )
+        )
+    }
+
     pub fn scan_all_with_transaction(
         &self,
         transaction: &Transaction
@@ -65,7 +79,7 @@ impl Keyspace {
             &self.options,
             TwoMergeIterator::create(
                 self.memtables.scan_all(&transaction),
-                self.sstables.iterator(&transaction),
+                self.sstables.scan_all(&transaction),
             )
         )
     }

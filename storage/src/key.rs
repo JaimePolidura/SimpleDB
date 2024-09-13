@@ -33,6 +33,10 @@ impl Key {
         self.bytes.is_empty()
     }
 
+    pub fn bytes(&self) -> &Bytes {
+        &self.bytes
+    }
+
     pub fn as_bytes(&self) -> &[u8] {
         self.bytes.as_ref()
     }

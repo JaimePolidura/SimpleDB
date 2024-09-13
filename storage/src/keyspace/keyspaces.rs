@@ -51,6 +51,16 @@ impl Keyspaces {
         })
     }
 
+    pub fn get_keyspaces_id(&self) -> Vec<shared::KeyspaceId> {
+        let mut keyspaces = Vec::new();
+
+        for entry in &self.keyspaces {
+            keyspaces.push(*entry.key());
+        }
+
+        keyspaces
+    }
+
     pub fn get_keyspace(&self, keyspace_id: shared::KeyspaceId) -> Result<Arc<Keyspace>, shared::SimpleDbError> {
         match self.keyspaces.get(&keyspace_id) {
             Some(entry) => Ok(entry.value().clone()),

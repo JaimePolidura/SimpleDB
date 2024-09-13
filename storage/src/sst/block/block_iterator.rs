@@ -23,6 +23,21 @@ impl BlockIterator {
             current_items_iterated: 0,
         }
     }
+
+    //Returns true if the key is contained in the block
+    //Returns false if the key is out of bounds the block
+    //Expect next() call after seek_key(), in order to get the seeked valuae
+    pub fn seek_key(&mut self, key: &Key) -> bool {
+        if !self.block.contains_key(key) {
+            return false;
+        }
+
+        let index = self.block.get_key_iterator_index(key.bytes());
+        self.current_items_iterated = index + 1;
+        self.current_index = index;
+
+        true
+    }
 }
 
 impl StorageIterator for BlockIterator {

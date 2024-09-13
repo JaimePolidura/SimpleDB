@@ -38,7 +38,7 @@ fn do_tiered_compaction(
 ) -> Result<(), shared::SimpleDbError> {
     let new_level = max_level_id_to_compact + 1;
     let levels_id_to_compact: Vec<usize> = (0..max_level_id_to_compact).into_iter().collect();
-    let mut iterator = sstables.iter(&levels_id_to_compact);
+    let mut iterator = sstables.scan_from_level(&levels_id_to_compact);
     let mut new_sstable_builder = Some(SSTableBuilder::create(
         options.clone(), transaction_manager.clone(), keyspace_id, new_level as u32
     ));

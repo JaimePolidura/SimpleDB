@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use bytes::Bytes;
+use crate::key;
 use crate::sst::block::block::Block;
 use crate::sst::block::block_iterator::BlockIterator;
 use crate::key::Key;
@@ -33,6 +35,22 @@ impl SSTableIterator {
             current_block_id: -1,
             sstable,
         }
+    }
+
+    pub fn seek_key(&mut self, key: &Bytes) {
+        let key = key::create(key.clone(), 0);
+
+        if self.sstable.is_key_higher(&key) {
+            self.pending_blocks.clear();
+            self.current_block_metadata = None;
+            self.current_block_iterator = None;
+            return;
+        }
+        if self.sstable.is_key_lower(&key) {
+            return;
+        }
+
+
     }
 
     fn set_iterator_as_empty(&mut self) {

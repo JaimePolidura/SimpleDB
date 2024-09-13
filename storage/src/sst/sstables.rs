@@ -9,6 +9,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
 use bytes::Bytes;
+use crate::key::Key;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
 use crate::transactions::transaction::Transaction;
@@ -87,7 +88,7 @@ impl SSTables {
         Ok((levels, max_sstable_id))
     }
 
-    pub fn iter(&self, levels_id: &Vec<usize>) -> MergeIterator<SSTableIterator> {
+    pub fn scan_from_level(&self, levels_id: &Vec<usize>) -> MergeIterator<SSTableIterator> {
         let mut iterators: Vec<Box<SSTableIterator>> = Vec::new();
 
         for level_id in levels_id {
@@ -102,7 +103,20 @@ impl SSTables {
         MergeIterator::create(iterators)
     }
 
-    pub fn iterator(&self, transaction: &Transaction) -> MergeIterator<SSTableIterator> {
+    pub fn scan_from_key(&self, transaction: &Transaction, key: &Bytes) -> MergeIterator<SSTableIterator> {
+        let mut iterators = self.create_iterators(transaction);
+        for iterator in &mut iterators {
+            iterator.seek_key(key);
+        }
+        MergeIterator::create(iterators)
+    }
+
+    pub fn scan_all(&self, transaction: &Transaction) -> MergeIterator<SSTableIterator> {
+        let iterators = self.create_iterators(transaction);
+        MergeIterator::create(iterators)
+    }
+
+    fn create_iterators(&self, transaction: &Transaction) -> Vec<Box<SSTableIterator>> {
         let mut iterators: Vec<Box<SSTableIterator>> = Vec::with_capacity(self.sstables.len());
 
         for sstables_in_level_lock in self.sstables.iter() {
@@ -114,7 +128,7 @@ impl SSTables {
             }
         }
 
-        MergeIterator::create(iterators)
+        iterators
     }
 
     pub fn get(&self, key: &Bytes, transaction: &Transaction) -> Result<Option<bytes::Bytes>, shared::SimpleDbError> {

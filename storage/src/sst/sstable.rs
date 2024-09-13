@@ -155,6 +155,14 @@ impl SSTable {
         block_metadata.get(0).unwrap().first_key.clone()
     }
 
+    pub fn is_key_higher(&self, key: &Key) -> bool {
+        self.last_key.lt(key)
+    }
+
+    pub fn is_key_lower(&self, key: &Key) -> bool {
+        self.first_key.gt(key)
+    }
+
     pub fn delete(&self) -> Result<(), shared::SimpleDbError> {
         self.state.store(SSTABLE_DELETED, Release);
         self.file.delete().map_err(|e| shared::SimpleDbError::CannotDeleteSSTable(self.keyspace_id, self.sstable_id, e))

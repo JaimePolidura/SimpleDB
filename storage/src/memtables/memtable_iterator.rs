@@ -32,6 +32,7 @@ impl MemtableIterator {
         }
     }
 
+    //Expect next() call after seek_key(), in order to get the seeked valuae
     pub fn seek_key(&mut self, key: &Bytes) {
         let key = key::create(key.clone(), 0);
         if let Some(prev_entry_to_key) = self.memtable.data.upper_bound(Excluded(&key)) {

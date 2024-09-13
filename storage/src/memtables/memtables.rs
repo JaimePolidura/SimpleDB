@@ -51,8 +51,8 @@ impl Memtables {
         }
     }
 
-    pub fn scan_at(&self, transaction: &Transaction, key: &Bytes)  -> MergeIterator<MemtableIterator> {
-        let mut iterators = self.create_memtable_iterators(transaction);
+    pub fn scan_from_key(&self, transaction: &Transaction, key: &Bytes) -> MergeIterator<MemtableIterator> {
+        let mut iterators = self.create_iterators(transaction);
         for iterator in &mut iterators {
             iterator.seek_key(key);
         }
@@ -60,7 +60,7 @@ impl Memtables {
     }
 
     pub fn scan_all(&self, transaction: &Transaction) -> MergeIterator<MemtableIterator> {
-        let iterators = self.create_memtable_iterators(transaction);
+        let iterators = self.create_iterators(transaction);
         MergeIterator::create(iterators)
     }
 
@@ -119,7 +119,7 @@ impl Memtables {
         }
     }
 
-    fn create_memtable_iterators(&self, transaction: &Transaction) -> Vec<Box<MemtableIterator>> {
+    fn create_iterators(&self, transaction: &Transaction) -> Vec<Box<MemtableIterator>> {
         unsafe {
             let mut memtable_iterators: Vec<Box<MemtableIterator>> = Vec::new();
 

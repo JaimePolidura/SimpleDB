@@ -27,7 +27,7 @@ pub(crate) fn start_simple_leveled_compaction(
     let sstables_id_in_next_level = sstables.get_sstables_id(level_to_compact + 1);
     let sstables_id_in_level = sstables.get_sstables_id(level_to_compact);
 
-    let mut iterator = sstables.iter(&vec![level_to_compact, level_to_compact + 1]);
+    let mut iterator = sstables.scan_from_level(&vec![level_to_compact, level_to_compact + 1]);
     let mut new_sstable_builder = Some(SSTableBuilder::create(
         options.clone(), transaction_manager.clone(), keyspace_id, (level_to_compact + 1) as u32
     ));

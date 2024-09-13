@@ -1,15 +1,15 @@
 use crate::keyspace::keyspaces::Keyspaces;
+use crate::memtables::memtable_iterator::MemtableIterator;
 use crate::sst::ssttable_iterator::SSTableIterator;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
 use crate::utils::merge_iterator::MergeIterator;
+use crate::utils::merge_values_iterator::MergeValuesIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use bytes::Bytes;
 use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use crate::memtables::memtable_iterator::MemtableIterator;
-use crate::utils::merge_values_iterator::MergeValuesIterator;
 
 pub struct Storage {
     transaction_manager: Arc<TransactionManager>,
@@ -50,15 +50,35 @@ pub fn create(options: Arc<shared::SimpleDbOptions>) -> Result<Storage, shared::
 }
 
 impl Storage {
+    //TODO Rollback transaction
     pub fn scan_all(&self, keyspace_id: shared::KeyspaceId) -> Result<SimpleDbStorageIterator, shared::SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
-        self.scan_all_with_transaction(keyspace_id, &transaction)
+        self.scan_all_with_transaction(&transaction, keyspace_id)
+    }
+
+    pub fn scan_from(
+        &self,
+        keyspace_id: shared::KeyspaceId,
+        key: &Bytes
+    ) -> Result<SimpleDbStorageIterator, shared::SimpleDbError> {
+        let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
+        self.scan_from_key_with_transaction(&transaction, keyspace_id, key)
+    }
+
+    pub fn scan_from_key_with_transaction(
+        &self,
+        transaction: &Transaction,
+        keyspace_id: shared::KeyspaceId,
+        key: &Bytes
+    ) -> Result<SimpleDbStorageIterator, shared::SimpleDbError> {
+        let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
+        Ok(keyspace.scan_from_key_with_transaction(transaction, key))
     }
 
     pub fn scan_all_with_transaction(
         &self,
+        transaction: &Transaction,
         keyspace_id: shared::KeyspaceId,
-        transaction: &Transaction
     ) -> Result<SimpleDbStorageIterator, shared::SimpleDbError> {
         let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         Ok(keyspace.scan_all_with_transaction(transaction))
@@ -182,6 +202,6 @@ impl Storage {
     }
 
     pub fn get_keyspaces_id(&self) -> Vec<shared::KeyspaceId> {
-        unimplemented!()
+        self.keyspaces.get_keyspaces_id()
     }
 }

@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::sync::Arc;
 use bytes::Bytes;
 use crate::sst::block::block_decoder::decode_block;
@@ -28,7 +29,27 @@ impl Block {
         decode_block(encoded, options)
     }
 
+    pub fn contains_key(&self, key: &Key) -> bool {
+        let max_key = self.get_key_by_index(self.offsets.len() - 1);
+        let min_key = self.get_key_by_index(0);
+        min_key.le(key) && max_key.ge(key)
+    }
+
     pub fn get_value(&self, key_lookup: &Bytes, transaction: &Transaction) -> Option<Bytes> {
+        let (value, _) = self.get(key_lookup, transaction);
+        value
+    }
+
+    //Only used by block_iterator
+    // [A, B, D], key_lookup = B, returned = 0
+    // [A, B, D], key_lookup = C, returned = 1
+    pub(crate) fn get_key_iterator_index(&self, key_lookup: &Bytes) -> usize {
+        let (_, index) = self.get(key_lookup, &Transaction::none());
+        index
+    }
+
+    //Optinoal of value bytes, index of last search
+    fn get(&self, key_lookup: &Bytes, transaction: &Transaction) -> (Option<(Bytes)>, usize) {
         let mut right = self.offsets.len() / 2;
         let mut left = 0;
 
@@ -37,7 +58,7 @@ impl Block {
             let mut current_key = self.get_key_by_index(current_index);
 
             if left == right {
-                return None;
+                return (None, current_index);
             }
             if current_key.bytes_eq_bytes(key_lookup) {
                 return self.get_value_in_multiple_key_versions(transaction, key_lookup, current_index);
@@ -57,7 +78,7 @@ impl Block {
         transaction: &Transaction,
         key: &Bytes,
         index: usize
-    ) -> Option<Bytes> {
+    ) -> (Option<(Bytes)>, usize) { //Byte values, index of alst search
         let mut current_index = index;
         while current_index > 0 && self.get_key_by_index(current_index).bytes_eq_bytes(key) {
             current_index = current_index - 1;
@@ -66,14 +87,14 @@ impl Block {
         while current_index < self.entries.len() {
             let current_key = self.get_key_by_index(current_index);
             if current_key.bytes_eq_bytes(key) {
-                return None;
+                return (None, index);
             }
             if transaction.can_read(&current_key) {
-                return Some(self.get_value_by_index(current_index));
+                return (Some(self.get_value_by_index(current_index)), current_index);
             }
         }
 
-        None
+        (None, index)
     }
 
     //Expect n_entry_index to be an index to block::offsets aray
