@@ -36,7 +36,7 @@ impl Block {
     }
 
     pub fn get_value(&self, key_lookup: &Bytes, transaction: &Transaction) -> Option<Bytes> {
-        let (value, _) = self.get(key_lookup, transaction);
+        let (value, _) = self.binary_search_by_key(key_lookup, transaction);
         value
     }
 
@@ -44,16 +44,25 @@ impl Block {
     // [A, B, D], key_lookup = B, returned = 0
     // [A, B, D], key_lookup = C, returned = 1
     pub(crate) fn get_key_iterator_index(&self, key_lookup: &Bytes) -> usize {
-        let (_, index) = self.get(key_lookup, &Transaction::none());
-        index
+        let (value_found, index) = self.binary_search_by_key(key_lookup, &Transaction::none());
+        match value_found {
+            Some(_) => {
+                if index == 0 {
+                    index
+                } else {
+                    index - 1
+                }
+            },
+            None => index,
+        }
     }
 
     //Optinoal of value bytes, index of last search
-    fn get(&self, key_lookup: &Bytes, transaction: &Transaction) -> (Option<(Bytes)>, usize) {
-        let mut right = self.offsets.len() / 2;
+    fn binary_search_by_key(&self, key_lookup: &Bytes, transaction: &Transaction) -> (Option<(Bytes)>, usize) {
+        let mut right = self.offsets.len();
         let mut left = 0;
 
-        loop {
+        while left < right {
             let current_index = (left + right) / 2;
             let mut current_key = self.get_key_by_index(current_index);
 
@@ -67,9 +76,11 @@ impl Block {
                 right = current_index;
             }
             if current_key.bytes_lt_bytes(key_lookup) {
-                left = current_index;
+                left = current_index + 1;
             }
         }
+
+        (None, left)
     }
 
     //Different versions exists for the same key
@@ -80,7 +91,7 @@ impl Block {
         index: usize
     ) -> (Option<(Bytes)>, usize) { //Byte values, index of alst search
         let mut current_index = index;
-        while current_index > 0 && self.get_key_by_index(current_index).bytes_eq_bytes(key) {
+        while current_index > 0 && self.get_key_by_index(current_index - 1).bytes_eq_bytes(key) {
             current_index = current_index - 1;
         }
 

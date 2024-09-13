@@ -29,6 +29,7 @@ impl BlockIterator {
     //Expect next() call after seek_key(), in order to get the seeked valuae
     pub fn seek_key(&mut self, key: &Key) -> bool {
         if !self.block.contains_key(key) {
+            self.finish_iterator();
             return false;
         }
 
@@ -37,6 +38,13 @@ impl BlockIterator {
         self.current_index = index;
 
         true
+    }
+
+    fn finish_iterator(&mut self) {
+        self.current_items_iterated = self.block.offsets.len();
+        self.current_index = self.block.offsets.len();
+        self.current_value = None;
+        self.current_key = None;
     }
 }
 
@@ -81,7 +89,38 @@ mod test {
     use crate::utils::storage_iterator::StorageIterator;
 
     #[test]
-    fn iterator() {
+    fn seek_key() {
+        let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
+        block_builder.add_entry(key::create_from_str("B", 1), Bytes::from(vec![1, 2, 3]));
+        block_builder.add_entry(key::create_from_str("D", 1), Bytes::from(vec![4, 5, 6]));
+        block_builder.add_entry(key::create_from_str("E", 1), Bytes::from(vec![4, 5, 6]));
+        let block = Arc::new(block_builder.build());
+
+        // Start from the beggining [B, D, E] Seek: A
+        let mut iterator = BlockIterator::create(block.clone());
+        iterator.seek_key(&key::create_from_str("A", 1));
+        assert!(!iterator.has_next());
+
+        // Out of bounds [B, D, E] Seek: A
+        let mut iterator = BlockIterator::create(block.clone());
+        iterator.seek_key(&key::create_from_str("F", 1));
+        assert!(!iterator.has_next());
+
+        // Start from D [B, D, E] Seek: D
+        let mut iterator = BlockIterator::create(block.clone());
+        iterator.seek_key(&key::create_from_str("D", 1));
+        iterator.next();
+        assert!(iterator.key().eq(&key::create_from_str("D", 1)));
+
+        // Start from D [B, D, E] Seek: C
+        let mut iterator = BlockIterator::create(block.clone());
+        iterator.seek_key(&key::create_from_str("C", 1));
+        iterator.next();
+        assert!(iterator.key().eq(&key::create_from_str("D", 1)));
+    }
+
+    #[test]
+    fn next_has_next() {
         let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
         block_builder.add_entry(key::create_from_str("Jaime", 1), Bytes::from(vec![1, 2, 3]));
         block_builder.add_entry(key::create_from_str("Pedro", 1), Bytes::from(vec![4, 5, 6]));
