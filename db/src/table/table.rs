@@ -1,4 +1,5 @@
 use std::cell::UnsafeCell;
+use std::collections::HashSet;
 use std::hash::Hasher;
 use crate::table::table_descriptor::{ColumnDescriptor, ColumnType, TableDescriptor};
 use shared::{ColumnId, SimpleDbError, SimpleDbFileWrapper};
@@ -7,6 +8,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
+use shared::SimpleDbError::{ColumnNameAlreadyDefined, NotPrimaryColumnDefined, OnlyOnePrimaryColumnAllowed};
 use storage::SimpleDbStorageIterator;
 use storage::transactions::transaction::Transaction;
 use crate::table::tuple::Tuple;
@@ -25,25 +27,14 @@ pub struct Table {
 }
 
 impl Table {
-    pub fn add_column(
+    pub fn add_columns(
         &self,
-        column_name: &str,
-        column_type: ColumnType,
-        is_primary: bool,
+        columns_to_add: Vec<(String, ColumnType, bool)>,
     ) -> Result<(), SimpleDbError> {
-        let column_descriptor = ColumnDescriptor {
-            column_id: self.next_column_id.fetch_add(1, Relaxed) as shared::ColumnId,
-            column_name: column_name.to_string(),
-            column_type,
-            is_primary,
-        };
-
-        let file = unsafe { &mut *self.table_descriptor_file.file.get() };
-        file.write(&column_descriptor.serialize())
-            .map_err(|e| SimpleDbError::CannotWriteTableDescriptor(self.storage_keyspace_id, e))?;
-
-        self.columns_by_id.insert(column_descriptor.column_id, column_descriptor);
-
+        self.validate_new_table_columns(&columns_to_add)?;
+        for (column_name, column_type, is_primary) in columns_to_add {
+            self.add_column(&column_name, column_type, is_primary)?
+        }
         Ok(())
     }
 
@@ -98,6 +89,29 @@ impl Table {
         Ok(Tuple{ data_records: data_records_to_return, })
     }
 
+    fn add_column(
+        &self,
+        column_name: &str,
+        column_type: ColumnType,
+        is_primary: bool,
+    ) -> Result<(), SimpleDbError> {
+        let column_descriptor = ColumnDescriptor {
+            column_id: self.next_column_id.fetch_add(1, Relaxed) as shared::ColumnId,
+            column_name: column_name.to_string(),
+            column_type,
+            is_primary,
+        };
+
+        let file = unsafe { &mut *self.table_descriptor_file.file.get() };
+        file.write(&column_descriptor.serialize())
+            .map_err(|e| SimpleDbError::CannotWriteTableDescriptor(self.storage_keyspace_id, e))?;
+
+        self.columns_by_name.insert(column_descriptor.column_name.clone(), column_descriptor.column_id);
+        self.columns_by_id.insert(column_descriptor.column_id, column_descriptor);
+
+        Ok(())
+    }
+
     pub fn create(
         table_name: &str,
         options: &Arc<shared::SimpleDbOptions>,
@@ -112,7 +126,7 @@ impl Table {
 
         let max_column_id = table_descriptor.get_max_column_id();
 
-        Ok(Arc::new(Table{
+        Ok(Arc::new(Table {
             storage_keyspace_id: table_keyspace_id,
             columns_by_id: table_descriptor.columns,
             columns_by_name: SkipMap::new(),
@@ -152,6 +166,41 @@ impl Table {
         }
 
         result
+    }
+
+    fn validate_new_table_columns(
+        &self,
+        columns: &Vec<(String, ColumnType, bool)>,
+    ) -> Result<(), SimpleDbError> {
+        let mut primary_already_added = self.has_primary_column();
+        let mut column_names_added = HashSet::new();
+
+        for (new_column_name, _, is_primary) in columns {
+            let is_primary = *is_primary;
+
+            if primary_already_added && is_primary {
+                return Err(OnlyOnePrimaryColumnAllowed());
+            }
+
+            if !primary_already_added && is_primary {
+                primary_already_added = true;
+            }
+
+            //Some value already exists
+            if !column_names_added.insert(new_column_name) {
+                return Err(ColumnNameAlreadyDefined(new_column_name.to_string()));
+            }
+        }
+
+        if !primary_already_added {
+            return Err(NotPrimaryColumnDefined());
+        }
+
+        Ok(())
+    }
+
+    fn has_primary_column(&self) -> bool {
+        unimplemented!()
     }
 
     pub fn name(&self) -> String {
