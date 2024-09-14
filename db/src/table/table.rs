@@ -200,7 +200,9 @@ impl Table {
     }
 
     fn has_primary_column(&self) -> bool {
-        unimplemented!()
+        self.columns_by_id.iter()
+            .find(|i| i.value().is_primary)
+            .is_some()
     }
 
     pub fn name(&self) -> String {

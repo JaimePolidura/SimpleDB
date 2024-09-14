@@ -3,9 +3,15 @@ use std::sync::Arc;
 use bytes::Bytes;
 use shared::StorageValueMergeResult;
 use crate::key::Key;
+use crate::transactions::transaction::Transaction;
+use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_iterator::StorageIterator;
 
-pub struct MergeValuesIterator<I: StorageIterator> {
+//This is the iterator that will be exposed to users of the storage engine:
+//This iterator merges the values by the merger functino defined in SimpleDbOptions
+//And commits the transaction when the iterator is dropped, if the itrerator was created in "standalone" mode
+// which means when the transaction was created only for the iterator, (for example: call to Storage::scan_from or Storage::scan_all)
+pub struct StorageEngineItertor<I: StorageIterator> {
     options: Arc<shared::SimpleDbOptions>,
     inner_iterator: I,
 
@@ -13,21 +19,35 @@ pub struct MergeValuesIterator<I: StorageIterator> {
 
     current_value: Option<Bytes>,
     current_key: Option<Key>,
+
+    transaction_manager: Option<Arc<TransactionManager>>,
+    transaction: Option<Transaction>,
 }
 
-impl<I: StorageIterator> MergeValuesIterator<I> {
-    pub fn create(options: &Arc<shared::SimpleDbOptions>, mut iterator: I) -> MergeValuesIterator<I> {
+impl<I: StorageIterator> StorageEngineItertor<I> {
+    pub fn create(options: &Arc<shared::SimpleDbOptions>, mut iterator: I) -> StorageEngineItertor<I> {
         if iterator.has_next() {
             iterator.next();
         }
 
-        MergeValuesIterator {
+        StorageEngineItertor {
             options: options.clone(),
             entries_to_return: VecDeque::new(),
             inner_iterator: iterator,
+            transaction_manager: None,
             current_value: None,
             current_key: None,
+            transaction: None,
         }
+    }
+
+    pub fn set_transaction_standalone(
+        &mut self,
+        transaction_manager: &Arc<TransactionManager>,
+        transaction: Transaction
+    ) {
+        self.transaction_manager = Some(transaction_manager.clone());
+        self.transaction = Some(transaction);
     }
 
     fn find_entries(&mut self) -> bool {
@@ -86,7 +106,7 @@ impl<I: StorageIterator> MergeValuesIterator<I> {
     }
 }
 
-impl<I: StorageIterator> StorageIterator for MergeValuesIterator<I> {
+impl<I: StorageIterator> StorageIterator for StorageEngineItertor<I> {
     fn next(&mut self) -> bool {
         if !self.inner_iterator.has_next() && self.entries_to_return.len() > 0 {
             return false
@@ -115,6 +135,14 @@ impl<I: StorageIterator> StorageIterator for MergeValuesIterator<I> {
     }
 }
 
+impl<I: StorageIterator> Drop for StorageEngineItertor<I> {
+    fn drop(&mut self) {
+        if let Some(transaction_manager) = self.transaction_manager.as_ref() {
+            transaction_manager.commit(self.transaction.as_ref().unwrap().clone())
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::sync::Arc;
@@ -124,7 +152,7 @@ mod test {
     use crate::memtables::memtable::{MemTable};
     use crate::memtables::memtable_iterator::MemtableIterator;
     use crate::transactions::transaction::Transaction;
-    use crate::utils::merge_values_iterator::MergeValuesIterator;
+    use crate::utils::storage_engine_iterator::StorageEngineItertor;
     use crate::utils::storage_iterator::StorageIterator;
 
     #[test]
@@ -140,7 +168,7 @@ mod test {
         memtable.set(&transaction(5), Bytes::from("jaime"), &vec![8]);
         memtable.set(&transaction(1), Bytes::from("wili"), &vec![9]);
 
-        let mut iterator = MergeValuesIterator::create(
+        let mut iterator = StorageEngineItertor::create(
             &options,
             MemtableIterator::create(&memtable, &Transaction::none())
         );
@@ -196,7 +224,7 @@ mod test {
         memtable.set(&transaction(1), Bytes::from("wili"), &vec![10]); //10 Equivalent of tombstone
         memtable.set(&transaction(1), Bytes::from("wili"), &vec![2]);
 
-        let mut iterator = MergeValuesIterator::create(
+        let mut iterator = StorageEngineItertor::create(
             &options,
             MemtableIterator::create(&memtable, &Transaction::none())
         );

@@ -11,7 +11,7 @@ use crate::SimpleDbStorageIterator;
 use bytes::Bytes;
 use std::fs;
 use std::sync::Arc;
-use crate::utils::merge_values_iterator::MergeValuesIterator;
+use crate::utils::storage_engine_iterator::StorageEngineItertor;
 
 pub struct Keyspace {
     keyspace_id: shared::KeyspaceId,
@@ -62,7 +62,7 @@ impl Keyspace {
         transaction: &Transaction,
         key: &Bytes,
     ) -> SimpleDbStorageIterator {
-        MergeValuesIterator::create(
+        StorageEngineItertor::create(
             &self.options,
             TwoMergeIterator::create(
                 self.memtables.scan_from_key(&transaction, key),
@@ -75,7 +75,7 @@ impl Keyspace {
         &self,
         transaction: &Transaction
     ) -> SimpleDbStorageIterator {
-        MergeValuesIterator::create(
+        StorageEngineItertor::create(
             &self.options,
             TwoMergeIterator::create(
                 self.memtables.scan_all(&transaction),

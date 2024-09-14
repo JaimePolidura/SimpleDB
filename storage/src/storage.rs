@@ -4,7 +4,7 @@ use crate::sst::ssttable_iterator::SSTableIterator;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
 use crate::utils::merge_iterator::MergeIterator;
-use crate::utils::merge_values_iterator::MergeValuesIterator;
+use crate::utils::storage_engine_iterator::StorageEngineItertor;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use bytes::Bytes;
 use std::collections::{HashSet, VecDeque};
@@ -23,7 +23,9 @@ pub enum WriteBatch {
     Delete(shared::KeyspaceId, Bytes)
 }
 
-pub type SimpleDbStorageIterator = MergeValuesIterator<TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>>;
+pub type SimpleDbStorageIterator = StorageEngineItertor<
+    TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>
+>;
 
 pub fn create(options: Arc<shared::SimpleDbOptions>) -> Result<Storage, shared::SimpleDbError> {
     println!("Starting storage engine!");
@@ -50,10 +52,11 @@ pub fn create(options: Arc<shared::SimpleDbOptions>) -> Result<Storage, shared::
 }
 
 impl Storage {
-    //TODO Rollback transaction
     pub fn scan_all(&self, keyspace_id: shared::KeyspaceId) -> Result<SimpleDbStorageIterator, shared::SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
-        self.scan_all_with_transaction(&transaction, keyspace_id)
+        let mut iterator = self.scan_all_with_transaction(&transaction, keyspace_id)?;
+        iterator.set_transaction_standalone(&self.transaction_manager, transaction);
+        Ok(iterator)
     }
 
     pub fn scan_from(
@@ -62,7 +65,9 @@ impl Storage {
         key: &Bytes
     ) -> Result<SimpleDbStorageIterator, shared::SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
-        self.scan_from_key_with_transaction(&transaction, keyspace_id, key)
+        let mut iterator = self.scan_from_key_with_transaction(&transaction, keyspace_id, key)?;
+        iterator.set_transaction_standalone(&self.transaction_manager, transaction);
+        Ok(iterator)
     }
 
     pub fn scan_from_key_with_transaction(
