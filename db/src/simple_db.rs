@@ -47,7 +47,7 @@ impl SimpleDb {
         let mut indexed = SkipMap::new();
 
         while let Some(database) = databases.pop() {
-            indexed.insert(database.name(), database);
+            indexed.insert(database.name().clone(), database);
         }
 
         indexed

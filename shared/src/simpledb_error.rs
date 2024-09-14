@@ -28,6 +28,11 @@ pub enum SSTableCorruptedPart {
 pub enum SimpleDbError {
     //General db layer errors
     ColumnNotFound(types::KeyspaceId, String),
+    TableNotFound(String),
+    TableAlreadyExists(String),
+    NotPrimaryColumnDefined(),
+    OnlyOnePrimaryColumnAllowed(),
+    ColumnNameAlreadyDefined(String),
 
     //Databases
     DatabaseAlreadyExists(String),
@@ -45,6 +50,7 @@ pub enum SimpleDbError {
     CannotReaDatabaseDescriptor(String, std::io::Error),
     CannotDecodeDatabaseDescriptor(String, DecodeError),
     CannotCreateDatabaseDescriptor(String, std::io::Error),
+    CannotWriteDatabaseDescriptor(std::io::Error),
 
     //Keyspaces
     KeyspaceNotFound(types::KeyspaceId),
@@ -202,6 +208,24 @@ impl Debug for SimpleDbError {
             }
             SimpleDbError::ColumnNotFound(keyspace_id, column_nmae) => {
                 write!(f, "Column {} not found. KeyspaceID: {}", column_nmae, keyspace_id)
+            }
+            SimpleDbError::TableNotFound(table_name) => {
+                write!(f, "Table with name: {} not found", table_name)
+            }
+            SimpleDbError::TableAlreadyExists(table_name) => {
+                write!(f, "Table with name: {} already exists", table_name)
+            }
+            SimpleDbError::NotPrimaryColumnDefined() => {
+                write!(f, "Every table should have a primary column defined at creation time")
+            }
+            SimpleDbError::OnlyOnePrimaryColumnAllowed() => {
+                write!(f, "Every table can only have at least one primary column")
+            }
+            SimpleDbError::ColumnNameAlreadyDefined(column_name) => {
+                write!(f, "Column: {} already defined int able", column_name)
+            }
+            SimpleDbError::CannotWriteDatabaseDescriptor(io_error) => {
+                write!(f, "Cannot write to database descriptor. IO Error: {}", io_error)
             }
         }
     }

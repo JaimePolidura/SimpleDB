@@ -10,7 +10,7 @@ impl Tuple {
     //Repeated records will be replaced by other
     pub fn merge(&mut self, mut other: Tuple) {
         while let Some((other_column_id, other_column_value)) = other.data_records.pop() {
-            match self.get_column_id(other_column_id) {
+            match self.get_column_id_index(other_column_id) {
                 Some(self_column_id_index) => {
                     self.data_records[self_column_id_index] = (other_column_id, other_column_value);
                 },

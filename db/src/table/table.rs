@@ -12,16 +12,16 @@ use storage::transactions::transaction::Transaction;
 use crate::table::tuple::Tuple;
 
 pub struct Table {
-    storage_keyspace_id: shared::KeyspaceId,
+    pub(crate) storage_keyspace_id: shared::KeyspaceId,
+    pub(crate) table_name: String,
 
-    columns_by_id: SkipMap<shared::ColumnId, ColumnDescriptor>,
-    columns_by_name: SkipMap<String, shared::ColumnId>,
+    pub(crate) table_descriptor_file: SimpleDbFileWrapper,
 
-    table_descriptor_file: SimpleDbFileWrapper,
-    next_column_id: AtomicUsize,
-    table_name: String,
+    pub(crate) columns_by_id: SkipMap<ColumnId, ColumnDescriptor>,
+    pub(crate) columns_by_name: SkipMap<String, shared::ColumnId>,
+    pub(crate) next_column_id: AtomicUsize,
 
-    storage: Arc<storage::Storage>,
+    pub(crate) storage: Arc<storage::Storage>,
 }
 
 impl Table {
@@ -47,16 +47,16 @@ impl Table {
         Ok(())
     }
 
-    pub fn scan_at(
+    pub fn scan_from_key(
         &self,
         key: &Bytes,
         transaction: &Transaction,
     ) -> Result<SimpleDbStorageIterator, SimpleDbError> {
-        unimplemented!()
+        self.storage.scan_from_key_with_transaction(transaction, self.storage_keyspace_id, key)
     }
 
     pub fn scan_all(&self, transaction: &Transaction) -> Result<SimpleDbStorageIterator, SimpleDbError> {
-        self.storage.scan_all_with_transaction(self.storage_keyspace_id, transaction)
+        self.storage.scan_all_with_transaction(transaction, self.storage_keyspace_id)
     }
 
     pub fn insert(

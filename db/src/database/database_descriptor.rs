@@ -1,16 +1,35 @@
-use bytes::Buf;
+use bytes::{Buf, BufMut};
 use crossbeam_skiplist::SkipMap;
-use shared::SimpleDbError::CannotCreateDatabaseDescriptor;
-use shared::{SimpleDbError, SimpleDbFile, SimpleDbFileMode, SimpleDbOptions};
+use shared::SimpleDbError::{CannotCreateDatabaseDescriptor, CannotWriteDatabaseDescriptor};
+use shared::{KeyspaceId, SimpleDbError, SimpleDbFile, SimpleDbFileMode, SimpleDbOptions};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+//Contains a mapping between storage engine's keyspace IDs and table names
+//This file is stored in binary format
+//There is one file of these for each database
 pub struct DatabaseDescriptor {
     keyspace_id_by_table_name: SkipMap<String, shared::KeyspaceId>,
     file: SimpleDbFile,
 }
 
 impl DatabaseDescriptor {
+    pub fn add_table(&mut self, table_name: &str, keyspace_id: KeyspaceId) -> Result<(), SimpleDbError> {
+        self.keyspace_id_by_table_name.insert(table_name.to_string(), keyspace_id);
+        let bytes = self.serialize_new_table_entry(table_name, keyspace_id);
+        self.file.write(&bytes)
+            .map_err(|e| CannotWriteDatabaseDescriptor(e))?;
+        Ok(())
+    }
+
+    fn serialize_new_table_entry(&self, table_name: &str, keyspace_id: KeyspaceId) -> Vec<u8> {
+        let mut serialized = Vec::new();
+        serialized.put_u32_le(table_name.len() as u32);
+        serialized.extend(table_name.as_bytes());
+        serialized.put_u64_le(keyspace_id as u64);
+        serialized
+    }
+
     pub fn create(
         database_options: &Arc<SimpleDbOptions>,
         database_name: &String,
@@ -39,7 +58,7 @@ impl DatabaseDescriptor {
         let database_descriptor_file_bytes = database_descriptor_file.read_all()
             .map_err(|e| SimpleDbError::CannotOpenDatabaseDescriptor(String::from(database_name.clone()), e))?;
 
-        Self::decode_database_descriptor_bytes(
+        Self::deserialize_database_descriptor(
             database_descriptor_file,
             database_descriptor_file_bytes,
             database_name,
@@ -47,7 +66,7 @@ impl DatabaseDescriptor {
         )
     }
 
-    fn decode_database_descriptor_bytes(
+    fn deserialize_database_descriptor(
         file: SimpleDbFile,
         bytes: Vec<u8>,
         database_name: &String,

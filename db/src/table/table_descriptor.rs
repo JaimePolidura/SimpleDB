@@ -5,6 +5,9 @@ use std::cmp::max;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+//Maintains information about column ID with its column name, column type, is_primary etc.
+//This file is stored in binary format
+//There is one file of these for each table
 pub struct TableDescriptor {
     pub(crate) columns: SkipMap<ColumnId, ColumnDescriptor>,
     pub(crate) table_name: String,

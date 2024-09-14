@@ -3,7 +3,7 @@ use rand::Rng;
 
 fn main() {
     let mut lsm = storage::create(shared::start_simpledb_options_builder()
-        .base_path("C:\\programacion\\mini-lsm\\playground\\resources")
+        .base_path("C:\\programacion\\SimpleDB\\playground\\resources")
         .compaction_strategy(shared::CompactionStrategy::SimpleLeveled)
         .durability_level(shared::DurabilityLevel::Strong)
         .memtable_max_size_bytes(8192)
@@ -12,7 +12,7 @@ fn main() {
         .build())
         .unwrap();
 
-    // let k = lsm.create_keyspace().unwrap();
+    let k = lsm.create_keyspace().unwrap();
 
     // transactions(&mut lsm);
     write(&mut lsm, 1);
