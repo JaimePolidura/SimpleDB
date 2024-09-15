@@ -11,7 +11,9 @@ use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::{ColumnNameAlreadyDefined, NotPrimaryColumnDefined, OnlyOnePrimaryColumnAllowed};
 use storage::SimpleDbStorageIterator;
 use storage::transactions::transaction::Transaction;
+use crate::selection::Selection;
 use crate::table::record::Record;
+use crate::table::table_iteartor::TableIterator;
 
 pub struct Table {
     pub(crate) storage_keyspace_id: shared::KeyspaceId,
@@ -39,15 +41,34 @@ impl Table {
     }
 
     pub fn scan_from_key(
-        &self,
+        self: Arc<Self>,
         key: &Bytes,
         transaction: &Transaction,
-    ) -> Result<SimpleDbStorageIterator, SimpleDbError> {
-        self.storage.scan_from_key_with_transaction(transaction, self.storage_keyspace_id, key)
+        selection: Selection,
+    ) -> Result<TableIterator, SimpleDbError> {
+        let selection = self.selection_to_columns_id(selection)?;
+        let storage_iterator = self.storage.scan_from_key_with_transaction(transaction, self.storage_keyspace_id, key)?;
+        
+        Ok(TableIterator::create(
+            storage_iterator,
+            selection,
+            self.clone()
+        ))
     }
 
-    pub fn scan_all(&self, transaction: &Transaction) -> Result<SimpleDbStorageIterator, SimpleDbError> {
-        self.storage.scan_all_with_transaction(transaction, self.storage_keyspace_id)
+    pub fn scan_all(
+        self: Arc<Self>,
+        transaction: &Transaction,
+        selection: Selection
+    ) -> Result<TableIterator, SimpleDbError> {
+        let selection = self.selection_to_columns_id(selection)?;
+        let storage_iterator = self.storage.scan_all_with_transaction(transaction, self.storage_keyspace_id)?;
+
+        Ok(TableIterator::create(
+            storage_iterator,
+            selection,
+            self.clone()
+        ))
     }
 
     pub fn insert(
@@ -203,6 +224,33 @@ impl Table {
         self.columns_by_id.iter()
             .find(|i| i.value().is_primary)
             .is_some()
+    }
+
+    fn selection_to_columns_id(&self, selection: Selection) -> Result<Vec<ColumnId>, SimpleDbError> {
+        match selection {
+            Selection::Some(columns_names) => {
+                let mut column_ids = Vec::new();
+
+                for column_name in &columns_names {
+                    let column_id = self.get_column_id_by_name(column_name)?;
+                    column_ids.push(column_id);
+                }
+
+                Ok(column_ids)
+            },
+            Selection::All() => {
+                Ok(self.columns_by_id.iter()
+                    .map(|entry| entry.key().clone())
+                    .collect())
+            }
+        }
+    }
+
+    fn get_column_id_by_name(&self, column_name: &String) -> Result<ColumnId, SimpleDbError> {
+        match self.columns_by_name.get(column_name) {
+            Some(column_id) => Ok(*column_id.value()),
+            None => Err(SimpleDbError::ColumnNotFound(self.storage_keyspace_id, column_name.to_string()))
+        }
     }
 
     pub fn name(&self) -> String {

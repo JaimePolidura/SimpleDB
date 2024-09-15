@@ -28,14 +28,14 @@ impl TableIterator {
     pub fn create(
         simple_db_storage_iterator: SimpleDbStorageIterator,
         selection: Vec<ColumnId>, //Columns ID to select
-        table: &Arc<Table>
+        table: Arc<Table>
     ) -> TableIterator {
         TableIterator {
             selection: Arc::new(selection),
             rows_in_reconstruction: Vec::new(),
             simple_db_storage_iterator,
-            table: table.clone(),
             current_row: None,
+            table,
         }
     }
 
