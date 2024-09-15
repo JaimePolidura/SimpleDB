@@ -1,3 +1,5 @@
 pub mod table;
 pub mod table_descriptor;
-pub mod tuple;
+pub mod record;
+mod table_iteartor;
+mod row;

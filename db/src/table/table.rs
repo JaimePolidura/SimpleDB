@@ -11,7 +11,7 @@ use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::{ColumnNameAlreadyDefined, NotPrimaryColumnDefined, OnlyOnePrimaryColumnAllowed};
 use storage::SimpleDbStorageIterator;
 use storage::transactions::transaction::Transaction;
-use crate::table::tuple::Tuple;
+use crate::table::record::Record;
 
 pub struct Table {
     pub(crate) storage_keyspace_id: shared::KeyspaceId,
@@ -65,8 +65,8 @@ impl Table {
         id: Bytes,
         to_update_data: &Vec<(String, Bytes)>
     ) -> Result<(), SimpleDbError> {
-        let tuple = self.build_tuple(to_update_data)?;
-        let value = tuple.serialize();
+        let record = self.build_record(to_update_data)?;
+        let value = record.serialize();
 
         self.storage.set_with_transaction(
             self.storage_keyspace_id,
@@ -76,7 +76,7 @@ impl Table {
         )
     }
 
-    fn build_tuple(&self, data_records: &Vec<(String, Bytes)>) -> Result<Tuple, SimpleDbError> {
+    fn build_record(&self, data_records: &Vec<(String, Bytes)>) -> Result<Record, SimpleDbError> {
         let mut data_records_to_return: Vec<(ColumnId, Bytes)> = Vec::new();
 
         for (column_name, column_value) in data_records.iter() {
@@ -86,7 +86,7 @@ impl Table {
             };
         }
 
-        Ok(Tuple{ data_records: data_records_to_return, })
+        Ok(Record { data_records: data_records_to_return, })
     }
 
     fn add_column(
@@ -172,7 +172,7 @@ impl Table {
         &self,
         columns: &Vec<(String, ColumnType, bool)>,
     ) -> Result<(), SimpleDbError> {
-        let mut primary_already_added = self.has_primary_column();
+        let mut primary_already_added = self.has_primary_key();
         let mut column_names_added = HashSet::new();
 
         for (new_column_name, _, is_primary) in columns {
@@ -199,7 +199,7 @@ impl Table {
         Ok(())
     }
 
-    fn has_primary_column(&self) -> bool {
+    fn has_primary_key(&self) -> bool {
         self.columns_by_id.iter()
             .find(|i| i.value().is_primary)
             .is_some()

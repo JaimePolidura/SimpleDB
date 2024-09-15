@@ -5,7 +5,7 @@ use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
 use shared::{SimpleDbError, SimpleDbOptions, StorageValueMergeResult};
 use crate::database::database::Database;
-use crate::table::tuple::Tuple;
+use crate::table::record::Record;
 
 pub struct SimpleDb {
     databases: SkipMap<String, Arc<Database>>,
@@ -80,8 +80,8 @@ impl SimpleDb {
         if prev.eq(&tombstone) || new.eq(&tombstone) {
             StorageValueMergeResult::DiscardPrevious
         } else {
-            let mut prev = Tuple::deserialize(prev.to_vec());
-            let new = Tuple::deserialize(new.to_vec());
+            let mut prev = Record::deserialize(prev.to_vec());
+            let new = Record::deserialize(new.to_vec());
             prev.merge(new);
 
             StorageValueMergeResult::Ok(Bytes::from(prev.serialize()))

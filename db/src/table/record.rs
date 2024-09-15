@@ -1,14 +1,17 @@
 use bytes::{Buf, BufMut, Bytes};
 use shared::ColumnId;
 
-pub struct Tuple {
+//Represents the row data stored in the storage engine,
+//This might represent an incomplete set of data
+//The binary format is: |Column ID (u16)| Column value length (u32) | Column values |...
+pub struct Record {
     pub(crate) data_records: Vec<(ColumnId, Bytes)>
 }
 
-impl Tuple {
+impl Record {
     //Missing records from other will be added
     //Repeated records will be replaced by other
-    pub fn merge(&mut self, mut other: Tuple) {
+    pub fn merge(&mut self, mut other: Record) {
         while let Some((other_column_id, other_column_value)) = other.data_records.pop() {
             match self.get_column_id_index(other_column_id) {
                 Some(self_column_id_index) => {
@@ -47,7 +50,7 @@ impl Tuple {
         result
     }
 
-    pub fn deserialize(bytes: Vec<u8>) -> Tuple {
+    pub fn deserialize(bytes: Vec<u8>) -> Record {
         let mut current_ptr = bytes.as_slice();
         let mut data_records: Vec<(ColumnId, Bytes)> = Vec::new();
 
@@ -59,6 +62,57 @@ impl Tuple {
             data_records.push((column_id, Bytes::from(column_value_bytes.to_vec())));
         }
 
-        Tuple { data_records }
+        Record { data_records }
+    }
+
+    pub fn builder() -> RecordBuilder {
+        RecordBuilder { data_records: Vec::new() }
+    }
+}
+
+pub struct RecordBuilder {
+    data_records: Vec<(ColumnId, Bytes)>
+}
+
+impl RecordBuilder {
+    pub fn add_record(&mut self, mut other: Record) {
+        while let Some((column_id, other_value)) = other.data_records.pop() {
+            self.add_column(column_id, other_value);
+        }
+    }
+
+    //Adds the column if it doest exists
+    //Returns true if the column was added, false if it wasn't added
+    pub fn add_column(&mut self, column_id: ColumnId, column_value: Bytes) -> bool {
+        if self.has_column_id(column_id) {
+            return false
+        }
+
+        self.data_records.push((column_id, column_value));
+        true
+    }
+
+    pub fn has_columns_id(&self, columns_ids: &Vec<ColumnId>) -> bool {
+        for column_id in columns_ids {
+            if self.has_column_id(*column_id) {
+                return true
+            }
+        }
+
+        false
+    }
+
+    pub fn has_column_id(&self, column_id_lookup: ColumnId) -> bool {
+        for (current_column_id, _) in &self.data_records {
+            if *current_column_id == column_id_lookup{
+                return true;
+            }
+        }
+
+        false
+    }
+
+    pub fn build(self) -> Record {
+        Record { data_records: self.data_records }
     }
 }
