@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
 use crate::transactions::transaction_manager::TransactionManager;
+use crate::utils::storage_engine_iterator::StorageEngineItertor;
 use crate::utils::storage_iterator::StorageIterator;
+use crate::utils::tombstone::TOMBSTONE;
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
 pub enum TieredCompactionTask {
@@ -37,8 +39,12 @@ fn do_tiered_compaction(
     keyspace_id: shared::KeyspaceId
 ) -> Result<(), shared::SimpleDbError> {
     let new_level = max_level_id_to_compact + 1;
+    let is_new_level_last_level = sstables.is_last_level(new_level);
     let levels_id_to_compact: Vec<usize> = (0..max_level_id_to_compact).into_iter().collect();
-    let mut iterator = sstables.scan_from_level(&levels_id_to_compact);
+    let mut iterator = StorageEngineItertor::create(
+        options,
+        sstables.scan_from_level(&levels_id_to_compact)
+    );
     let mut new_sstable_builder = Some(SSTableBuilder::create(
         options.clone(), transaction_manager.clone(), keyspace_id, new_level as u32
     ));
@@ -49,6 +55,14 @@ fn do_tiered_compaction(
         let key = iterator.key().clone();
         match transaction_manager.on_write_key(&key) {
             Ok(_) => {
+                let value = iterator.value().clone();
+                let is_tombstone = value.eq(TOMBSTONE.as_ref());
+
+                if is_new_level_last_level && is_tombstone {
+                    //We remove tombstones in the last levels compactions
+                    continue;
+                }
+
                 new_sstable_builder.as_mut().unwrap().add_entry(
                     key, Bytes::copy_from_slice(iterator.value())
                 );

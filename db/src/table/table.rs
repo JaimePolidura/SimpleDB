@@ -48,7 +48,7 @@ impl Table {
     ) -> Result<TableIterator, SimpleDbError> {
         let selection = self.selection_to_columns_id(selection)?;
         let storage_iterator = self.storage.scan_from_key_with_transaction(transaction, self.storage_keyspace_id, key)?;
-        
+
         Ok(TableIterator::create(
             storage_iterator,
             selection,

@@ -15,8 +15,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 use crate::memtables::memtable_iterator::MemtableIterator;
-
-const TOMBSTONE: Bytes = Bytes::new();
+use crate::utils::tombstone::TOMBSTONE;
 
 pub struct MemTable {
     pub(crate) data: Arc<SkipMap<Key, Bytes>>,

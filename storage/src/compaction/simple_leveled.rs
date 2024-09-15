@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
 use crate::transactions::transaction_manager::TransactionManager;
+use crate::utils::storage_engine_iterator::StorageEngineItertor;
 use crate::utils::storage_iterator::StorageIterator;
+use crate::utils::tombstone::TOMBSTONE;
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
 pub struct SimpleLeveledCompactionTask {
@@ -26,11 +28,15 @@ pub(crate) fn start_simple_leveled_compaction(
 
     let sstables_id_in_next_level = sstables.get_sstables_id(level_to_compact + 1);
     let sstables_id_in_level = sstables.get_sstables_id(level_to_compact);
-
-    let mut iterator = sstables.scan_from_level(&vec![level_to_compact, level_to_compact + 1]);
+    let is_new_level_last_level = sstables.is_last_level(level_to_compact + 1);
+    let mut iterator = StorageEngineItertor::create(
+        options,
+        sstables.scan_from_level(&vec![level_to_compact, level_to_compact + 1])
+    );
     let mut new_sstable_builder = Some(SSTableBuilder::create(
         options.clone(), transaction_manager.clone(), keyspace_id, (level_to_compact + 1) as u32
     ));
+
     let mut new_sstables_id = Vec::new();
 
     while iterator.has_next() {
@@ -40,6 +46,14 @@ pub(crate) fn start_simple_leveled_compaction(
 
         match transaction_manager.on_write_key(&key) {
             Ok(_) => {
+                let value = iterator.value().clone();
+                let is_tombstone = value.eq(TOMBSTONE.as_ref());
+
+                if is_new_level_last_level && is_tombstone {
+                    //We remove tombstones in the last levels compactions
+                    continue;
+                }
+
                 new_sstable_builder.as_mut().unwrap().add_entry(
                     key, Bytes::copy_from_slice(iterator.value())
                 );

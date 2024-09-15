@@ -8,7 +8,7 @@ use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_iterator::StorageIterator;
 
 //This is the iterator that will be exposed to users of the storage engine:
-//This iterator merges the values by the merger functino defined in SimpleDbOptions
+//This iterator merges the values by the merger function defined in SimpleDbOptions
 //And commits the transaction when the iterator is dropped, if the itrerator was created in "standalone" mode
 // which means when the transaction was created only for the iterator, (for example: call to Storage::scan_from or Storage::scan_all)
 pub struct StorageEngineItertor<I: StorageIterator> {

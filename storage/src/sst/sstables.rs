@@ -250,6 +250,10 @@ impl SSTables {
         self.n_current_levels
     }
 
+    pub fn is_last_level(&self, level: usize) -> bool {
+        level + 1  >= self.sstables.len()
+    }
+
     pub fn flush_memtable_to_disk(&self, sstable_builder: SSTableBuilder) -> Result<usize, shared::SimpleDbError> {
         let sstable_id: usize = self.next_sstable_id.fetch_add(1, Relaxed);
         let flush_operation = self.manifest.append_operation(ManifestOperationContent::MemtableFlush(MemtableFlushManifestOperation{
