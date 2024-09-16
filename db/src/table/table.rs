@@ -1,6 +1,6 @@
 use crate::selection::Selection;
 use crate::table::record::Record;
-use crate::table::table_descriptor::{ColumnDescriptor, ColumnType, TableDescriptor};
+use crate::table::table_descriptor::{ColumnDescriptor, TableDescriptor};
 use crate::table::table_iteartor::TableIterator;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
@@ -13,6 +13,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::ColumnType;
 use crate::table::row::Row;
 
 pub struct Table {
@@ -156,7 +157,7 @@ impl Table {
         Ok(())
     }
 
-    pub fn create(
+    pub(crate) fn create(
         table_name: &str,
         options: &Arc<shared::SimpleDbOptions>,
         storage: &Arc<storage::Storage>,
@@ -181,7 +182,7 @@ impl Table {
         }))
     }
 
-    pub fn load_tables(
+    pub(crate) fn load_tables(
         options: &Arc<shared::SimpleDbOptions>,
         storage: &Arc<storage::Storage>,
     ) -> Result<Vec<Arc<Table>>, SimpleDbError> {

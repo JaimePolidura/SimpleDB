@@ -14,7 +14,7 @@ pub struct Row {
 }
 
 impl Row {
-    pub fn create(
+    pub(crate) fn create(
         storage_engine_record: Record,
         selection: &Arc<Vec<ColumnId>>,
         table: &Arc<Table>,

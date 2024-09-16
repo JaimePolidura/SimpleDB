@@ -1,12 +1,11 @@
 use crate::database::database_descriptor::DatabaseDescriptor;
 use crate::table::table::Table;
-use crate::table::table_descriptor::ColumnType;
 use crossbeam_skiplist::SkipMap;
-use shared::SimpleDbError::{ColumnNameAlreadyDefined, NotPrimaryColumnDefined, OnlyOnePrimaryColumnAllowed, TableAlreadyExists};
+use shared::SimpleDbError::TableAlreadyExists;
 use shared::{SimpleDbError, SimpleDbOptions};
-use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use storage::transactions::transaction::Transaction;
+use crate::ColumnType;
 
 pub struct Database {
     name: String,
@@ -70,7 +69,7 @@ impl Database {
         &self.name
     }
 
-    pub fn create(
+    pub(crate) fn create(
         options: &Arc<SimpleDbOptions>,
         database_name: &str
     ) -> Result<Arc<Database>, SimpleDbError> {
@@ -83,7 +82,7 @@ impl Database {
         }))
     }
 
-    pub fn load_database(
+    pub(crate) fn load_database(
         database_options: &Arc<SimpleDbOptions>,
         database_name: &str
     ) -> Result<Arc<Database>, SimpleDbError> {

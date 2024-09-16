@@ -8,7 +8,7 @@ use std::sync::Arc;
 //Contains a mapping between storage engine's keyspace IDs and table names
 //This file is stored in binary format
 //There is one file of these for each database
-pub struct DatabaseDescriptor {
+pub(crate) struct DatabaseDescriptor {
     keyspace_id_by_table_name: SkipMap<String, shared::KeyspaceId>,
     file: SimpleDbFile,
 }

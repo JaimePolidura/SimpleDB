@@ -26,6 +26,11 @@ pub enum SSTableCorruptedPart {
 }
 
 pub enum SimpleDbError {
+    //SQL Parsing
+    UnexpectedToken(String, usize),
+    MalformedString(usize),
+    MalformedNumber(usize),
+
     //General db layer errors
     ColumnNotFound(types::KeyspaceId, String),
     TableNotFound(String),
@@ -226,6 +231,15 @@ impl Debug for SimpleDbError {
             }
             SimpleDbError::CannotWriteDatabaseDescriptor(io_error) => {
                 write!(f, "Cannot write to database descriptor. IO Error: {}", io_error)
+            }
+            SimpleDbError::UnexpectedToken(string, index) => {
+                write!(f, "Unknown token in query {} at position {}", string, index)
+            }
+            SimpleDbError::MalformedString(index) => {
+                write!(f, "Malformed string at index: {}", index)
+            }
+            SimpleDbError::MalformedNumber(index) => {
+                write!(f, "Malformed number at index: {}", index)
             }
         }
     }

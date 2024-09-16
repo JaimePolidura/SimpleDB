@@ -25,7 +25,7 @@ pub struct TableIterator {
 }
 
 impl TableIterator {
-    pub fn create(
+    pub(crate) fn create(
         simple_db_storage_iterator: SimpleDbStorageIterator,
         selection: Vec<ColumnId>, //Columns ID to select
         table: Arc<Table>

@@ -1,5 +1,6 @@
 pub mod table;
-pub mod table_descriptor;
-pub mod record;
-mod table_iteartor;
-mod row;
+pub(crate) mod table_descriptor;
+pub(crate) mod record;
+pub(crate) mod table_iteartor;
+pub mod row;
+pub mod column_type;
