@@ -4,6 +4,7 @@ use shared::ColumnId;
 //Represents the row data stored in the storage engine,
 //This might represent an incomplete set of data
 //The binary format is: |Column ID (u16)| Column value length (u32) | Column values |...
+#[derive(Clone)]
 pub struct Record {
     pub(crate) data_records: Vec<(ColumnId, Bytes)>
 }
@@ -22,6 +23,16 @@ impl Record {
                 }
             }
         }
+    }
+
+    pub fn get_value(&self, column_id_lookup: ColumnId) -> Option<&Bytes> {
+        for (current_column_id, current_column_value) in &self.data_records {
+            if *current_column_id == column_id_lookup {
+                return Some(current_column_value);
+            }
+        }
+
+        None
     }
 
     fn get_column_id_index(&self, column_id_lookup: ColumnId) -> Option<usize> {

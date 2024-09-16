@@ -55,8 +55,9 @@ impl TableIterator {
         }
 
         let row_in_reconstruction = self.rows_in_reconstruction.pop().unwrap();
+        let key_bytes = row_in_reconstruction.key.clone();
         let row_record_reconstructed = row_in_reconstruction.build();
-        self.current_row = Some(Row::create(row_record_reconstructed, &self.selection, &self.table));
+        self.current_row = Some(Row::create(row_record_reconstructed, &self.selection, &self.table, key_bytes));
 
         true
     }

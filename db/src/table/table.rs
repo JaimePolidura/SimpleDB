@@ -1,19 +1,19 @@
-use std::cell::UnsafeCell;
-use std::collections::HashSet;
-use std::hash::Hasher;
+use crate::selection::Selection;
+use crate::table::record::Record;
 use crate::table::table_descriptor::{ColumnDescriptor, ColumnType, TableDescriptor};
-use shared::{ColumnId, SimpleDbError, SimpleDbFileWrapper};
-use std::sync::Arc;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::Relaxed;
+use crate::table::table_iteartor::TableIterator;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::{ColumnNameAlreadyDefined, NotPrimaryColumnDefined, OnlyOnePrimaryColumnAllowed};
-use storage::SimpleDbStorageIterator;
+use shared::{ColumnId, SimpleDbError, SimpleDbFileWrapper};
+use std::cell::UnsafeCell;
+use std::collections::HashSet;
+use std::hash::Hasher;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::Relaxed;
+use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use crate::selection::Selection;
-use crate::table::record::Record;
-use crate::table::table_iteartor::TableIterator;
+use crate::table::row::Row;
 
 pub struct Table {
     pub(crate) storage_keyspace_id: shared::KeyspaceId,
@@ -38,6 +38,29 @@ impl Table {
             self.add_column(&column_name, column_type, is_primary)?
         }
         Ok(())
+    }
+
+    pub fn get_by_primary_column(
+        self: Arc<Self>,
+        key: &Bytes,
+        transaction: &Transaction,
+        selection: Selection
+    ) -> Result<Option<Row>, SimpleDbError> {
+        let mut table_iterator = TableIterator::create(
+            self.storage.scan_from_key_with_transaction(transaction, self.storage_keyspace_id, key)?,
+            self.selection_to_columns_id(selection)?,
+            self.clone()
+        );
+        if !table_iterator.next() {
+            return Ok(None);
+        }
+
+        let row = table_iterator.row();
+        if row.get_primary_column_value().eq(key) {
+            Ok(Some(row.clone()))
+        } else {
+            Ok(None)
+        }
     }
 
     pub fn scan_from_key(
