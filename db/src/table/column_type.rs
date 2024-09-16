@@ -10,7 +10,7 @@ pub enum ColumnType {
     F32,
     F64,
     BOOLEAN,
-    TEXT,
+    VARCHAR,
     DATE,
     BLOB
 }
@@ -29,7 +29,7 @@ impl ColumnType {
             ColumnType::F32 => 9,
             ColumnType::F64 => 10,
             ColumnType::BOOLEAN => 11,
-            ColumnType::TEXT => 12,
+            ColumnType::VARCHAR => 12,
             ColumnType::DATE => 13,
             ColumnType::BLOB => 14,
         }
@@ -48,7 +48,7 @@ impl ColumnType {
             9 =>  Ok(ColumnType::F32),
             10 => Ok(ColumnType::F64) ,
             11 => Ok(ColumnType::BOOLEAN),
-            12 => Ok(ColumnType::TEXT),
+            12 => Ok(ColumnType::VARCHAR),
             13 => Ok(ColumnType::DATE),
             14 => Ok(ColumnType::BLOB),
             _ => Err((value))
