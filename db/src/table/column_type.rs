@@ -1,3 +1,4 @@
+#[derive(Debug, Clone)]
 pub enum ColumnType {
     I8,
     U8,

@@ -3,6 +3,7 @@ pub mod selection;
 
 mod database;
 mod table;
+mod sql;
 
 pub use simple_db::SimpleDb;
 pub use database::database::Database;

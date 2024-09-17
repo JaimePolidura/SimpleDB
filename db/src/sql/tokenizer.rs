@@ -1,67 +1,38 @@
-use db::ColumnType;
-use shared::SimpleDbError::{MalformedNumber, MalformedString, UnexpectedToken};
 use std::str::FromStr;
+use shared::SimpleDbError::{MalformedNumber, MalformedString, IllegalToken};
+use shared::TokenLocation;
+use crate::ColumnType;
+use crate::sql::token::{Token};
 
-pub enum Token {
-    OpenParen, // "("
-    CloseParen, // ")"
-    Comma, // ","
-    Plus, // "+"
-    Star, // "*"
-    Minus, // "-"
-    Slash, // "/"
-    Less, // "<"
-    Equal, // "="
-    EqualEqual, // "=="
-    Greater, // ">"
-    GreaterEqual, // ">="
-    LessEqual, // "<="
-    NotEqual, // "!="
-    Seimicolon,
-
-    And,
-    Or,
-    Select,
-    Where,
-    From,
-    Create,
-    Table,
-    Limit,
-    Update,
-    Delete,
-    Insert,
-    Values,
-    Into,
-    Set,
-    Primary,
-    Key,
-    StartTransaction, // "START_TRANSACTION"
-    Rollback, // "ROLLBACK"
-    Commit, // "COMMIT"
-
-    Identifier(String), //Ohter identifier, like table or column names
-    String(String), // "some text"
-    NumberI64(i64), // any number
-    NumberF64(f64), // any number
-    ColumnType(db::ColumnType),
-
-    EOF
-}
-
-pub struct Toknizer {
+pub struct Tokenizer {
     string: String,
     //This will point to the next character to scan before calling next_token()
     next: usize,
+
+    current_line: usize,
+    current_column_index: usize,
+
+    last_token: Option<Token>,
 }
 
-impl Toknizer {
+impl Tokenizer {
     pub fn create(
         string: String,
-    ) -> Toknizer {
-        Toknizer { string, next: 0 }
+    ) -> Tokenizer {
+        Tokenizer { string, next: 0, current_line: 1, current_column_index: 0, last_token: None }
+    }
+
+    pub fn last_token(&self) -> &Token {
+        self.last_token.as_ref().unwrap()
     }
 
     pub fn next_token(&mut self) -> Result<Token, shared::SimpleDbError> {
+        let next_token = self.get_token()?;
+        self.last_token = Some(next_token.clone());
+        Ok(next_token)
+    }
+
+    fn get_token(&mut self) -> Result<Token, shared::SimpleDbError> {
         self.skip_whitespaces();
 
         if self.end_reached() {
@@ -88,7 +59,7 @@ impl Toknizer {
             '<' => self.match_char_or('=', Token::LessEqual, Token::LessEqual),
             '=' => self.match_char_or('=', Token::EqualEqual, Token::Equal),
             '!' => self.match_char_or_error('=', Token::NotEqual),
-            _ => Err(UnexpectedToken(self.string.clone(), self.next))
+            _ => Err(IllegalToken(self.current_location(), String::from("Unexpected token")))
         }
     }
 
@@ -291,10 +262,15 @@ impl Toknizer {
             }
 
             match self.string.chars().nth(self.next).unwrap() {
-                ' ' | '\t' | '\n' | '\r' => {
+                ' ' | '\t' | '\r' => {
+                    self.current_column_index += 1;
                     self.next += 1;
-                    continue;
                 },
+                '\n' => {
+                    self.next += 1;
+                    self.current_line += 1;
+                    self.current_column_index = 0;
+                }
                 _ => break,
             }
         }
@@ -318,7 +294,7 @@ impl Toknizer {
         if self.advance_if_next_char_eq(next) {
             Ok(true_token)
         } else {
-            Err(UnexpectedToken(self.current().to_string(), self.next))
+            Err(IllegalToken(self.current_location(), String::from("Unknown token")))
         }
     }
 
@@ -346,6 +322,7 @@ impl Toknizer {
             Ok(true_token)
         } else {
             self.next -= adjust_other_identifier;
+            self.current_column_index -= adjust_other_identifier;
             Ok(self.other_identifier())
         }
     }
@@ -370,6 +347,7 @@ impl Toknizer {
         string_to_match: &str,
     ) -> bool {
         if self.is_next_string_eq(string_to_match) {
+            self.current_column_index += string_to_match.len();
             self.next += string_to_match.len();
             true
         } else {
@@ -386,8 +364,14 @@ impl Toknizer {
         }
     }
 
+    fn advance_backward(&mut self) {
+        self.current_column_index -= 1;
+        self.next -= 1;
+    }
+
     fn advance(&mut self) -> char {
         let current = self.current();
+        self.current_column_index += 1;
         self.next += 1;
         current
     }
@@ -403,16 +387,24 @@ impl Toknizer {
     fn char_at(&self, index: usize) -> char {
         self.string.chars().nth(index).unwrap()
     }
+
+    pub fn current_location(&self) -> TokenLocation {
+        TokenLocation {
+            column_index: self.current_column_index,
+            line: self.current_line,
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use db::ColumnType;
-    use crate::token::{Token, Toknizer};
+    use crate::ColumnType;
+    use crate::sql::token::Token;
+    use crate::sql::tokenizer::Tokenizer;
 
     #[test]
     fn select() {
-        let mut tokenizer = Toknizer::create(String::from(
+        let mut tokenizer = Tokenizer::create(String::from(
             "SELECT * FROM personas WHERE nombre = \"Jaime\" AND dinero >= 100.2 LIMIT 10"
         ));
         let personas = String::from("personas");
@@ -420,26 +412,26 @@ mod test {
         let dinero = String::from("dinero");
         let jaime = String::from("Jaime");
 
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Select));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Star));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::From));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(personas)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Where));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(nombre)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Equal));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::String(jaime)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::And));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(dinero)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::GreaterEqual));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::NumberF64(100.2)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Limit));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::NumberI64(10)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::EOF));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Select));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Star));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::From));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(personas)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Where));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(nombre)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Equal));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::String(jaime)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::And));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(dinero)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::GreaterEqual));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::NumberF64(100.2)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Limit));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::NumberI64(10)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::EOF));
     }
 
     #[test]
     fn insert() {
-        let mut tokenizer = Toknizer::create(String::from(
+        let mut tokenizer = Tokenizer::create(String::from(
             "INSERT INTO personas (id, nombre, dinero) VALUES (1, \"Jaime\", 100);"
         ));
         let personas = String::from("personas");
@@ -448,72 +440,72 @@ mod test {
         let jaime = String::from("Jaime");
         let id = String::from("id");
 
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Insert));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Into));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(personas)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::OpenParen));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(id)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Comma));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(nombre)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Comma));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(dinero)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::CloseParen));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Values));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::OpenParen));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::NumberI64(1)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Comma));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::String(jaime)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Comma));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::NumberI64(100)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::CloseParen));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Seimicolon));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::EOF));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Insert));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Into));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(personas)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::OpenParen));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(id)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Comma));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(nombre)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Comma));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(dinero)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::CloseParen));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Values));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::OpenParen));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::NumberI64(1)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Comma));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::String(jaime)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Comma));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::NumberI64(100)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::CloseParen));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Seimicolon));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::EOF));
     }
 
     #[test]
     fn delete() {
-        let mut tokenizer = Toknizer::create(String::from(
+        let mut tokenizer = Tokenizer::create(String::from(
             "DELETE FROM personas WHERE id = 1"
         ));
         let personas = String::from("personas");
         let dinero = String::from("dinero");
         let id = String::from("id");
 
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Delete));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::From));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(personas)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Where));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(id)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Equal));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::NumberI64(1)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::EOF));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Delete));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::From));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(personas)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Where));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(id)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Equal));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::NumberI64(1)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::EOF));
     }
 
     #[test]
     fn update() {
-        let mut tokenizer = Toknizer::create(String::from(
+        let mut tokenizer = Tokenizer::create(String::from(
             "UPDATE personas SET dinero = 101 WHERE id = 1"
         ));
         let personas = String::from("personas");
         let dinero = String::from("dinero");
         let id = String::from("id");
 
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Update));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(personas)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Set));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(dinero)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Equal));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::NumberI64(101)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Where));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(id)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Equal));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::NumberI64(1)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::EOF));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Update));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(personas)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Set));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(dinero)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Equal));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::NumberI64(101)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Where));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(id)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Equal));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::NumberI64(1)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::EOF));
     }
 
     #[test]
     fn create_table() {
-        let mut tokenizer = Toknizer::create(String::from(
+        let mut tokenizer = Tokenizer::create(String::from(
             "CREATE TABLE personas (
                 id u64 PRIMARY KEY,
                 nombre VARCHAR,
@@ -526,26 +518,26 @@ mod test {
         let jaime = String::from("Jaime");
         let id = String::from("id");
 
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Create));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Table));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(personas)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::OpenParen));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Create));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Table));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(personas)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::OpenParen));
 
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(id)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::ColumnType(ColumnType::U64)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Primary));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Key));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Comma));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(id)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::ColumnType(ColumnType::U64)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Primary));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Key));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Comma));
 
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(nombre)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::ColumnType(ColumnType::VARCHAR)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Comma));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(nombre)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::ColumnType(ColumnType::VARCHAR)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Comma));
 
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Identifier(dinero)));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::ColumnType(ColumnType::F32)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(dinero)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::ColumnType(ColumnType::F32)));
 
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::CloseParen));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::Seimicolon));
-        assert!(matches!(tokenizer.next_token().unwrap(), Token::EOF));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::CloseParen));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Seimicolon));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::EOF));
     }
 }

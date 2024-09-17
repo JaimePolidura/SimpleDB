@@ -1,5 +1,6 @@
 use crate::types;
 use std::fmt::{Debug, Formatter};
+use std::panic::Location;
 use std::path::PathBuf;
 use std::string::FromUtf8Error;
 
@@ -25,9 +26,14 @@ pub enum SSTableCorruptedPart {
     Block(usize), //Block ID
 }
 
+pub struct TokenLocation {
+    pub line: usize, //Starts form 1
+    pub column_index: usize, //Starts from 0
+}
+
 pub enum SimpleDbError {
     //SQL Parsing
-    UnexpectedToken(String, usize),
+    IllegalToken(TokenLocation, String),
     MalformedString(usize),
     MalformedNumber(usize),
 
@@ -232,14 +238,14 @@ impl Debug for SimpleDbError {
             SimpleDbError::CannotWriteDatabaseDescriptor(io_error) => {
                 write!(f, "Cannot write to database descriptor. IO Error: {}", io_error)
             }
-            SimpleDbError::UnexpectedToken(string, index) => {
-                write!(f, "Unknown token in query {} at position {}", string, index)
-            }
             SimpleDbError::MalformedString(index) => {
                 write!(f, "Malformed string at index: {}", index)
             }
             SimpleDbError::MalformedNumber(index) => {
                 write!(f, "Malformed number at index: {}", index)
+            }
+            SimpleDbError::IllegalToken(location, message) => {
+                write!(f, "Unexpected token at line {} and index {} Message: {}", location.line, location.column_index, message)
             }
         }
     }
