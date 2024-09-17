@@ -35,6 +35,9 @@ pub enum Token {
     Set,
     Primary,
     Key,
+    StartTransaction, // "START_TRANSACTION"
+    Rollback, // "ROLLBACK"
+    Commit, // "COMMIT"
 
     Identifier(String), //Ohter identifier, like table or column names
     String(String), // "some text"
@@ -123,9 +126,19 @@ impl Toknizer {
             'K' => self.match_string_or_other_identifier("EY", Token::Key, 1),
             'P' => self.match_string_or_other_identifier("RIMARY", Token::Primary, 1),
             'O' => self.match_string_or_other_identifier("R", Token::Or, 1),
+            'R' => {
+                if self.advance_if_next_string_eq("OLLBACK") {
+                    Ok(Token::Rollback)
+                } else {
+                    self.next -= 1;
+                    Ok(self.other_identifier())
+                }
+            }
             'S' => {
                 if self.advance_if_next_string_eq("ELECT") {
                     Ok(Token::Select)
+                } else if self.advance_if_next_string_eq("TART_TRANSACTION") {
+                    Ok(Token::StartTransaction)
                 } else if self.advance_if_next_string_eq("ET") {
                     Ok(Token::Set)
                 } else {
@@ -146,7 +159,16 @@ impl Toknizer {
                     Ok(self.other_identifier())
                 }
             },
-            'C' => self.match_string_or_other_identifier("REATE", Token::Create, 1),
+            'C' => {
+                if self.advance_if_next_string_eq("REATE") {
+                    Ok(Token::Create)
+                } else if self.advance_if_next_string_eq("OMMIT") {
+                    Ok(Token::Commit)
+                } else {
+                    self.next -= 1;
+                    Ok(self.other_identifier())
+                }
+            },
             'T' => {
                 if self.advance_if_next_string_eq("ABLE") {
                     Ok(Token::Table)
