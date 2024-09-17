@@ -34,8 +34,7 @@ pub struct TokenLocation {
 pub enum SimpleDbError {
     //SQL Parsing
     IllegalToken(TokenLocation, String),
-    MalformedString(usize),
-    MalformedNumber(usize),
+    MalformedQuery(String),
 
     //General db layer errors
     ColumnNotFound(types::KeyspaceId, String),
@@ -96,7 +95,7 @@ pub enum SimpleDbError {
     CannotWriteTransactionLogEntry(std::io::Error),
     CannotReadTransactionLogEntries(std::io::Error),
     CannotDecodeTransactionLogEntry(DecodeError),
-    CannotResetTransacionLog(std::io::Error),
+    CannotResetTransactionLog(std::io::Error),
 
     //This error cannot be returned to the final user,
     //It will only be used internally in the storage engine code
@@ -184,7 +183,7 @@ impl Debug for SimpleDbError {
             SimpleDbError::CannotDecodeTransactionLogEntry(decode_error) => {
                 write!(f, "Cannot decode transaction log entry. Error: {}", decode_error_to_message(&decode_error))
             }
-            SimpleDbError::CannotResetTransacionLog(io_error) => {
+            SimpleDbError::CannotResetTransactionLog(io_error) => {
                 write!(f, "Cannot reset transaction log. Error: {}", io_error)
             }
             SimpleDbError::KeyspaceNotFound(keyspace_id) => {
@@ -238,14 +237,11 @@ impl Debug for SimpleDbError {
             SimpleDbError::CannotWriteDatabaseDescriptor(io_error) => {
                 write!(f, "Cannot write to database descriptor. IO Error: {}", io_error)
             }
-            SimpleDbError::MalformedString(index) => {
-                write!(f, "Malformed string at index: {}", index)
-            }
-            SimpleDbError::MalformedNumber(index) => {
-                write!(f, "Malformed number at index: {}", index)
-            }
             SimpleDbError::IllegalToken(location, message) => {
                 write!(f, "Unexpected token at line {} and index {} Message: {}", location.line, location.column_index, message)
+            }
+            SimpleDbError::MalformedQuery(message) => {
+                write!(f, "Malformed query: {}", message)
             }
         }
     }

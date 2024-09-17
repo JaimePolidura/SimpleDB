@@ -72,7 +72,7 @@ impl TransactionLog {
             .collect();
 
         log_file.save_write(&new_entries_encoded)
-            .map_err(|e| shared::SimpleDbError::CannotResetTransacionLog(e));
+            .map_err(|e| shared::SimpleDbError::CannotResetTransactionLog(e));
 
         Ok(())
     }

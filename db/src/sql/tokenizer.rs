@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use shared::SimpleDbError::{MalformedNumber, MalformedString, IllegalToken};
+use shared::SimpleDbError::{IllegalToken};
 use shared::TokenLocation;
 use crate::ColumnType;
 use crate::sql::token::{Token};
@@ -53,7 +53,7 @@ impl Tokenizer {
             '-' => Ok(Token::Minus),
             '*' => Ok(Token::Star),
             '/' => Ok(Token::Slash),
-            ';' => Ok(Token::Seimicolon),
+            ';' => Ok(Token::Semicolon),
             '"' => self.string(),
             '>' => self.match_char_or('=', Token::GreaterEqual, Token::Greater),
             '<' => self.match_char_or('=', Token::LessEqual, Token::LessEqual),
@@ -71,7 +71,7 @@ impl Tokenizer {
         }
 
         if self.end_reached() || self.current() != '"' {
-            return Err(MalformedString(self.next))
+            return Err(IllegalToken(self.current_location(), String::from("Strings should end with '\"\'")));
         }
 
         //Get rid of "
@@ -121,6 +121,8 @@ impl Tokenizer {
             'F' => {
                 if self.advance_if_next_string_eq("ROM") {
                     Ok(Token::From)
+                } else if self.advance_if_next_string_eq("ALSE") {
+                    Ok(Token::False)
                 } else if self.advance_if_next_string_eq("32") {
                     Ok(Token::ColumnType(ColumnType::F32))
                 } else if self.advance_if_next_string_eq("64") {
@@ -143,6 +145,8 @@ impl Tokenizer {
             'T' => {
                 if self.advance_if_next_string_eq("ABLE") {
                     Ok(Token::Table)
+                } else if self.advance_if_next_string_eq("RUE") {
+                    Ok(Token::True)
                 } else {
                     self.next -= 1;
                     Ok(self.other_identifier())
@@ -245,12 +249,12 @@ impl Tokenizer {
         if has_decimals {
             match f64::from_str(number_string) {
                 Ok(f64_value) => Ok(Token::NumberF64(f64_value)),
-                Err(e) => Err(MalformedNumber(self.next - 1)),
+                Err(e) => Err(IllegalToken(self.current_location(), String::from("Illegal number format"))),
             }
         } else {
             match number_string.parse::<i64>() {
                 Ok(i64_value) => Ok(Token::NumberI64(i64_value)),
-                Err(_) => Err(MalformedNumber(self.next - 1)),
+                Err(_) => Err(IllegalToken(self.current_location(), String::from("Illegal number format"))),
             }
         }
     }
@@ -458,7 +462,7 @@ mod test {
         assert!(matches!(tokenizer.get_token().unwrap(), Token::Comma));
         assert!(matches!(tokenizer.get_token().unwrap(), Token::NumberI64(100)));
         assert!(matches!(tokenizer.get_token().unwrap(), Token::CloseParen));
-        assert!(matches!(tokenizer.get_token().unwrap(), Token::Seimicolon));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Semicolon));
         assert!(matches!(tokenizer.get_token().unwrap(), Token::EOF));
     }
 
@@ -537,7 +541,7 @@ mod test {
         assert!(matches!(tokenizer.get_token().unwrap(), Token::ColumnType(ColumnType::F32)));
 
         assert!(matches!(tokenizer.get_token().unwrap(), Token::CloseParen));
-        assert!(matches!(tokenizer.get_token().unwrap(), Token::Seimicolon));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::Semicolon));
         assert!(matches!(tokenizer.get_token().unwrap(), Token::EOF));
     }
 }

@@ -33,9 +33,9 @@ pub struct DeleteStatement {
 }
 
 pub struct InsertStatement {
-    table_name: String,
+    pub(crate) table_name: String,
     //Column name, Value
-    values: Vec<(String, Bytes)>,
+    pub(crate) values: Vec<(String, Bytes)>,
 }
 
 pub struct CreateTableStatement {

@@ -13,9 +13,9 @@ pub enum ColumnType {
     F32,
     F64,
     BOOLEAN,
-    VARCHAR,
-    DATE,
-    BLOB
+    VARCHAR, //AKA Strings
+    DATE, //TODO
+    BLOB //TODO
 }
 
 impl ColumnType {

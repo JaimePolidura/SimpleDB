@@ -1,3 +1,4 @@
+use bytes::BufMut;
 use crate::ColumnType;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -16,8 +17,10 @@ pub enum Token {
     GreaterEqual, // ">="
     LessEqual, // "<="
     NotEqual, // "!="
-    Seimicolon,
+    Semicolon,
 
+    True,
+    False,
     And,
     Or,
     Select,
@@ -45,4 +48,32 @@ pub enum Token {
     ColumnType(ColumnType),
 
     EOF
+}
+
+impl Token {
+    pub fn convert_to_bytes(&self) -> Result<bytes::Bytes, ()> {
+        match self {
+            Token::String(string) => Ok(bytes::Bytes::from(string.as_bytes().to_vec())),
+            Token::NumberI64(number) => {
+                let mut bytes: Vec<u8> = Vec::new();
+                bytes.put_i64_le(*number);
+                Ok(bytes::Bytes::from(bytes))
+            },
+            Token::True => Ok(bytes::Bytes::from(vec![0x01])),
+            Token::False => Ok(bytes::Bytes::from(vec![0x00])),
+            Token::NumberF64(number) => {
+                let mut bytes: Vec<u8> = Vec::new();
+                bytes.put_f64_le(*number);
+                Ok(bytes::Bytes::from(bytes))
+            },
+            _ => Err(()) //Cannot cast to bytes
+        }
+    }
+
+    pub fn can_be_converted_to_bytes(&self) -> bool {
+        match self {
+            Token::String(_) | Token::NumberI64(_) | Token::True | Token::False | Token::NumberF64(_) => true,
+            _ => false
+        }
+    }
 }
