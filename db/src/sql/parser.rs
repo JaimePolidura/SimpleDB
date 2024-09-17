@@ -22,17 +22,15 @@ impl Parser {
     pub fn next_statement(
         &mut self,
     ) -> Result<Statement, SimpleDbError> {
-        println!("HOla");
-
         let query = match self.tokenizer.next_token()? {
             Token::Select => self.select(),
             Token::Update => self.update(),
             Token::Delete => self.delete(),
             Token::Insert => self.insert(),
             Token::Create => self.create_table(),
-            Token::StartTransaction => Ok(Statement::StartTransaction),
-            Token::Commit => Ok(Statement::Commit),
-            Token::Rollback => Ok(Statement::Rollback),
+            Token::StartTransaction => self.start_transaction(),
+            Token::Commit => self.commit(),
+            Token::Rollback => self.rollback(),
             _ => Err(SimpleDbError::IllegalToken(self.tokenizer.current_location(), String::from("Unknown keyword")))
         }?;
         self.expect_token(Token::Semicolon)?;
@@ -49,6 +47,21 @@ impl Parser {
 
     fn delete(&mut self) -> Result<Statement, SimpleDbError> {
         todo!()
+    }
+
+    fn commit(&mut self) -> Result<Statement, SimpleDbError> {
+        self.advance()?;
+        Ok(Statement::Commit)
+    }
+
+    fn rollback(&mut self) -> Result<Statement, SimpleDbError> {
+        self.advance()?;
+        Ok(Statement::Rollback)
+    }
+
+    fn start_transaction(&mut self) -> Result<Statement, SimpleDbError> {
+        self.advance()?;
+        Ok(Statement::StartTransaction)
     }
 
     fn insert(&mut self) -> Result<Statement, SimpleDbError> {
@@ -235,6 +248,33 @@ mod test {
     use crate::sql::parser::Parser;
     use crate::sql::statement::Statement;
     use crate::sql::token::Token;
+
+    #[test]
+    fn start_transaction() {
+        let mut parser = Parser::create(String::from(
+            "START_TRANSACTION;"
+        ));
+        let statement = parser.next_statement().unwrap();
+        assert!(matches!(statement, Statement::StartTransaction));
+    }
+
+    #[test]
+    fn rollback() {
+        let mut parser = Parser::create(String::from(
+            "ROLLBACK;"
+        ));
+        let statement = parser.next_statement().unwrap();
+        assert!(matches!(statement, Statement::Rollback));
+    }
+
+    #[test]
+    fn commit() {
+        let mut parser = Parser::create(String::from(
+            "COMMIT;"
+        ));
+        let statement = parser.next_statement().unwrap();
+        assert!(matches!(statement, Statement::Commit));
+    }
 
     #[test]
     fn insert() {
