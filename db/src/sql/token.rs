@@ -1,6 +1,6 @@
 use crate::ColumnType;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     OpenParen, // "("
     CloseParen, // ")"

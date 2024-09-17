@@ -1,4 +1,6 @@
-#[derive(Debug, Clone)]
+use clap::Parser;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ColumnType {
     I8,
     U8,

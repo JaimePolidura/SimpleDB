@@ -7,7 +7,7 @@ pub enum Statement {
     Update(UpdateStatement),
     Delete(DeleteStatement),
     Insert(InsertStatement),
-    CreateTable(CreateStatement),
+    CreateTable(CreateTableStatement),
     StartTransaction,
     Rollback,
     Commit
@@ -38,7 +38,7 @@ pub struct InsertStatement {
     values: Vec<(String, Bytes)>,
 }
 
-pub struct CreateStatement {
+pub struct CreateTableStatement {
     pub(crate) table_name: String,
     //Column name, Column type, is primary
     pub(crate) columns: Vec<(String, ColumnType, bool)>
