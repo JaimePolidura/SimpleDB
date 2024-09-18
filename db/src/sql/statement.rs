@@ -1,6 +1,7 @@
 use bytes::Bytes;
 use crate::ColumnType;
 use crate::selection::Selection;
+use crate::sql::expression::Expression;
 
 pub enum Statement {
     Select(SelectStatement),
@@ -19,9 +20,10 @@ pub enum Limit {
 }
 
 pub struct SelectStatement {
-    table_name: String,
-    selection: Selection,
-    limit: Limit,
+    pub(crate) expression: Expression,
+    pub(crate) selection: Selection,
+    pub(crate) table_name: String,
+    pub(crate) limit: Limit,
 }
 
 pub struct UpdateStatement {

@@ -1,12 +1,13 @@
-use std::cmp::PartialEq;
+use crate::sql::statement::{CreateTableStatement, InsertStatement, Limit, SelectStatement, Statement};
+use crate::sql::token::Token;
+use crate::sql::tokenizer::Tokenizer;
+use crate::ColumnType;
 use bytes::Bytes;
 use shared::SimpleDbError;
 use shared::SimpleDbError::IllegalToken;
-use crate::ColumnType;
-use crate::sql::statement::{CreateTableStatement, InsertStatement, Statement};
-use crate::sql::token::Token;
-use crate::sql::token::Token::Values;
-use crate::sql::tokenizer::Tokenizer;
+use std::cmp::PartialEq;
+use crate::selection::Selection;
+use crate::sql::expression::Expression;
 
 pub struct Parser {
     tokenizer: Tokenizer,
@@ -38,7 +39,47 @@ impl Parser {
     }
 
     fn select(&mut self) -> Result<Statement, SimpleDbError> {
+        self.advance()?;
+        let selection = self.selection()?;
+        self.expect_token(Token::From)?;
+        let table_name = self.identifier()?;
+        let mut limit = Limit::None;
+        let mut expression = Expression::None;
+
+        if self.check_last_token(Token::Limit) {
+            limit = self.limit()?;
+        }
+        if self.check_last_token(Token::Where) {
+            expression = self.expression()?;
+        }
+
+        Ok(Statement::Select(SelectStatement {
+            expression,
+            table_name,
+            selection,
+            limit
+        }))
+    }
+
+    fn expression(&mut self) -> Result<Expression, SimpleDbError> {
         todo!()
+    }
+
+    fn limit(&mut self) -> Result<Limit, SimpleDbError> {
+        if self.check_last_token(Token::Limit) {
+            let limit_value = self.number_i64()?;
+            Ok(Limit::Some(limit_value as usize))
+        } else {
+            Ok(Limit::None)
+        }
+    }
+
+    fn selection(&mut self) -> Result<Selection, SimpleDbError> {
+        if !self.check_last_token(Token::Star) {
+            Ok(Selection::Some(self.column_names()?))
+        } else {
+            Ok(Selection::All)
+        }
     }
 
     fn update(&mut self) -> Result<Statement, SimpleDbError> {
@@ -71,7 +112,7 @@ impl Parser {
         match self.advance()? {
             Token::Identifier(table_name) => {
                 self.expect_token(Token::OpenParen)?;
-                let column_names = self.insert_into_column_names()?;
+                let column_names = self.column_names()?;
                 self.expect_token(Token::Values)?;
                 self.expect_token(Token::OpenParen)?;
                 let column_values = self.insert_into_column_values()?;
@@ -109,7 +150,7 @@ impl Parser {
         Ok(insert_values)
     }
 
-    fn insert_into_column_names(&mut self) -> Result<Vec<String>, SimpleDbError> {
+    fn column_names(&mut self) -> Result<Vec<String>, SimpleDbError> {
         let mut column_names = Vec::new();
         while !self.maybe_expect_token(Token::CloseParen)? {
             match self.advance()? {
@@ -208,6 +249,13 @@ impl Parser {
         }
     }
 
+    fn number_i64(&mut self) -> Result<i64, SimpleDbError> {
+        match self.advance()? {
+            Token::NumberI64(number) => Ok(number),
+            _ => Err(SimpleDbError::IllegalToken(self.tokenizer.current_location(), String::from("Expected number")))
+        }
+    }
+
     fn advance(&mut self) -> Result<Token, SimpleDbError> {
         let last_token = self.tokenizer.last_token().clone();
         self.tokenizer.next_token()?;
@@ -244,10 +292,10 @@ impl Parser {
 
 #[cfg(test)]
 mod test {
-    use crate::ColumnType;
     use crate::sql::parser::Parser;
     use crate::sql::statement::Statement;
     use crate::sql::token::Token;
+    use crate::ColumnType;
 
     #[test]
     fn start_transaction() {

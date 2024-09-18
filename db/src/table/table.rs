@@ -262,7 +262,7 @@ impl Table {
 
                 Ok(column_ids)
             },
-            Selection::All() => {
+            Selection::All => {
                 Ok(self.columns_by_id.iter()
                     .map(|entry| entry.key().clone())
                     .collect())
