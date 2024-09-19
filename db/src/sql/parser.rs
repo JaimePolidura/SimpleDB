@@ -98,7 +98,7 @@ impl Parser {
         };
         let right = self.expression(precedence)?;
 
-        Ok(Expression::Binary(Box::new(left), Box::new(right), binary_operator))
+        Ok(Expression::Binary(binary_operator, Box::new(left), Box::new(right)))
     }
 
     fn parse_prefix(&mut self) -> Result<Expression, SimpleDbError> {
@@ -127,9 +127,9 @@ impl Parser {
 
     fn selection(&mut self) -> Result<Selection, SimpleDbError> {
         if !self.check_last_token(Token::Star) {
-            Ok(Selection::Some(self.column_names()?))
+            Ok(Selection::Some(self.column_names(&Token::From)?))
         } else {
-            self.advance()?;
+            self.advance()?; //Consume *
             Ok(Selection::All)
         }
     }
@@ -164,12 +164,14 @@ impl Parser {
         match self.advance()? {
             Token::Identifier(table_name) => {
                 self.expect_token(Token::OpenParen)?;
-                let column_names = self.column_names()?;
+                let column_names = self.column_names(&Token::CloseParen)?;
+                self.expect_token(Token::CloseParen)?;
                 self.expect_token(Token::Values)?;
                 self.expect_token(Token::OpenParen)?;
-                let column_values = self.insert_into_column_values()?;
-
+                let column_values = self.column_values(&Token::CloseParen)?;
+                self.expect_token(Token::CloseParen)?;
                 let column_name_values = self.create_insert_statement_values(column_names, column_values)?;
+
                 Ok(Statement::Insert(InsertStatement {
                     values: column_name_values,
                     table_name,
@@ -202,15 +204,15 @@ impl Parser {
         Ok(insert_values)
     }
 
-    fn column_names(&mut self) -> Result<Vec<String>, SimpleDbError> {
+    fn column_names(&mut self, terminator_token: &Token) -> Result<Vec<String>, SimpleDbError> {
         let mut column_names = Vec::new();
-        while !self.maybe_expect_token(Token::CloseParen)? {
+        while !self.check_last_token(terminator_token.clone()) {
             match self.advance()? {
                 Token::Identifier(column_name) => column_names.push(column_name),
                 _ => return Err(IllegalToken(self.tokenizer.current_location(), String::from("Expected column name")))
             }
 
-            if !self.check_last_token(Token::CloseParen) {
+            if !self.check_last_token(terminator_token.clone()) {
                 self.expect_token(Token::Comma)?;
             }
         }
@@ -218,9 +220,9 @@ impl Parser {
         Ok(column_names)
     }
 
-    fn insert_into_column_values(&mut self) -> Result<Vec<Bytes>, SimpleDbError> {
+    fn column_values(&mut self, terminator_token: &Token) -> Result<Vec<Bytes>, SimpleDbError> {
         let mut column_values = Vec::new();
-        while !self.maybe_expect_token(Token::CloseParen)? {
+        while !self.check_last_token(terminator_token.clone()) {
             let token = self.advance()?;
             let bytes = token.convert_to_bytes()
                 .or( Err(IllegalToken(
@@ -231,7 +233,7 @@ impl Parser {
 
             column_values.push(bytes);
 
-            if !self.check_last_token(Token::CloseParen) {
+            if !self.check_last_token(terminator_token.clone()) {
                 self.expect_token(Token::Comma)?;
             }
         }
@@ -357,18 +359,82 @@ impl Parser {
 #[cfg(test)]
 mod test {
     use crate::sql::parser::Parser;
-    use crate::sql::statement::Statement;
+    use crate::sql::statement::{Limit, Statement};
     use crate::sql::token::Token;
     use crate::ColumnType;
+    use crate::selection::Selection;
+    use crate::sql::expression::{BinaryOperator, Expression};
 
     #[test]
-    fn select() {
+    fn select_with_expression_with_limit() {
+        let mut parser = Parser::create(String::from("SELECT dinero FROM personas WHERE dinero > 10 LIMIT 10;"));
+        let statement = parser.next_statement().unwrap();
+        assert!(matches!(statement, Statement::Select(_)));
+
+        let select_statement = match statement {
+            Statement::Select(s) => s, _ => panic!(),
+        };
+        let expected_column_names = vec!["dinero"];
+        assert!(matches!(select_statement.selection, Selection::Some(expected_column_names)));
+        assert!(matches!(select_statement.limit, Limit::Some(10)));
+        assert_eq!(select_statement.table_name, "personas");
+        assert_eq!(select_statement.expression, Expression::Binary(
+            BinaryOperator::Greater,
+            Box::new(Expression::Identifier(String::from("dinero"))),
+            Box::new(Expression::NumberI64(10)),
+        ));
+    }
+
+    #[test]
+    fn select_without_expression_with_limit() {
+        let mut parser = Parser::create(String::from("SELECT nombre, dinero FROM personas LIMIT 10;"));
+        let statement = parser.next_statement().unwrap();
+
+        assert!(matches!(statement, Statement::Select(_)));
+        let select_statement = match statement {
+            Statement::Select(s) => s, _ => panic!(),
+        };
+        let expected_column_names = vec!["nombre", "dinero"];
+        assert!(matches!(select_statement.selection, Selection::Some(expected_column_names)));
+        assert!(matches!(select_statement.expression, Expression::None));
+        assert!(matches!(select_statement.limit, Limit::Some(10)));
+        assert_eq!(select_statement.table_name, "personas");
+    }
+
+    #[test]
+    fn select_with_expression_without_limit() {
         let mut parser = Parser::create(String::from(
             "SELECT * FROM personas WHERE dinero >= 1 + 2 AND nombre == \"Jaime\";"
         ));
         let statement = parser.next_statement().unwrap();
 
         assert!(matches!(statement, Statement::Select(_)));
+        let select_statement = match statement {
+            Statement::Select(s) => s, _ => panic!(),
+        };
+        assert!(matches!(select_statement.selection, Selection::All));
+        assert!(matches!(select_statement.limit, Limit::None));
+        assert_eq!(select_statement.table_name, "personas");
+
+        let expression = select_statement.expression;
+
+        assert_eq!(expression, Expression::Binary(
+            BinaryOperator::And,
+            Box::new(Expression::Binary(
+                BinaryOperator::GreaterEqual,
+                Box::new(Expression::Identifier(String::from("dinero"))),
+                Box::new(Expression::Binary(
+                    BinaryOperator::Add,
+                    Box::new(Expression::NumberI64(1)),
+                    Box::new(Expression::NumberI64(2)),
+                )))
+            ),
+            Box::new(Expression::Binary(
+                BinaryOperator::Equal,
+                Box::new(Expression::Identifier(String::from("nombre"))),
+                Box::new(Expression::String(String::from("Jaime"))),
+            ))
+        ));
     }
 
     #[test]

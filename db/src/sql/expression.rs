@@ -1,9 +1,8 @@
-use crate::sql::token::Token;
-
+#[derive(Debug, PartialEq)]
 pub enum Expression {
     None,
 
-    Binary(Box<Expression>, Box<Expression>, BinaryOperator),
+    Binary(BinaryOperator, Box<Expression>, Box<Expression>),
     Unary(UnaryOperator, Box<Expression>),
     String(String),
     Identifier(String),
@@ -12,11 +11,13 @@ pub enum Expression {
     NumberI64(i64),
 }
 
+#[derive(Debug, PartialEq)]
 pub enum UnaryOperator {
     Plus,
     Minus,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum BinaryOperator {
     Add,
     Subtract,
