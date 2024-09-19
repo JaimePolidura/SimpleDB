@@ -19,7 +19,7 @@ pub enum Token {
     NotEqual, // "!="
     Semicolon,
 
-    True,
+    True, //15
     False,
     And,
     Or,

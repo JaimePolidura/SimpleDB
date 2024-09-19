@@ -48,11 +48,14 @@ impl Parser {
         let mut limit = Limit::None;
         let mut expression = Expression::None;
 
-        if self.check_last_token(Token::Limit) {
+        if self.maybe_expect_token(Token::Limit)? {
             limit = self.limit()?;
         }
-        if self.check_last_token(Token::Where) {
+        if self.maybe_expect_token(Token::Where)? {
             expression = self.expression(0)?;
+        }
+        if self.maybe_expect_token(Token::Limit)? {
+            limit = self.limit()?;
         }
 
         Ok(Statement::Select(SelectStatement {
@@ -80,7 +83,7 @@ impl Parser {
             Token::And => BinaryOperator::And,
             Token::Or => BinaryOperator::Or,
             Token::NotEqual => BinaryOperator::NotEqual,
-            Token::Equal => BinaryOperator::Equal,
+            Token::EqualEqual => BinaryOperator::Equal,
             Token::Less => BinaryOperator::Less,
             Token::LessEqual => BinaryOperator::LessEqual,
             Token::Greater => BinaryOperator::Greater,
@@ -90,7 +93,7 @@ impl Parser {
             Token::Star => BinaryOperator::Multiply,
             Token::Minus => BinaryOperator::Subtract,
             _ => return Err(IllegalToken(
-                self.tokenizer.current_location(), String::from("Cannot use as a binary operation")
+                self.tokenizer.current_location(), String::from("Cannot use it as a binary operator")
             ))
         };
         let right = self.expression(precedence)?;
@@ -118,18 +121,15 @@ impl Parser {
     }
 
     fn limit(&mut self) -> Result<Limit, SimpleDbError> {
-        if self.check_last_token(Token::Limit) {
-            let limit_value = self.number_i64()?;
-            Ok(Limit::Some(limit_value as usize))
-        } else {
-            Ok(Limit::None)
-        }
+        let limit_value = self.number_i64()?;
+        Ok(Limit::Some(limit_value as usize))
     }
 
     fn selection(&mut self) -> Result<Selection, SimpleDbError> {
         if !self.check_last_token(Token::Star) {
             Ok(Selection::Some(self.column_names()?))
         } else {
+            self.advance()?;
             Ok(Selection::All)
         }
     }
@@ -304,7 +304,7 @@ impl Parser {
     fn number_i64(&mut self) -> Result<i64, SimpleDbError> {
         match self.advance()? {
             Token::NumberI64(number) => Ok(number),
-            _ => Err(SimpleDbError::IllegalToken(self.tokenizer.current_location(), String::from("Expected number")))
+            _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Expected number")))
         }
     }
 
@@ -345,9 +345,8 @@ impl Parser {
         match token {
             Token::NumberI64(_) | Token::NumberF64(_) | Token::Identifier(_) | Token::String(_) => 0,
             Token::Or => 1,
-
             Token::And => 2,
-            Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual => 3,
+            Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual | Token::EqualEqual | Token::NotEqual => 3,
             Token::Plus | Token::Minus => 4,
             Token::Slash | Token::Star => 5,
             _ => 0
@@ -361,6 +360,16 @@ mod test {
     use crate::sql::statement::Statement;
     use crate::sql::token::Token;
     use crate::ColumnType;
+
+    #[test]
+    fn select() {
+        let mut parser = Parser::create(String::from(
+            "SELECT * FROM personas WHERE dinero >= 1 + 2 AND nombre == \"Jaime\";"
+        ));
+        let statement = parser.next_statement().unwrap();
+
+        assert!(matches!(statement, Statement::Select(_)));
+    }
 
     #[test]
     fn start_transaction() {
