@@ -7,7 +7,9 @@ use shared::SimpleDbError;
 use shared::SimpleDbError::IllegalToken;
 use std::cmp::PartialEq;
 use crate::selection::Selection;
-use crate::sql::expression::Expression;
+use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
+
+const MAX_PRECEDENCE: u8 = u8::MAX;
 
 pub struct Parser {
     tokenizer: Tokenizer,
@@ -50,7 +52,7 @@ impl Parser {
             limit = self.limit()?;
         }
         if self.check_last_token(Token::Where) {
-            expression = self.expression()?;
+            expression = self.expression(0)?;
         }
 
         Ok(Statement::Select(SelectStatement {
@@ -61,8 +63,58 @@ impl Parser {
         }))
     }
 
-    fn expression(&mut self) -> Result<Expression, SimpleDbError> {
-        todo!()
+    fn expression(&mut self, precedence: u8) -> Result<Expression, SimpleDbError> {
+        let mut expression = self.parse_prefix()?;
+        let mut next_precedence = self.get_precedence(self.tokenizer.last_token());
+
+        while precedence < next_precedence {
+            expression = self.parse_infix(next_precedence, expression)?;
+            next_precedence = self.get_precedence(self.tokenizer.last_token());
+        }
+
+        Ok(expression)
+    }
+
+    fn parse_infix(&mut self, precedence: u8, left: Expression) -> Result<Expression, SimpleDbError> {
+        let binary_operator = match self.advance()? {
+            Token::And => BinaryOperator::And,
+            Token::Or => BinaryOperator::Or,
+            Token::NotEqual => BinaryOperator::NotEqual,
+            Token::Equal => BinaryOperator::Equal,
+            Token::Less => BinaryOperator::Less,
+            Token::LessEqual => BinaryOperator::LessEqual,
+            Token::Greater => BinaryOperator::Greater,
+            Token::GreaterEqual => BinaryOperator::GreaterEqual,
+            Token::Plus => BinaryOperator::Add,
+            Token::Slash => BinaryOperator::Divide,
+            Token::Star => BinaryOperator::Multiply,
+            Token::Minus => BinaryOperator::Subtract,
+            _ => return Err(IllegalToken(
+                self.tokenizer.current_location(), String::from("Cannot use as a binary operation")
+            ))
+        };
+        let right = self.expression(precedence)?;
+
+        Ok(Expression::Binary(Box::new(left), Box::new(right), binary_operator))
+    }
+
+    fn parse_prefix(&mut self) -> Result<Expression, SimpleDbError> {
+        match self.advance()? {
+            Token::False => Ok(Expression::Boolean(false)),
+            Token::True => Ok(Expression::Boolean(true)),
+            Token::NumberF64(num) => Ok(Expression::NumberF64(num)),
+            Token::NumberI64(num) => Ok(Expression::NumberI64(num)),
+            Token::String(string) => Ok(Expression::String(string)),
+            Token::Identifier(identifier) => Ok(Expression::Identifier(identifier)),
+            Token::Minus => Ok(Expression::Unary(UnaryOperator::Minus, Box::new(self.expression(MAX_PRECEDENCE)?))),
+            Token::Plus => Ok(Expression::Unary(UnaryOperator::Plus, Box::new(self.expression(MAX_PRECEDENCE)?))),
+            Token::OpenParen => {
+                let result = self.expression(0)?;
+                self.expect_token(Token::CloseParen)?;
+                Ok(result)
+            },
+            _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Token cannot be parsed")))
+        }
     }
 
     fn limit(&mut self) -> Result<Limit, SimpleDbError> {
@@ -278,7 +330,7 @@ impl Parser {
             self.advance()?;
             Ok(current_token)
         } else {
-            Err(SimpleDbError::IllegalToken(
+            Err(IllegalToken(
                 self.tokenizer.current_location(),
                 format!("Expected token {:?} but found {:?}", expected_token, current_token))
             )
@@ -287,6 +339,19 @@ impl Parser {
 
     fn check_last_token(&mut self, expected_token: Token) -> bool {
         *self.tokenizer.last_token() == expected_token
+    }
+
+    fn get_precedence(&self, token: &Token) -> u8 {
+        match token {
+            Token::NumberI64(_) | Token::NumberF64(_) | Token::Identifier(_) | Token::String(_) => 0,
+            Token::Or => 1,
+
+            Token::And => 2,
+            Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual => 3,
+            Token::Plus | Token::Minus => 4,
+            Token::Slash | Token::Star => 5,
+            _ => 0
+        }
     }
 }
 

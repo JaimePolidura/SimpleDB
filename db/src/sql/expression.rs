@@ -1,3 +1,5 @@
+use crate::sql::token::Token;
+
 pub enum Expression {
     None,
 
@@ -5,8 +7,9 @@ pub enum Expression {
     Unary(UnaryOperator, Box<Expression>),
     String(String),
     Identifier(String),
+    Boolean(bool),
     NumberF64(f64),
-    NumberI64(f64),
+    NumberI64(i64),
 }
 
 pub enum UnaryOperator {
