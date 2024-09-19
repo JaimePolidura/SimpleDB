@@ -31,7 +31,9 @@ pub struct UpdateStatement {
 }
 
 pub struct DeleteStatement {
-    table_name: String,
+    pub(crate) table_name: String,
+    pub(crate) expression: Expression,
+    pub(crate) limit: Limit
 }
 
 pub struct InsertStatement {

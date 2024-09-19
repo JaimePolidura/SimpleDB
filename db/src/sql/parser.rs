@@ -1,4 +1,4 @@
-use crate::sql::statement::{CreateTableStatement, InsertStatement, Limit, SelectStatement, Statement};
+use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Limit, SelectStatement, Statement};
 use crate::sql::token::Token;
 use crate::sql::tokenizer::Tokenizer;
 use crate::ColumnType;
@@ -139,7 +139,28 @@ impl Parser {
     }
 
     fn delete(&mut self) -> Result<Statement, SimpleDbError> {
-        todo!()
+        self.advance()?;
+
+        self.expect_token(Token::From)?;
+        let table_name = self.identifier()?;
+        let mut expression = Expression::None;
+        let mut limit = Limit::None;
+
+        if self.maybe_expect_token(Token::Limit)? {
+            limit = self.limit()?;
+        }
+        if self.maybe_expect_token(Token::Where)? {
+            expression = self.expression(0)?;
+        }
+        if self.maybe_expect_token(Token::Limit)? {
+            limit = self.limit()?;
+        }
+
+        Ok(Statement::Delete(DeleteStatement{
+            table_name,
+            expression,
+            limit,
+        }))
     }
 
     fn commit(&mut self) -> Result<Statement, SimpleDbError> {
@@ -399,6 +420,26 @@ mod test {
         assert!(matches!(select_statement.expression, Expression::None));
         assert!(matches!(select_statement.limit, Limit::Some(10)));
         assert_eq!(select_statement.table_name, "personas");
+    }
+
+    #[test]
+    fn delete_with_expression() {
+        let mut parser = Parser::create(String::from(
+            "DELETE FROM personas WHERE id == 1;"
+        ));
+        let statement = parser.next_statement().unwrap();
+
+        assert!(matches!(statement, Statement::Delete(_)));
+        let select_statement = match statement {
+            Statement::Delete(s) => s, _ => panic!(),
+        };
+        assert!(matches!(select_statement.limit, Limit::None));
+        assert_eq!(select_statement.table_name, "personas");
+        assert_eq!(select_statement.expression, Expression::Binary(
+            BinaryOperator::Equal,
+            Box::new(Expression::Identifier(String::from("id"))),
+            Box::new(Expression::NumberI64(1)),
+        ));
     }
 
     #[test]
