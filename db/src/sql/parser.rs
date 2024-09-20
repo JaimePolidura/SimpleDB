@@ -1,4 +1,6 @@
-use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Limit, SelectStatement, Statement};
+use crate::selection::Selection;
+use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
+use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Limit, SelectStatement, Statement, UpdateStatement};
 use crate::sql::token::Token;
 use crate::sql::tokenizer::Tokenizer;
 use crate::ColumnType;
@@ -6,8 +8,6 @@ use bytes::Bytes;
 use shared::SimpleDbError;
 use shared::SimpleDbError::IllegalToken;
 use std::cmp::PartialEq;
-use crate::selection::Selection;
-use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
 
 const MAX_PRECEDENCE: u8 = u8::MAX;
 
@@ -34,7 +34,7 @@ impl Parser {
             Token::StartTransaction => self.start_transaction(),
             Token::Commit => self.commit(),
             Token::Rollback => self.rollback(),
-            _ => Err(SimpleDbError::IllegalToken(self.tokenizer.current_location(), String::from("Unknown keyword")))
+            _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Unknown keyword")))
         }?;
         self.expect_token(Token::Semicolon)?;
         Ok(query)
@@ -59,7 +59,7 @@ impl Parser {
         }
 
         Ok(Statement::Select(SelectStatement {
-            expression,
+            where_expr: expression,
             table_name,
             selection,
             limit
@@ -68,6 +68,7 @@ impl Parser {
 
     fn expression(&mut self, precedence: u8) -> Result<Expression, SimpleDbError> {
         let mut expression = self.parse_prefix()?;
+        println!("Hola");
         let mut next_precedence = self.get_precedence(self.tokenizer.last_token());
 
         while precedence < next_precedence {
@@ -135,7 +136,38 @@ impl Parser {
     }
 
     fn update(&mut self) -> Result<Statement, SimpleDbError> {
-        todo!()
+        self.advance()?;
+        let table_name = self.identifier()?;
+        let updated_values = self.updated_values()?;
+
+        let mut expression = Expression::None;
+        if self.maybe_expect_token(Token::Where)? {
+            expression = self.expression(0)?;
+        }
+
+        Ok(Statement::Update(UpdateStatement {
+            table_name,
+            updated_values,
+            where_expr: expression
+        }))
+    }
+
+    fn updated_values(&mut self) -> Result<Vec<(String, Expression)>, SimpleDbError> {
+        let mut updated_values = Vec::new();
+        while !self.check_last_token(Token::Where) && !self.check_last_token(Token::Semicolon) {
+            if updated_values.len() > 0 {
+                self.expect_token(Token::Comma)?;
+            }
+
+            self.expect_token(Token::Set)?;
+            let column_name = self.identifier()?;
+            self.expect_token(Token::Equal)?;
+            let new_value_expression = self.expression(0)?;
+
+            updated_values.push((column_name, new_value_expression));
+        }
+
+        Ok(updated_values)
     }
 
     fn delete(&mut self) -> Result<Statement, SimpleDbError> {
@@ -158,7 +190,7 @@ impl Parser {
 
         Ok(Statement::Delete(DeleteStatement{
             table_name,
-            expression,
+            where_expr: expression,
             limit,
         }))
     }
@@ -250,7 +282,6 @@ impl Parser {
                     self.tokenizer.current_location(),
                     String::from("Value cannot be inserted into a row")))
                 )?;
-
 
             column_values.push(bytes);
 
@@ -379,12 +410,59 @@ impl Parser {
 
 #[cfg(test)]
 mod test {
+    use crate::selection::Selection;
+    use crate::sql::expression::{BinaryOperator, Expression};
     use crate::sql::parser::Parser;
     use crate::sql::statement::{Limit, Statement};
     use crate::sql::token::Token;
     use crate::ColumnType;
-    use crate::selection::Selection;
-    use crate::sql::expression::{BinaryOperator, Expression};
+
+    #[test]
+    fn update_all() {
+        let mut parser = Parser::create(String::from("UPDATE personas SET dinero = 0;"));
+        let statement = parser.next_statement().unwrap();
+
+        assert!(matches!(statement, Statement::Update(_)));
+        let update_statement = match statement {
+            Statement::Update(u) => u, _ => panic!(),
+        };
+        assert_eq!(update_statement.table_name, String::from("personas"));
+        assert_eq!(update_statement.updated_values.len(), 1);
+        assert_eq!(update_statement.updated_values[0].0, "dinero");
+        assert_eq!(update_statement.updated_values[0].1, Expression::NumberI64(0));
+        assert_eq!(update_statement.where_expr, Expression::None);
+    }
+
+    #[test]
+    fn update() {
+        let mut parser = Parser::create(String::from("UPDATE personas \
+            SET dinero = dinero + 10, \
+            SET id = 10.2\
+            WHERE dinero > 10;"));
+        let statement = parser.next_statement().unwrap();
+
+        assert!(matches!(statement, Statement::Update(_)));
+        let update_statement = match statement {
+            Statement::Update(u) => u, _ => panic!(),
+        };
+        assert_eq!(update_statement.table_name, String::from("personas"));
+        assert_eq!(update_statement.updated_values.len(), 2);
+
+        assert_eq!(update_statement.updated_values[0].0, "dinero");
+        assert_eq!(update_statement.updated_values[0].1, Expression::Binary(
+            BinaryOperator::Add,
+            Box::new(Expression::Identifier(String::from("dinero"))),
+            Box::new(Expression::NumberI64(10)))
+        );
+        assert_eq!(update_statement.updated_values[1].0, "id");
+        assert_eq!(update_statement.updated_values[1].1, Expression::NumberF64(10.2));
+
+        assert_eq!(update_statement.where_expr, Expression::Binary(
+            BinaryOperator::Greater,
+            Box::new(Expression::Identifier(String::from("dinero"))),
+            Box::new(Expression::NumberI64(10)),
+        ));
+    }
 
     #[test]
     fn select_with_expression_with_limit() {
@@ -399,7 +477,7 @@ mod test {
         assert!(matches!(select_statement.selection, Selection::Some(expected_column_names)));
         assert!(matches!(select_statement.limit, Limit::Some(10)));
         assert_eq!(select_statement.table_name, "personas");
-        assert_eq!(select_statement.expression, Expression::Binary(
+        assert_eq!(select_statement.where_expr, Expression::Binary(
             BinaryOperator::Greater,
             Box::new(Expression::Identifier(String::from("dinero"))),
             Box::new(Expression::NumberI64(10)),
@@ -417,7 +495,7 @@ mod test {
         };
         let expected_column_names = vec!["nombre", "dinero"];
         assert!(matches!(select_statement.selection, Selection::Some(expected_column_names)));
-        assert!(matches!(select_statement.expression, Expression::None));
+        assert!(matches!(select_statement.where_expr, Expression::None));
         assert!(matches!(select_statement.limit, Limit::Some(10)));
         assert_eq!(select_statement.table_name, "personas");
     }
@@ -435,7 +513,7 @@ mod test {
         };
         assert!(matches!(select_statement.limit, Limit::None));
         assert_eq!(select_statement.table_name, "personas");
-        assert_eq!(select_statement.expression, Expression::Binary(
+        assert_eq!(select_statement.where_expr, Expression::Binary(
             BinaryOperator::Equal,
             Box::new(Expression::Identifier(String::from("id"))),
             Box::new(Expression::NumberI64(1)),
@@ -457,7 +535,7 @@ mod test {
         assert!(matches!(select_statement.limit, Limit::None));
         assert_eq!(select_statement.table_name, "personas");
 
-        let expression = select_statement.expression;
+        let expression = select_statement.where_expr;
 
         assert_eq!(expression, Expression::Binary(
             BinaryOperator::And,

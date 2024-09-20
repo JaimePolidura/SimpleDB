@@ -20,19 +20,21 @@ pub enum Limit {
 }
 
 pub struct SelectStatement {
-    pub(crate) expression: Expression,
+    pub(crate) where_expr: Expression,
     pub(crate) selection: Selection,
     pub(crate) table_name: String,
     pub(crate) limit: Limit,
 }
 
 pub struct UpdateStatement {
-    table_name: String,
+    pub(crate) table_name: String,
+    pub(crate) updated_values: Vec<(String, Expression)>,
+    pub(crate) where_expr: Expression
 }
 
 pub struct DeleteStatement {
     pub(crate) table_name: String,
-    pub(crate) expression: Expression,
+    pub(crate) where_expr: Expression,
     pub(crate) limit: Limit
 }
 
