@@ -46,6 +46,7 @@ pub enum SimpleDbError {
 
     //Databases
     DatabaseAlreadyExists(String),
+    DatabaseNotFound(String),
 
     //Table Descriptor
     CannotCreateTableDescriptor(types::KeyspaceId, std::io::Error),
@@ -242,6 +243,9 @@ impl Debug for SimpleDbError {
             }
             SimpleDbError::MalformedQuery(message) => {
                 write!(f, "Malformed query: {}", message)
+            }
+            SimpleDbError::DatabaseNotFound(database) => {
+                write!(f, "Database not found: {}", database)
             }
         }
     }

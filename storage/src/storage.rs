@@ -10,6 +10,7 @@ use bytes::Bytes;
 use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
+use shared::SimpleDbError;
 
 pub struct Storage {
     transaction_manager: Arc<TransactionManager>,
@@ -174,12 +175,12 @@ impl Storage {
         self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation)
     }
 
-    pub fn commit_transaction(&self, transaction: Transaction) {
-        self.transaction_manager.commit(transaction);
+    pub fn commit_transaction(&self, transaction: &Transaction) -> Result<(), SimpleDbError> {
+        self.transaction_manager.commit(transaction)
     }
 
-    pub fn rollback_transaction(&self, transaction: Transaction) {
-        self.transaction_manager.rollback(transaction);
+    pub fn rollback_transaction(&self, transaction: &Transaction) -> Result<(), SimpleDbError> {
+        self.transaction_manager.rollback(transaction)
     }
 
     pub fn create_keyspace(&self) -> Result<shared::KeyspaceId, shared::SimpleDbError> {
@@ -193,7 +194,7 @@ impl Storage {
 
         for active_transaction_id in active_transactions_id {
             if self.keyspaces.has_txn_id_been_written(active_transaction_id) {
-                self.transaction_manager.rollback(Transaction {
+                self.transaction_manager.rollback(&Transaction {
                     active_transactions: HashSet::new(),
                     isolation_level: IsolationLevel::SnapshotIsolation,
                     n_writes_rolled_back: AtomicUsize::new(0),

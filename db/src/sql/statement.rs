@@ -3,6 +3,7 @@ use crate::ColumnType;
 use crate::selection::Selection;
 use crate::sql::expression::Expression;
 
+
 pub enum Statement {
     Select(SelectStatement),
     Update(UpdateStatement),
@@ -48,4 +49,13 @@ pub struct CreateTableStatement {
     pub(crate) table_name: String,
     //Column name, Column type, is primary
     pub(crate) columns: Vec<(String, ColumnType, bool)>
+}
+
+impl Statement {
+    pub fn has_ownership_over_transaction(&self) -> bool {
+        match *self {
+            Statement::Rollback | Statement::Commit => true,
+            _ => false
+        }
+    }
 }

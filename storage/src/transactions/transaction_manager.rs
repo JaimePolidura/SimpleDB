@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::sync::Arc;
+use shared::SimpleDbError;
 
 #[derive(Clone)]
 pub enum IsolationLevel {
@@ -57,9 +58,9 @@ impl TransactionManager {
         }
     }
 
-    pub fn commit(&self, transaction: Transaction) {
+    pub fn commit(&self, transaction: &Transaction) -> Result<(), SimpleDbError> {
         self.active_transactions.remove(&transaction.txn_id);
-        self.log.add_entry(TransactionLogEntry::Commit(transaction.txn_id));
+        self.log.add_entry(TransactionLogEntry::Commit(transaction.txn_id))
     }
 
     pub fn rollback_active_transaction_failure(&self, txn_id: shared::TxnId) -> Result<(), shared::SimpleDbError> {
@@ -70,9 +71,10 @@ impl TransactionManager {
 
     //A rolledback transaction won't be removed from active transactions, so no other transaction can see its changes
     //Once all writes has been discareded in compaction or memtable flush, it wil be removed.
-    pub fn rollback(&self, transaction: Transaction) {
-        self.log.add_entry(TransactionLogEntry::StartRollback(transaction.txn_id, transaction.n_writes.load(Relaxed)));
-        self.rolledback_transactions.insert(transaction.txn_id, Arc::new(transaction));
+    pub fn rollback(&self, transaction: &Transaction) -> Result<(), SimpleDbError> {
+        self.log.add_entry(TransactionLogEntry::StartRollback(transaction.txn_id, transaction.n_writes.load(Relaxed)))?;
+        self.rolledback_transactions.insert(transaction.txn_id, Arc::new(transaction.clone()));
+        Ok(())
     }
 
     //This function is called when there is a memtable flush or sstable compaction

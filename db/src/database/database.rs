@@ -57,11 +57,11 @@ impl Database {
         self.storage.start_transaction()
     }
 
-    pub fn rollback_transaction(&self, transaction: Transaction) {
+    pub fn rollback_transaction(&self, transaction: &Transaction) -> Result<(), SimpleDbError> {
         self.storage.rollback_transaction(transaction)
     }
 
-    pub fn commit_transaction(&self, transaction: Transaction) {
+    pub fn commit_transaction(&self, transaction: &Transaction) -> Result<(), SimpleDbError> {
         self.storage.commit_transaction(transaction)
     }
 

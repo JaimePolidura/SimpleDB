@@ -24,7 +24,7 @@ impl Parser {
 
     pub fn next_statement(
         &mut self,
-    ) -> Result<Statement, SimpleDbError> {
+    ) -> Result<Option<Statement>, SimpleDbError> {
         let query = match self.tokenizer.next_token()? {
             Token::Select => self.select(),
             Token::Update => self.update(),
@@ -34,10 +34,11 @@ impl Parser {
             Token::StartTransaction => self.start_transaction(),
             Token::Commit => self.commit(),
             Token::Rollback => self.rollback(),
+            Token::EOF => return Ok(None),
             _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Unknown keyword")))
         }?;
         self.expect_token(Token::Semicolon)?;
-        Ok(query)
+        Ok(Some(query))
     }
 
     fn select(&mut self) -> Result<Statement, SimpleDbError> {
@@ -420,7 +421,7 @@ mod test {
     #[test]
     fn update_all() {
         let mut parser = Parser::create(String::from("UPDATE personas SET dinero = 0;"));
-        let statement = parser.next_statement().unwrap();
+        let statement = parser.next_statement().unwrap().unwrap();
 
         assert!(matches!(statement, Statement::Update(_)));
         let update_statement = match statement {
@@ -439,7 +440,7 @@ mod test {
             SET dinero = dinero + 10, \
             SET id = 10.2\
             WHERE dinero > 10;"));
-        let statement = parser.next_statement().unwrap();
+        let statement = parser.next_statement().unwrap().unwrap();
 
         assert!(matches!(statement, Statement::Update(_)));
         let update_statement = match statement {
@@ -467,7 +468,7 @@ mod test {
     #[test]
     fn select_with_expression_with_limit() {
         let mut parser = Parser::create(String::from("SELECT dinero FROM personas WHERE dinero > 10 LIMIT 10;"));
-        let statement = parser.next_statement().unwrap();
+        let statement = parser.next_statement().unwrap().unwrap();
         assert!(matches!(statement, Statement::Select(_)));
 
         let select_statement = match statement {
@@ -487,7 +488,7 @@ mod test {
     #[test]
     fn select_without_expression_with_limit() {
         let mut parser = Parser::create(String::from("SELECT nombre, dinero FROM personas LIMIT 10;"));
-        let statement = parser.next_statement().unwrap();
+        let statement = parser.next_statement().unwrap().unwrap();
 
         assert!(matches!(statement, Statement::Select(_)));
         let select_statement = match statement {
@@ -505,7 +506,7 @@ mod test {
         let mut parser = Parser::create(String::from(
             "DELETE FROM personas WHERE id == 1;"
         ));
-        let statement = parser.next_statement().unwrap();
+        let statement = parser.next_statement().unwrap().unwrap();
 
         assert!(matches!(statement, Statement::Delete(_)));
         let select_statement = match statement {
@@ -525,7 +526,7 @@ mod test {
         let mut parser = Parser::create(String::from(
             "SELECT * FROM personas WHERE dinero >= 1 + 2 AND nombre == \"Jaime\";"
         ));
-        let statement = parser.next_statement().unwrap();
+        let statement = parser.next_statement().unwrap().unwrap();
 
         assert!(matches!(statement, Statement::Select(_)));
         let select_statement = match statement {
@@ -561,7 +562,7 @@ mod test {
         let mut parser = Parser::create(String::from(
             "START_TRANSACTION;"
         ));
-        let statement = parser.next_statement().unwrap();
+        let statement = parser.next_statement().unwrap().unwrap();
         assert!(matches!(statement, Statement::StartTransaction));
     }
 
@@ -570,7 +571,7 @@ mod test {
         let mut parser = Parser::create(String::from(
             "ROLLBACK;"
         ));
-        let statement = parser.next_statement().unwrap();
+        let statement = parser.next_statement().unwrap().unwrap();
         assert!(matches!(statement, Statement::Rollback));
     }
 
@@ -579,7 +580,7 @@ mod test {
         let mut parser = Parser::create(String::from(
             "COMMIT;"
         ));
-        let statement = parser.next_statement().unwrap();
+        let statement = parser.next_statement().unwrap().unwrap();
         assert!(matches!(statement, Statement::Commit));
     }
 
@@ -588,7 +589,7 @@ mod test {
         let mut parser = Parser::create(String::from(
             "INSERT INTO personas (id, nombre, dinero) VALUES (1, \"Jaime\", 10.2);"
         ));
-        let statement = parser.next_statement().unwrap();
+        let statement = parser.next_statement().unwrap().unwrap();
 
         assert!(matches!(statement, Statement::Insert(_)));
         match statement {
@@ -612,7 +613,7 @@ mod test {
                 dinero f64
                );"#
         ));
-        let statement = parser.next_statement().unwrap();
+        let statement = parser.next_statement().unwrap().unwrap();
 
         assert!(matches!(statement, Statement::CreateTable(_)));
         match statement {

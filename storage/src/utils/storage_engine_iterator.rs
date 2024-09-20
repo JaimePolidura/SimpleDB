@@ -138,7 +138,7 @@ impl<I: StorageIterator> StorageIterator for StorageEngineItertor<I> {
 impl<I: StorageIterator> Drop for StorageEngineItertor<I> {
     fn drop(&mut self) {
         if let Some(transaction_manager) = self.transaction_manager.as_ref() {
-            transaction_manager.commit(self.transaction.as_ref().unwrap().clone())
+            transaction_manager.commit(self.transaction.as_ref().unwrap());
         }
     }
 }
