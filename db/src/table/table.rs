@@ -4,10 +4,10 @@ use crate::table::table_descriptor::{ColumnDescriptor, TableDescriptor};
 use crate::table::table_iteartor::TableIterator;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
-use shared::SimpleDbError::{ColumnNameAlreadyDefined, NotPrimaryColumnDefined, OnlyOnePrimaryColumnAllowed};
+use shared::SimpleDbError::{ColumnNameAlreadyDefined, PrimaryColumnNotIncluded, OnlyOnePrimaryColumnAllowed, UnknownColumn, InvalidType};
 use shared::{ColumnId, SimpleDbError, SimpleDbFileWrapper};
 use std::cell::UnsafeCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::hash::Hasher;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
@@ -25,6 +25,7 @@ pub struct Table {
     pub(crate) columns_by_id: SkipMap<ColumnId, ColumnDescriptor>,
     pub(crate) columns_by_name: SkipMap<String, shared::ColumnId>,
     pub(crate) next_column_id: AtomicUsize,
+    pub(crate) primary_column_name: String,
 
     pub(crate) storage: Arc<storage::Storage>,
 }
@@ -34,7 +35,6 @@ impl Table {
         &self,
         columns_to_add: Vec<(String, ColumnType, bool)>,
     ) -> Result<(), SimpleDbError> {
-        self.validate_new_table_columns(&columns_to_add)?;
         for (column_name, column_type, is_primary) in columns_to_add {
             self.add_column(&column_name, column_type, is_primary)?
         }
@@ -95,13 +95,42 @@ impl Table {
         ))
     }
 
+    pub fn validate_insert(
+        &self,
+        to_insert_data: &Vec<(String, Bytes)>
+    ) -> Result<(), SimpleDbError> {
+        self.validate_column_values(to_insert_data)
+    }
+
+    //Expect call to validate_insert before calling this function
     pub fn insert(
         &self,
         transaction: &Transaction,
-        id: Bytes,
-        to_insert_data: &Vec<(String, Bytes)>
+        to_insert_data: &mut Vec<(String, Bytes)>
     ) -> Result<(), SimpleDbError> {
-        self.update(transaction, id, to_insert_data)
+        let id_value = self.extract_primary_value(to_insert_data).unwrap();
+        self.update(transaction, id_value, to_insert_data)
+    }
+
+    fn has_primary_value(&self, data: &Vec<(String, Bytes)>) -> bool {
+        for (column_name, _) in data.iter() {
+            if column_name.eq(&self.primary_column_name) {
+                return true
+            }
+        }
+
+        false
+    }
+
+    fn extract_primary_value(&self, data: &mut Vec<(String, Bytes)>) -> Option<Bytes> {
+        for (index, column_entry) in data.iter().enumerate() {
+            let (column_name, _) = column_entry;
+            if column_name.eq(&self.primary_column_name) {
+                let (_, column_value) = data.remove(index);
+                return Some(column_value);
+            }
+        }
+        None
     }
 
     pub fn update(
@@ -119,6 +148,70 @@ impl Table {
             id,
             value.as_slice()
         )
+    }
+
+    pub fn get_columns(&self) -> HashMap<String, ColumnDescriptor> {
+        let mut columns = HashMap::new();
+        for entry in self.columns_by_id.iter() {
+            columns.insert(entry.value().column_name.clone(), entry.value().clone());
+        }
+
+        columns
+    }
+
+    pub fn validate_new_columns(
+        &self,
+        columns: &Vec<(String, ColumnType, bool)>,
+    ) -> Result<(), SimpleDbError> {
+        let mut primary_already_added = self.has_primary_key();
+        let mut column_names_added = HashSet::new();
+
+        for (new_column_name, _, is_primary) in columns {
+            let is_primary = *is_primary;
+
+            if primary_already_added && is_primary {
+                return Err(OnlyOnePrimaryColumnAllowed());
+            }
+
+            if !primary_already_added && is_primary {
+                primary_already_added = true;
+            }
+
+            //Some value already exists
+            if !column_names_added.insert(new_column_name) {
+                return Err(ColumnNameAlreadyDefined(new_column_name.to_string()));
+            }
+        }
+
+        if !primary_already_added {
+            return Err(PrimaryColumnNotIncluded());
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_column_values(
+        &self,
+        to_insert_data: &Vec<(String, Bytes)>
+    ) -> Result<(), SimpleDbError> {
+        if !self.has_primary_value(to_insert_data) {
+            return Err(PrimaryColumnNotIncluded())
+        }
+        for (column_name, column_value) in to_insert_data {
+            match self.columns_by_name.get(column_name) {
+                Some(column) => {
+                    let column = self.columns_by_id.get(column.value()).unwrap();
+                    let column = column.value();
+
+                    if !column.column_type.has_valid_format(column_value) {
+                        return Err(InvalidType(column_name.clone()));
+                    }
+                },
+                None => return Err(UnknownColumn(column_name.clone())),
+            }
+        }
+
+        Ok(())
     }
 
     fn build_record(&self, data_records: &Vec<(String, Bytes)>) -> Result<Record, SimpleDbError> {
@@ -172,12 +265,13 @@ impl Table {
         let max_column_id = table_descriptor.get_max_column_id();
 
         Ok(Arc::new(Table {
-            storage_keyspace_id: table_keyspace_id,
-            columns_by_id: table_descriptor.columns,
-            columns_by_name: SkipMap::new(),
             table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(table_descriptor_file)},
             next_column_id: AtomicUsize::new(max_column_id as usize + 1),
+            primary_column_name: table_descriptor.get_primary_column_name(),
+            columns_by_id: table_descriptor.columns,
             table_name: table_descriptor.table_name,
+            storage_keyspace_id: table_keyspace_id,
+            columns_by_name: SkipMap::new(),
             storage: storage.clone(),
         }))
     }
@@ -192,8 +286,9 @@ impl Table {
             let (descriptor, descriptor_file) = TableDescriptor::load_table_descriptor(options, keysapce_id)?;
             tables.push(Arc::new(Table {
                 table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(descriptor_file)},
-                columns_by_name: Self::index_column_id_by_name(&descriptor.columns),
                 next_column_id: AtomicUsize::new(descriptor.get_max_column_id() as usize + 1),
+                columns_by_name: Self::index_column_id_by_name(&descriptor.columns),
+                primary_column_name: descriptor.get_primary_column_name(),
                 table_name: descriptor.table_name,
                 storage_keyspace_id: keysapce_id,
                 columns_by_id: descriptor.columns,
@@ -211,37 +306,6 @@ impl Table {
         }
 
         result
-    }
-
-    fn validate_new_table_columns(
-        &self,
-        columns: &Vec<(String, ColumnType, bool)>,
-    ) -> Result<(), SimpleDbError> {
-        let mut primary_already_added = self.has_primary_key();
-        let mut column_names_added = HashSet::new();
-
-        for (new_column_name, _, is_primary) in columns {
-            let is_primary = *is_primary;
-
-            if primary_already_added && is_primary {
-                return Err(OnlyOnePrimaryColumnAllowed());
-            }
-
-            if !primary_already_added && is_primary {
-                primary_already_added = true;
-            }
-
-            //Some value already exists
-            if !column_names_added.insert(new_column_name) {
-                return Err(ColumnNameAlreadyDefined(new_column_name.to_string()));
-            }
-        }
-
-        if !primary_already_added {
-            return Err(NotPrimaryColumnDefined());
-        }
-
-        Ok(())
     }
 
     fn has_primary_key(&self) -> bool {

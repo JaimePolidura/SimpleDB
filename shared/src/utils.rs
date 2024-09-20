@@ -1,8 +1,49 @@
 use std::fs::DirEntry;
 use std::io::sink;
+use std::mem::size_of_val;
 use crate::SimpleDbError;
-use bytes::{Buf, BufMut};
+use bytes::{Buf, BufMut, Bytes};
 use crossbeam_skiplist::SkipMap;
+
+pub fn bytes_to_f64_le(bytes: &Bytes) -> f64 {
+    f64::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]])
+}
+
+pub fn bytes_to_u64_le(bytes: &Bytes) -> u64 {
+    u64::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]])
+}
+
+pub fn bytes_to_i64_le(bytes: &Bytes) -> i64 {
+    i64::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]])
+}
+
+pub fn bytes_to_f32_le(bytes: &Bytes) -> u32 {
+    u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+}
+
+pub fn bytes_to_u32_le(bytes: &Bytes) -> u32 {
+    u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+}
+
+pub fn bytes_to_i32_le(bytes: &Bytes) -> i32 {
+    i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+}
+
+pub fn bytes_to_u16_le(bytes: &Bytes) -> u16 {
+    u16::from_le_bytes([bytes[0], bytes[1]])
+}
+
+pub fn bytes_to_i16_le(bytes: &Bytes) -> i16 {
+    i16::from_le_bytes([bytes[0], bytes[1]])
+}
+
+pub fn bytes_to_u8(bytes: &Bytes) -> u8 {
+    bytes[0]
+}
+
+pub fn bytes_to_i8(bytes: &Bytes) -> i8 {
+    bytes[0] as i8
+}
 
 pub fn u16_vec_to_u8_vec(u16_vec: &Vec<u16>) -> Vec<u8> {
     let mut u8_vec: Vec<u8> = Vec::with_capacity(u16_vec.len() * 2);
@@ -19,6 +60,12 @@ pub fn u16_to_u8_le(value: u16, start_index: usize, vector: &mut Vec<u8>) {
 
     vector[start_index] = (value & 0xff) as u8;
     vector[start_index + 1] = (value >> 8 & 0xff) as u8;
+}
+
+pub fn overflows_bytes_64(bytes: &Bytes, target_size_bytes: u8) -> bool {
+    let byte_array: [u8; 8] = bytes[..8].try_into().expect("slice with incorrect length");
+    let u64 = u64::from_le_bytes(byte_array);
+    u64 >> (target_size_bytes * 8) == 0x00
 }
 
 pub fn u64_to_u8_le(value: u64, start_index: usize, vector: &mut Vec<u8>) {

@@ -3,6 +3,7 @@ use std::fmt::{Debug, Formatter};
 use std::panic::Location;
 use std::path::PathBuf;
 use std::string::FromUtf8Error;
+use bytes::Bytes;
 
 pub enum DecodeErrorType {
     CorruptedCrc(u32, u32), //Expected crc, actual crc
@@ -40,9 +41,11 @@ pub enum SimpleDbError {
     ColumnNotFound(types::KeyspaceId, String),
     TableNotFound(String),
     TableAlreadyExists(String),
-    NotPrimaryColumnDefined(),
+    PrimaryColumnNotIncluded(),
     OnlyOnePrimaryColumnAllowed(),
     ColumnNameAlreadyDefined(String),
+    UnknownColumn(String),
+    InvalidType(String),
 
     //Databases
     DatabaseAlreadyExists(String),
@@ -226,7 +229,7 @@ impl Debug for SimpleDbError {
             SimpleDbError::TableAlreadyExists(table_name) => {
                 write!(f, "Table with name: {} already exists", table_name)
             }
-            SimpleDbError::NotPrimaryColumnDefined() => {
+            SimpleDbError::PrimaryColumnNotIncluded() => {
                 write!(f, "Every table should have a primary column defined at creation time")
             }
             SimpleDbError::OnlyOnePrimaryColumnAllowed() => {
@@ -246,6 +249,12 @@ impl Debug for SimpleDbError {
             }
             SimpleDbError::DatabaseNotFound(database) => {
                 write!(f, "Database not found: {}", database)
+            }
+            SimpleDbError::UnknownColumn(column_name) => {
+                write!(f, "Unknown column: {}", column_name)
+            }
+            SimpleDbError::InvalidType(column_name) => {
+                write!(f, "Invliad type for column: {}", column_name)
             }
         }
     }

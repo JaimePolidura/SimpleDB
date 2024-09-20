@@ -17,13 +17,23 @@ pub struct Database {
 }
 
 impl Database {
+    pub fn validate_create_table(
+        &self,
+        table_name: &str,
+        columns: &Vec<(String, ColumnType, bool)>
+    ) -> Result<(), SimpleDbError> {
+        self.validate_table_name(table_name)?;
+        let table = self.tables.get(table_name).unwrap();
+        let table = table.value();
+        table.validate_new_columns(columns)?;
+        Ok(())
+    }
+
     pub fn create_table(
         &self,
         table_name: &str,
         columns: Vec<(String, ColumnType, bool)>
     ) -> Result<Arc<Table>, SimpleDbError> {
-        self.validate_table_creation(table_name)?;
-
         let table = Table::create(
             table_name,
             &self.options,
@@ -112,7 +122,7 @@ impl Database {
         indexed
     }
 
-    fn validate_table_creation(&self, table_name: &str) -> Result<(), SimpleDbError> {
+    fn validate_table_name(&self, table_name: &str) -> Result<(), SimpleDbError> {
         if self.tables.contains_key(table_name) {
             return Err(TableAlreadyExists(table_name.to_string()));
         }

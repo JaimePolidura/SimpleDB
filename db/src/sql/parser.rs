@@ -69,7 +69,6 @@ impl Parser {
 
     fn expression(&mut self, precedence: u8) -> Result<Expression, SimpleDbError> {
         let mut expression = self.parse_prefix()?;
-        println!("Hola");
         let mut next_precedence = self.get_precedence(self.tokenizer.last_token());
 
         while precedence < next_precedence {
@@ -279,7 +278,7 @@ impl Parser {
         while !self.check_last_token(terminator_token.clone()) {
             let token = self.advance()?;
             let bytes = token.convert_to_bytes()
-                .or( Err(IllegalToken(
+                .or(Err(IllegalToken(
                     self.tokenizer.current_location(),
                     String::from("Value cannot be inserted into a row")))
                 )?;

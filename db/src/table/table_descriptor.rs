@@ -12,8 +12,10 @@ use crate::ColumnType;
 pub struct TableDescriptor {
     pub(crate) columns: SkipMap<ColumnId, ColumnDescriptor>,
     pub(crate) table_name: String,
+    pub(crate) primary_column_id: ColumnId,
 }
 
+#[derive(Clone)]
 pub struct ColumnDescriptor {
     pub(crate) column_id: ColumnId,
     pub(crate) column_type: ColumnType,
@@ -28,6 +30,13 @@ impl TableDescriptor {
         } else {
             0
         }
+    }
+
+    pub fn get_primary_column_name(&self) -> String {
+        self.columns.get(&self.primary_column_id).unwrap()
+            .value()
+            .column_name
+            .clone()
     }
 
     pub fn name(&self) -> String {
@@ -52,6 +61,7 @@ impl TableDescriptor {
 
         Ok((TableDescriptor {
             table_name: table_name.to_string(),
+            primary_column_id: 0,
             columns: SkipMap::new(),
         }, table_descriptor_file))
     }
@@ -68,7 +78,7 @@ impl TableDescriptor {
 
         let table_descriptor_bytes = table_descriptor_file.read_all()
             .map_err(|e| SimpleDbError::CannotReadTableDescriptor(keyspace_id, e))?;
-        let (table_name, mut column_descriptors) = Self::decode_table_descriptor_bytes(
+        let (table_name, mut column_descriptors, primary_column_id) = Self::decode_table_descriptor_bytes(
             keyspace_id,
             &table_descriptor_bytes,
             &path
@@ -76,6 +86,7 @@ impl TableDescriptor {
 
         Ok((TableDescriptor {
             columns: Self::index_by_column_name(&mut column_descriptors),
+            primary_column_id,
             table_name,
         }, table_descriptor_file))
     }
@@ -93,7 +104,7 @@ impl TableDescriptor {
         keyspace_id: KeyspaceId,
         bytes: &Vec<u8>,
         path: &PathBuf,
-    ) -> Result<(String, Vec<ColumnDescriptor>), SimpleDbError> {
+    ) -> Result<(String, Vec<ColumnDescriptor>, ColumnId), SimpleDbError> {
         let mut current_ptr = bytes.as_slice();
         let mut columns_descriptor = Vec::new();
 
@@ -102,6 +113,7 @@ impl TableDescriptor {
         let name_bytes = &current_ptr[..table_name_length];
         current_ptr.advance(table_name_length);
         let table_name = Self::decode_string(name_bytes, keyspace_id, path, 0)?;
+        let mut primary_column_id = 0;
 
         while current_ptr.has_remaining() {
             let column_id = current_ptr.get_u16_le() as shared::ColumnId;
@@ -117,6 +129,10 @@ impl TableDescriptor {
             let name_bytes = &current_ptr[..name_bytes_length];
             current_ptr.advance(name_bytes_length);
 
+            if is_primary {
+                primary_column_id = column_id;
+            }
+
             let column_name = Self::decode_string(name_bytes, keyspace_id, path, columns_descriptor.len())?;
 
             columns_descriptor.push(ColumnDescriptor {
@@ -127,7 +143,7 @@ impl TableDescriptor {
             });
         }
 
-        Ok((table_name, columns_descriptor))
+        Ok((table_name, columns_descriptor, primary_column_id))
     }
 
     fn decode_string(bytes: &[u8], keyspace_id: KeyspaceId, path: &PathBuf, index: usize) -> Result<String, SimpleDbError> {

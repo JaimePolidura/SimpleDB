@@ -1,4 +1,5 @@
-use clap::Parser;
+use bytes::Bytes;
+use shared::utils;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ColumnType {
@@ -19,6 +20,28 @@ pub enum ColumnType {
 }
 
 impl ColumnType {
+    pub fn has_valid_format(&self, bytes: &Bytes) -> bool {
+        match *self {
+            ColumnType::I8 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 1),
+            ColumnType::U8 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 1),
+            ColumnType::I16 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 2),
+            ColumnType::U16 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 2),
+            ColumnType::U32 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 4),
+            ColumnType::I32 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 4),
+            ColumnType::U64 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 8),
+            ColumnType::I64 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 8),
+            ColumnType::F32 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 4),
+            ColumnType::F64 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 8),
+            ColumnType::BOOLEAN => {
+                let vec = bytes.to_vec();
+                vec.len() == 1 && (vec[0] == 0x00 || vec[1] == 0x01)
+            },
+            ColumnType::VARCHAR => String::from_utf8(bytes.to_vec()).is_ok(),
+            ColumnType::DATE => todo!(),
+            ColumnType::BLOB => true,
+        }
+    }
+
     pub fn serialize(&self) -> u8 {
         match *self {
             ColumnType::I8 => 1,
