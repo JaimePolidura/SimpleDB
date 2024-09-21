@@ -96,13 +96,6 @@ impl Table {
         ))
     }
 
-    pub fn validate_insert(
-        &self,
-        to_insert_data: &Vec<(String, Bytes)>
-    ) -> Result<(), SimpleDbError> {
-        self.validate_column_values(to_insert_data)
-    }
-
     //Expect call to validate_insert before calling this function
     pub fn insert(
         &self,
@@ -202,6 +195,24 @@ impl Table {
         }
 
         Ok(())
+    }
+
+    pub fn validate_selection(
+        &self,
+        selection: &Selection
+    ) -> Result<(), SimpleDbError> {
+        match selection {
+            Selection::All => Ok(()),
+            Selection::Some(selection) => {
+                for column_name in selection {
+                    if !self.columns_by_name.contains_key(column_name) {
+                        return Err(SimpleDbError::ColumnNotFound(self.storage_keyspace_id, column_name.clone()));
+                    }
+                }
+
+                Ok(())
+            }
+        }
     }
 
     pub fn validate_column_values(

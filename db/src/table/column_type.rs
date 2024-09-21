@@ -21,6 +21,25 @@ pub enum ColumnType {
 }
 
 impl ColumnType {
+    pub fn can_be_casted(&self, other: ColumnType) -> bool {
+        match other {
+            ColumnType::I8 => other.is_numeric(),
+            ColumnType::U8 => other.is_numeric(),
+            ColumnType::I16 => other.is_numeric(),
+            ColumnType::U16 => other.is_numeric(),
+            ColumnType::U32 => other.is_numeric(),
+            ColumnType::I32 => other.is_numeric(),
+            ColumnType::U64 => other.is_numeric(),
+            ColumnType::I64 => other.is_numeric(),
+            ColumnType::F32 => other.is_numeric(),
+            ColumnType::F64 => other.is_numeric(),
+            ColumnType::BOOLEAN => other.is_numeric(),
+            ColumnType::VARCHAR => matches!(other, ColumnType::VARCHAR),
+            ColumnType::DATE => matches!(other, ColumnType::DATE),
+            ColumnType::BLOB => matches!(other, ColumnType::BLOB)
+        }
+    }
+
     pub fn get_arithmetic_produced_type(&self, other: ColumnType) -> ColumnType {
         let bytes_self = self.get_numeric_bytes();
         let bytes_other = other.get_numeric_bytes();

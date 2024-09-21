@@ -1,9 +1,5 @@
-use std::cmp::PartialEq;
-use std::sync::Arc;
-use shared::SimpleDbError;
 use crate::sql::scan_type::ScanType;
-use crate::sql::scan_type::ScanType::Exact;
-use crate::{ColumnType, Table};
+use std::cmp::PartialEq;
 
 #[derive(Debug, PartialEq)]
 pub enum Expression {
