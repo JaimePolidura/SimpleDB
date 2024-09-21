@@ -1,4 +1,3 @@
-use crate::sql::expression::Expression;
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Statement};
 use crate::sql::statement_result::StatementResult;
 use crate::{ColumnType, Database, Table};
@@ -6,17 +5,14 @@ use bytes::Bytes;
 use shared::{utils, SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use crate::sql::statement_validator::StatementValidator;
 
 pub struct StatementExecutor {
     options: Arc<SimpleDbOptions>,
-    validator: StatementValidator,
 }
 
 impl StatementExecutor {
     pub fn create(options: &Arc<SimpleDbOptions>) -> StatementExecutor {
         StatementExecutor {
-            validator: StatementValidator::create(options),
             options: options.clone()
         }
     }
@@ -27,8 +23,6 @@ impl StatementExecutor {
         database: Arc<Database>,
         statement: Statement,
     ) -> Result<StatementResult, SimpleDbError> {
-        self.validator.validate(&database, &statement)?;
-
         match statement {
             Statement::Select(select_statement) => todo!(),
             Statement::Update(update_statement) => todo!(),

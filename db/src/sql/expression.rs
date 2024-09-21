@@ -1,6 +1,9 @@
 use std::cmp::PartialEq;
+use std::sync::Arc;
+use shared::SimpleDbError;
 use crate::sql::scan_type::ScanType;
 use crate::sql::scan_type::ScanType::Exact;
+use crate::{ColumnType, Table};
 
 #[derive(Debug, PartialEq)]
 pub enum Expression {
@@ -40,7 +43,7 @@ pub enum BinaryOperator {
 impl Expression {
     pub fn get_scan_type(
         &self,
-        primary_column_name: &String
+        primary_column_name: &String,
     ) -> ScanType {
         match self {
             Expression::Binary(operator, left, right) => {
@@ -175,6 +178,53 @@ impl Expression {
             Expression::Boolean(_) => true,
             Expression::NumberF64(_) => true,
             Expression::NumberI64(_) => true,
+        }
+    }
+}
+
+impl BinaryOperator {
+    //Takes booleans, Produces boolean
+    pub fn is_logical(&self) -> bool {
+        match self {
+            BinaryOperator::And |
+            BinaryOperator::Or => true,
+            _ => false
+        }
+    }
+
+    //Takes numbers, Produces boolean
+    pub fn is_arithmetic(&self) -> bool {
+        match self {
+            BinaryOperator::Add |
+            BinaryOperator::Subtract |
+            BinaryOperator::Multiply |
+            BinaryOperator::Divide => true,
+            BinaryOperator::And |
+            BinaryOperator::Or |
+            BinaryOperator::NotEqual |
+            BinaryOperator::Equal |
+            BinaryOperator::Greater |
+            BinaryOperator::GreaterEqual |
+            BinaryOperator::Less |
+            BinaryOperator::LessEqual => false
+        }
+    }
+
+    //Takes comparable args, Produces boolean
+    pub fn is_comparation(&self) -> bool {
+        match self {
+            BinaryOperator::Add |
+            BinaryOperator::Subtract |
+            BinaryOperator::Multiply |
+            BinaryOperator::Divide => false,
+            BinaryOperator::And |
+            BinaryOperator::Or |
+            BinaryOperator::NotEqual |
+            BinaryOperator::Equal |
+            BinaryOperator::Greater |
+            BinaryOperator::GreaterEqual |
+            BinaryOperator::Less |
+            BinaryOperator::LessEqual => true
         }
     }
 }

@@ -12,6 +12,7 @@ use std::hash::Hasher;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
+use crossbeam_skiplist::map::Entry;
 use storage::transactions::transaction::Transaction;
 use crate::ColumnType;
 use crate::table::row::Row;
@@ -148,6 +149,19 @@ impl Table {
             id,
             value.as_slice()
         )
+    }
+
+    pub fn get_column_data(
+        &self,
+        column_name: &str
+    ) -> Option<ColumnDescriptor> {
+        match self.columns_by_name.get(column_name) {
+            Some(column_id) => {
+                let column_data = self.columns_by_id.get(column_id.value()).unwrap();
+                Some(column_data.value().clone())
+            },
+            None => None
+        }
     }
 
     pub fn get_columns(&self) -> HashMap<String, ColumnDescriptor> {
