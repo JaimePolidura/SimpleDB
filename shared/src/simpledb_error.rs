@@ -36,6 +36,7 @@ pub enum SimpleDbError {
     //SQL Parsing
     IllegalToken(TokenLocation, String),
     MalformedQuery(String),
+    FullScanNotAllowed(),
 
     //General db layer errors
     ColumnNotFound(types::KeyspaceId, String),
@@ -254,7 +255,10 @@ impl Debug for SimpleDbError {
                 write!(f, "Unknown column: {}", column_name)
             }
             SimpleDbError::InvalidType(column_name) => {
-                write!(f, "Invliad type for column: {}", column_name)
+                write!(f, "Invalid type for column: {}", column_name)
+            }
+            SimpleDbError::FullScanNotAllowed() => {
+                write!(f, "Full scan is not allowed")
             }
         }
     }

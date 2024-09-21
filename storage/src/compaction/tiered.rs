@@ -93,7 +93,7 @@ pub(crate) fn create_tiered_compaction_task(
     options: shared::TieredCompactionOptions,
     sstables: &Arc<SSTables>
 ) -> Option<TieredCompactionTask> {
-    if  sstables.calculate_space_amplificacion() >= options.max_size_amplificacion {
+    if  sstables.calculate_space_amplificacion() >= options.max_size_amplification {
         return Some(TieredCompactionTask::AmplificationRatioTrigger);
     }
 

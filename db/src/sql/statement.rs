@@ -52,7 +52,7 @@ pub struct CreateTableStatement {
 }
 
 impl Statement {
-    pub fn has_ownership_over_transaction(&self) -> bool {
+    pub fn terminates_transaction(&self) -> bool {
         match *self {
             Statement::Rollback | Statement::Commit => true,
             _ => false

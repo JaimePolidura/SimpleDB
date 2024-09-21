@@ -1,19 +1,22 @@
-use crate::sql::statement::{CreateTableStatement, InsertStatement, Statement};
+use crate::sql::expression::Expression;
+use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Statement};
 use crate::sql::statement_result::StatementResult;
 use crate::{ColumnType, Database, Table};
+use bytes::Bytes;
 use shared::{utils, SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
-use bytes::Bytes;
 use storage::transactions::transaction::Transaction;
-use crate::sql::token::Token::Values;
+use crate::sql::statement_validator::StatementValidator;
 
 pub struct StatementExecutor {
-    options: Arc<SimpleDbOptions>
+    options: Arc<SimpleDbOptions>,
+    validator: StatementValidator,
 }
 
 impl StatementExecutor {
     pub fn create(options: &Arc<SimpleDbOptions>) -> StatementExecutor {
         StatementExecutor {
+            validator: StatementValidator::create(options),
             options: options.clone()
         }
     }
@@ -24,16 +27,28 @@ impl StatementExecutor {
         database: Arc<Database>,
         statement: Statement,
     ) -> Result<StatementResult, SimpleDbError> {
+        self.validator.validate(&database, &statement)?;
+
         match statement {
             Statement::Select(select_statement) => todo!(),
             Statement::Update(update_statement) => todo!(),
-            Statement::Delete(delete_statement) => todo!(),
+            Statement::Delete(delete_statement) => self.delete(database, transaction, delete_statement),
             Statement::Insert(insert_statement) => self.insert(database, transaction, insert_statement),
             Statement::CreateTable(create_table_statement) => self.create_table(database, create_table_statement),
             Statement::StartTransaction => self.start_transaction(database),
             Statement::Rollback => self.rollback_transaction(database, transaction),
             Statement::Commit => self.commit_transaction(database, transaction),
         }
+    }
+
+    fn delete(
+        &self,
+        database: Arc<Database>,
+        transaction: &Option<Transaction>,
+        delete_statement: DeleteStatement
+    ) -> Result<StatementResult, SimpleDbError> {
+        let table = database.get_table(delete_statement.table_name.as_str())?;
+        Ok(StatementResult::Ok(0))
     }
 
     fn insert(
@@ -44,7 +59,6 @@ impl StatementExecutor {
     ) -> Result<StatementResult, SimpleDbError> {
         let table = database.get_table(insert_statement.table_name.as_str())?;
         let transaction = transaction.as_ref().unwrap();
-        table.validate_column_values(&mut insert_statement.values)?;
         let mut inserted_values = self.format_column_values(&table, &insert_statement.values);
         table.insert(transaction, &mut inserted_values)?;
         Ok(StatementResult::Ok(1))
@@ -55,7 +69,6 @@ impl StatementExecutor {
         database: Arc<Database>,
         create_table_statement: CreateTableStatement,
     ) -> Result<StatementResult, SimpleDbError> {
-        database.validate_create_table(create_table_statement.table_name.as_str(), &create_table_statement.columns)?;
         database.create_table(create_table_statement.table_name.as_str(), create_table_statement.columns)?;
         Ok(StatementResult::Ok(0))
     }

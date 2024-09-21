@@ -42,7 +42,7 @@ impl SimpleDb {
         let mut results = Vec::new();
 
         while let Some(statement) = parser.next_statement()? {
-            let has_ownership_over_transaction = statement.has_ownership_over_transaction();
+            let terminates_transaction = statement.terminates_transaction();
             let result = self.statement_executor.execute(
                 &transaction,
                 database.clone(),
@@ -51,7 +51,7 @@ impl SimpleDb {
             results.push(result);
 
             //No more statements will be run after a commit or a rollback
-            if has_ownership_over_transaction {
+            if terminates_transaction {
                 break
             }
         }

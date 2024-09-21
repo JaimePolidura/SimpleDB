@@ -28,6 +28,8 @@ pub struct SimpleDbOptions {
     pub memtable_max_size_bytes: usize,
     pub max_memtables_inactive: usize,
     pub bloom_filter_n_entries: usize,
+    pub db_range_scan_allowed: bool,
+    pub db_full_scan_allowed: bool,
     pub block_size_bytes: usize,
     pub sst_size_bytes: usize,
     pub base_path: String,
@@ -35,9 +37,9 @@ pub struct SimpleDbOptions {
 
 #[derive(Clone, Copy)]
 pub struct TieredCompactionOptions {
-    pub max_size_amplificacion: usize,
-    pub size_ratio: usize,
     pub min_levels_trigger_size_ratio: usize,
+    pub max_size_amplification: usize,
+    pub size_ratio: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -64,10 +66,12 @@ impl Default for SimpleDbOptions {
             memtable_max_size_bytes: 1048576, //1Mb
             n_cached_blocks_per_sstable: 8, //Expect power of two
             bloom_filter_n_entries: 32768, //4kb of bloom filter so it fits in a page
-            sst_size_bytes: 268435456, //256 MB ~ 64 blocks
-            block_size_bytes: 4096, //4kb
-            max_memtables_inactive: 8,
+            db_range_scan_allowed: true,
             storage_value_merger: None,
+            sst_size_bytes: 268435456, //256 MB ~ 64 blocks
+            max_memtables_inactive: 8,
+            db_full_scan_allowed: true,
+            block_size_bytes: 4096, //4kb
         }
     }
 }
@@ -162,7 +166,7 @@ impl SimpleDbOptionsBuilder {
 impl Default for TieredCompactionOptions {
     fn default() -> Self {
         TieredCompactionOptions {
-            max_size_amplificacion: 2,
+            max_size_amplification: 2,
             size_ratio: 2,
             min_levels_trigger_size_ratio: 3,
         }
