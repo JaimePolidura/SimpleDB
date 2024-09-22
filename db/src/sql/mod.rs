@@ -7,5 +7,4 @@ pub mod statement_validator;
 mod token;
 mod tokenizer;
 mod expression;
-mod planner;
-mod scan_type;
+mod plan;

@@ -324,6 +324,16 @@ impl Table {
         Ok(tables)
     }
 
+    pub fn get_primary_column_data(&self) -> Option<ColumnDescriptor> {
+        match self.columns_by_name.get(&self.primary_column_name) {
+            Some(id) => {
+                let value = self.columns_by_id.get(id.value()).unwrap();
+                Some(value.value().clone())
+            },
+            None => None
+        }
+    }
+
     fn index_column_id_by_name(columns_by_id: &SkipMap<ColumnId, ColumnDescriptor>) -> SkipMap<String, ColumnId> {
         let result = SkipMap::new();
         for entry in columns_by_id.iter() {
