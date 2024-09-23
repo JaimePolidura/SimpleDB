@@ -5,15 +5,19 @@ use bytes::Bytes;
 use shared::{utils, SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::sql::expression_evaluator::evaluate_deterministic;
+use crate::sql::validator::StatementValidator;
 
 pub struct StatementExecutor {
     options: Arc<SimpleDbOptions>,
+    validator: StatementValidator,
 }
 
 impl StatementExecutor {
     pub fn create(options: &Arc<SimpleDbOptions>) -> StatementExecutor {
         StatementExecutor {
-            options: options.clone()
+            validator: StatementValidator::create(options),
+            options: options.clone(),
         }
     }
 
@@ -23,6 +27,10 @@ impl StatementExecutor {
         database: Arc<Database>,
         statement: Statement,
     ) -> Result<StatementResult, SimpleDbError> {
+        self.validator.validate(&database, &statement)?;
+
+        let statement = self.evaluate_expressions(statement)?;
+
         match statement {
             Statement::Select(select_statement) => todo!(),
             Statement::Update(update_statement) => todo!(),
@@ -124,5 +132,23 @@ impl StatementExecutor {
         }
 
         formatted_values
+    }
+
+    fn evaluate_expressions(&self, mut statement: Statement) -> Result<Statement, SimpleDbError> {
+        match statement {
+            Statement::Select(mut select) => {
+                select.where_expr = evaluate_deterministic(select.where_expr)?;
+                Ok(Statement::Select(select))
+            }
+            Statement::Update(mut update) => {
+                update.where_expr = evaluate_deterministic(update.where_expr)?;
+                Ok(Statement::Update(update))
+            }
+            Statement::Delete(mut delete) => {
+                delete.where_expr = evaluate_deterministic(delete.where_expr)?;
+                Ok(Statement::Delete(delete))
+            },
+            _ => Ok(statement)
+        }
     }
 }

@@ -1,10 +1,10 @@
 use crate::sql::expression::Expression;
-use crate::sql::scan_type::ScanType;
-use crate::sql::statement::{DeleteStatement, SelectStatement, Statement, UpdateStatement};
+use crate::sql::statement::{DeleteStatement, Limit, SelectStatement, Statement, UpdateStatement};
 use crate::Table;
 use shared::SimpleDbError::MalformedQuery;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
+use crate::sql::plan::scan_type::ScanType;
 
 struct Planner {
     options: Arc<SimpleDbOptions>
@@ -37,7 +37,11 @@ impl Planner {
         table: &Arc<Table>,
         select_statement: SelectStatement
     ) -> Result<Plan, SimpleDbError> {
-        let scan_type = self.get_and_validate_scan_type(&select_statement.where_expr, table)?;
+        let scan_type = self.get_and_validate_scan_type(
+            &select_statement.where_expr,
+            table,
+            &select_statement.limit
+        )?;
 
 
 
@@ -57,7 +61,11 @@ impl Planner {
         table: &Arc<Table>,
         select_statement: DeleteStatement
     ) -> Result<Plan, SimpleDbError> {
-        let where_scan_type = self.get_and_validate_scan_type(&select_statement.where_expr, table)?;
+        let where_scan_type = self.get_and_validate_scan_type(
+            &select_statement.where_expr,
+            table,
+            &select_statement.limit
+        )?;
 
         todo!()
     }
@@ -74,21 +82,22 @@ impl Planner {
     fn get_and_validate_scan_type(
         &self,
         expression: &Expression,
-        table: &Arc<Table>
+        table: &Arc<Table>,
+        limit: &Limit,
     ) -> Result<ScanType, SimpleDbError> {
-        let scan_type = ScanType::get_scan_type(expression, table);
+        let scan_type = ScanType::get_scan_type(expression, table, limit)?;
         match scan_type {
             ScanType::Full => {
                 if !self.options.db_full_scan_allowed {
                     return Err(MalformedQuery(String::from("Full scan is not allowed")));
                 }
             },
-            ScanType::Range => {
+            ScanType::Range(_) => {
                 if !self.options.db_range_scan_allowed {
                     return Err(MalformedQuery(String::from("Range scan is not allowed")));
                 }
             }
-            ScanType::Exact => {}
+            ScanType::Exact(_) => {}
         };
 
         Ok(scan_type)

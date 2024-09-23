@@ -5,10 +5,9 @@ use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use crate::sql::statement_executor::StatementExecutor;
 use crate::sql::statement_result::StatementResult;
-use crate::sql::statement_validator::StatementValidator;
+use crate::sql::validator::StatementValidator;
 
 pub struct SimpleDb {
-    statement_validator: StatementValidator,
     statement_executor: StatementExecutor,
 
     databases: Databases,
@@ -27,7 +26,6 @@ impl SimpleDb {
         let options = Arc::new(options);
 
         Ok(SimpleDb {
-            statement_validator: StatementValidator::create(&options),
             statement_executor: StatementExecutor::create(&options),
             databases: Databases::create(options.clone())?,
             options,
@@ -47,8 +45,6 @@ impl SimpleDb {
 
         while let Some(statement) = parser.next_statement()? {
             let terminates_transaction = statement.terminates_transaction();
-
-            self.statement_validator.validate(&database, &statement)?;
 
             let result = self.statement_executor.execute(
                 &transaction,

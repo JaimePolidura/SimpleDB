@@ -14,7 +14,7 @@ impl RangeScan {
 }
 
 impl PlanStep for RangeScan {
-    fn next(&mut self) -> Option<Row> {
+    fn next(&mut self) -> Option<&Row> {
         todo!()
     }
 }
