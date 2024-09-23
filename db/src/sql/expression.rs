@@ -70,6 +70,21 @@ impl Expression {
         }
     }
 
+    pub fn get_f64(&self) -> Result<f64, SimpleDbError> {
+        match self {
+            Expression::Boolean(boolean) => {
+                if *boolean {
+                    Ok(1.0)
+                } else {
+                    Ok(0.0)
+                }
+            },
+            Expression::NumberF64(number) => Ok(*number),
+            Expression::NumberI64(number) => Ok(*number as f64),
+            _ => Err(MalformedQuery(String::from("Cannot get F64 from expression")))
+        }
+    }
+
     pub fn identifier_eq(&self, expected_identifier: &String) -> bool {
         match self {
             Expression::Identifier(actual_identifier) => actual_identifier == expected_identifier,
@@ -77,7 +92,7 @@ impl Expression {
         }
     }
 
-    pub fn is_constant_expression(&self) -> bool {
+    pub fn  is_constant_expression(&self) -> bool {
         match self {
             Expression::None => panic!(""),
             Expression::Binary(_, left, right) => {
@@ -186,8 +201,8 @@ impl Expression {
     where
         F: Fn(f64, f64) -> f64
     {
-        if self.is_number() || other.is_number() {
-            return Err(MalformedQuery(String::from("Cannot add values")));
+        if !self.is_number() && !other.is_number() {
+            return Err(MalformedQuery(String::from("")));
         }
 
         match (other, self) {

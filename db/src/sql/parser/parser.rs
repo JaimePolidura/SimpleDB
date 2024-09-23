@@ -1,13 +1,13 @@
 use crate::selection::Selection;
 use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Limit, SelectStatement, Statement, UpdateStatement};
-use crate::sql::token::Token;
-use crate::sql::tokenizer::Tokenizer;
 use crate::ColumnType;
 use bytes::Bytes;
 use shared::SimpleDbError;
 use shared::SimpleDbError::IllegalToken;
 use std::cmp::PartialEq;
+use crate::sql::parser::token::Token;
+use crate::sql::parser::tokenizer::Tokenizer;
 
 const MAX_PRECEDENCE: u8 = u8::MAX;
 
@@ -412,10 +412,10 @@ impl Parser {
 mod test {
     use crate::selection::Selection;
     use crate::sql::expression::{BinaryOperator, Expression};
-    use crate::sql::parser::Parser;
     use crate::sql::statement::{Limit, Statement};
-    use crate::sql::token::Token;
     use crate::ColumnType;
+    use crate::sql::parser::parser::Parser;
+    use crate::sql::parser::token::Token;
 
     #[test]
     fn update_all() {

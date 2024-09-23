@@ -5,4 +5,4 @@ pub mod validator;
 mod expression;
 mod plan;
 mod expression_evaluator;
-mod parser;
+pub mod parser;

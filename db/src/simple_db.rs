@@ -1,10 +1,9 @@
 use crate::database::databases::Databases;
-use crate::sql::parser::Parser;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use crate::sql::executor::StatementExecutor;
-use crate::sql::statement_result::StatementResult;
+use crate::sql::executor::{StatementExecutor, StatementResult};
+use crate::sql::parser::parser::Parser;
 use crate::sql::validator::StatementValidator;
 
 pub struct SimpleDb {
