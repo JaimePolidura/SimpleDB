@@ -85,7 +85,8 @@ impl Planner {
         table: &Arc<Table>,
         limit: &Limit,
     ) -> Result<ScanType, SimpleDbError> {
-        let scan_type = ScanType::get_scan_type(expression, table, limit)?;
+        let primary_column_name = table.get_primary_column_data().unwrap().column_name;
+        let scan_type = ScanType::get_scan_type(&primary_column_name, limit, expression)?;
         match scan_type {
             ScanType::Full => {
                 if !self.options.db_full_scan_allowed {

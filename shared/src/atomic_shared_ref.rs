@@ -63,7 +63,7 @@ impl<T> AtomicSharedRef<T> {
 
 impl<T> SharedRef<T> {
     pub fn create(value: T) -> SharedRef<T> {
-        return SharedRef {
+        SharedRef {
             users: AtomicUsize::new(0),
             shared_ref: value
         }
@@ -74,11 +74,11 @@ impl<T> SharedRef<T> {
 mod test {
     use std::sync::Arc;
     use std::time::Duration;
-    use crate::utils::atomic_shared_ref::AtomicSharedRef;
+    use crate::atomic_shared_ref::AtomicSharedRef;
 
     #[test]
     fn load_unload() {
-        let mut vector_ref: Arc<AtomicSharedRef<Vec<u8>>> = Arc::new(AtomicSharedRef::new(Vec::new()));
+        let mut vector_ref: Arc<AtomicSharedRef<Vec<u8>>> = Arc::new(AtomicSharedRef::create(Vec::new()));
 
         let t1 =  {
             let vector_ref = vector_ref.clone();

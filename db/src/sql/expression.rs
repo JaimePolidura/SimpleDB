@@ -85,7 +85,7 @@ impl Expression {
         }
     }
 
-    pub fn identifier_eq(&self, expected_identifier: &String) -> bool {
+    pub fn identifier_eq(&self, expected_identifier: &str) -> bool {
         match self {
             Expression::Identifier(actual_identifier) => actual_identifier == expected_identifier,
             _ => false
