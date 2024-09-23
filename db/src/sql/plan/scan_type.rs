@@ -37,7 +37,7 @@ impl ScanType {
                 Self::get_scan_type_binary_expr(table, *operator, left, right, limit)
             },
             Expression::Unary(_, expr) => {
-                if expr.is_deterministic() {
+                if expr.is_constant() {
                     Ok(ScanType::Exact(*expr.clone()))
                 } else {
                     Ok(ScanType::Full)
@@ -79,7 +79,7 @@ impl ScanType {
                 Ok(ScanType::Full)
             },
             BinaryOperator::Equal => {
-                if right.is_deterministic() {
+                if right.is_constant() {
                     Ok(ScanType::Exact(Expression::Binary(operator, left.clone(), right.clone())))
                 } else {
                     Ok(ScanType::Full)
@@ -90,7 +90,7 @@ impl ScanType {
             },
             BinaryOperator::GreaterEqual |
             BinaryOperator::Greater => {
-                if right.is_deterministic() && left.is_identifier(&primary_column_name) {
+                if right.is_constant() && left.identifier_eq(&primary_column_name) {
                     Ok(ScanType::Range(RangeScan{
                         start: Some(*right.clone()),
                         start_inclusive: matches!(operator, BinaryOperator::GreaterEqual),
@@ -103,7 +103,7 @@ impl ScanType {
             },
             BinaryOperator::LessEqual |
             BinaryOperator::Less => {
-                if right.is_deterministic() && left.is_identifier(&primary_column_name){
+                if right.is_constant() && left.identifier_eq(&primary_column_name){
                     Ok(ScanType::Range(RangeScan{
                         start: None,
                         start_inclusive: false,

@@ -1,9 +1,9 @@
-use std::sync::Arc;
-use shared::{SimpleDbError, SimpleDbOptions};
-use shared::SimpleDbError::UnknownColumn;
-use crate::{ColumnType, Database, Table};
-use crate::sql::expression::{BinaryOperator, Expression};
+use crate::sql::expression::Expression;
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
+use crate::{ColumnType, Database, Table};
+use shared::SimpleDbError::UnknownColumn;
+use shared::{SimpleDbError, SimpleDbOptions};
+use std::sync::Arc;
 
 pub struct StatementValidator {
     options: Arc<SimpleDbOptions>

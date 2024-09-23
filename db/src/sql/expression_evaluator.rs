@@ -2,21 +2,21 @@ use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
 use shared::SimpleDbError;
 use SimpleDbError::MalformedQuery;
 
-pub fn evaluate_deterministic(
+pub fn evaluate_constant_expressions(
     expression: Expression
 ) -> Result<Expression, SimpleDbError> {
-    if !expression.is_deterministic() {
+    if !expression.is_constant() {
         return Ok(expression);
     }
 
     match expression {
         Expression::Binary(operator, left, right) => {
-            let left = evaluate_deterministic(*left)?;
-            let right = evaluate_deterministic(*right)?;
+            let left = evaluate_constant_expressions(*left)?;
+            let right = evaluate_constant_expressions(*right)?;
             evaluate_deterministic_binary_op(left, right, operator)
         },
         Expression::Unary(operator, expression) => {
-            let expression = evaluate_deterministic(*expression)?;
+            let expression = evaluate_constant_expressions(*expression)?;
             evaluate_deterministic_unary_op(expression, operator)
         },
         Expression::Identifier(_) => Ok(expression),
@@ -32,7 +32,7 @@ fn evaluate_deterministic_unary_op(
     expression: Expression,
     operator: UnaryOperator,
 ) -> Result<Expression, SimpleDbError> {
-    if !expression.is_deterministic() {
+    if !expression.is_constant() {
         return Ok(expression);
     }
     if !expression.is_number() {
@@ -69,5 +69,12 @@ fn evaluate_deterministic_binary_op(
         BinaryOperator::GreaterEqual => left.greater_equal(&right),
         BinaryOperator::Less => left.less(&right),
         BinaryOperator::LessEqual => left.less_equal(&right),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    fn simple_expression() {
+
     }
 }

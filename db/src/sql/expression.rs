@@ -46,30 +46,7 @@ impl Expression {
         }
     }
 
-    pub fn is_number(&self) -> bool {
-        match self {
-            Expression::NumberF64(_) |
-            Expression::NumberI64(_) => true,
-            _ => false
-        }
-    }
-
-    pub fn is_deterministic(&self) -> bool {
-        match self {
-            Expression::None => panic!(""),
-            Expression::Binary(_, left, right) => {
-                left.is_deterministic() && right.is_deterministic()
-            },
-            Expression::Unary(_, expr) => expr.is_deterministic(),
-            Expression::String(_) |
-            Expression::Boolean(_) |
-            Expression::NumberF64(_) |
-            Expression::NumberI64(_) => true,
-            Expression::Identifier(_) => false,
-        }
-    }
-
-    pub fn get_value_as_bytes(&self) -> Bytes {
+    pub fn get_bytes(&self) -> Bytes {
         match self {
             Expression::String(string) => Bytes::copy_from_slice(string.as_bytes()),
             Expression::Boolean(boolean_value) => {
@@ -85,7 +62,37 @@ impl Expression {
         }
     }
 
-    pub fn is_literal(&self) -> bool {
+    pub fn is_number(&self) -> bool {
+        match self {
+            Expression::NumberF64(_) |
+            Expression::NumberI64(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn identifier_eq(&self, expected_identifier: &String) -> bool {
+        match self {
+            Expression::Identifier(actual_identifier) => actual_identifier == expected_identifier,
+            _ => false
+        }
+    }
+
+    pub fn is_constant_expression(&self) -> bool {
+        match self {
+            Expression::None => panic!(""),
+            Expression::Binary(_, left, right) => {
+                left.is_constant_expression() && right.is_constant_expression()
+            },
+            Expression::Unary(_, expr) => expr.is_constant_expression(),
+            Expression::String(_) |
+            Expression::Boolean(_) |
+            Expression::NumberF64(_) |
+            Expression::NumberI64(_) => true,
+            Expression::Identifier(_) => false,
+        }
+    }
+
+    pub fn is_constant(&self) -> bool {
         match self {
             Expression::String(_) |
             Expression::Boolean(_) |
@@ -109,13 +116,6 @@ impl Expression {
 
     pub fn divide(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         self.arithmetic_op(other, |a, b| a / b)
-    }
-
-    pub fn is_identifier(&self, expected_identifier: &String) -> bool {
-        match self {
-            Expression::Identifier(actual_identifier) => actual_identifier == expected_identifier,
-            _ => false
-        }
     }
 
     pub fn or(&self, other: &Expression) -> Result<Expression, SimpleDbError> {

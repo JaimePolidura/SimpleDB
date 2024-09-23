@@ -1,16 +1,20 @@
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Statement};
-use crate::sql::statement_result::StatementResult;
 use crate::{ColumnType, Database, Table};
 use bytes::Bytes;
 use shared::{utils, SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use crate::sql::expression_evaluator::evaluate_deterministic;
+use crate::sql::expression_evaluator::evaluate_constant_expressions;
 use crate::sql::validator::StatementValidator;
 
 pub struct StatementExecutor {
     options: Arc<SimpleDbOptions>,
     validator: StatementValidator,
+}
+
+pub enum StatementResult {
+    TransactionStarted(Transaction),
+    Ok(usize), //usize number of rows affected
 }
 
 impl StatementExecutor {
@@ -137,15 +141,15 @@ impl StatementExecutor {
     fn evaluate_expressions(&self, mut statement: Statement) -> Result<Statement, SimpleDbError> {
         match statement {
             Statement::Select(mut select) => {
-                select.where_expr = evaluate_deterministic(select.where_expr)?;
+                select.where_expr = evaluate_constant_expressions(select.where_expr)?;
                 Ok(Statement::Select(select))
             }
             Statement::Update(mut update) => {
-                update.where_expr = evaluate_deterministic(update.where_expr)?;
+                update.where_expr = evaluate_constant_expressions(update.where_expr)?;
                 Ok(Statement::Update(update))
             }
             Statement::Delete(mut delete) => {
-                delete.where_expr = evaluate_deterministic(delete.where_expr)?;
+                delete.where_expr = evaluate_constant_expressions(delete.where_expr)?;
                 Ok(Statement::Delete(delete))
             },
             _ => Ok(statement)

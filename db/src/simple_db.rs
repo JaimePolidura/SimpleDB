@@ -3,7 +3,7 @@ use crate::sql::parser::Parser;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use crate::sql::statement_executor::StatementExecutor;
+use crate::sql::executor::StatementExecutor;
 use crate::sql::statement_result::StatementResult;
 use crate::sql::validator::StatementValidator;
 
