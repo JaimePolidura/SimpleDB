@@ -24,7 +24,7 @@ impl LimitStep {
 }
 
 impl PlanStep for LimitStep {
-    fn next(&mut self) -> Result<Option<&Row>, SimpleDbError> {
+    fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         match self.limit {
             Limit::Some(limit) => {
                 if limit > self.count {

@@ -85,9 +85,9 @@ impl Tokenizer {
             'A' => self.match_string_or_other_identifier("ND", Token::And, 1),
             'B' => {
                 if self.advance_if_next_string_eq("OOLEAN") {
-                    Ok(Token::ColumnType(ColumnType::BOOLEAN))
+                    Ok(Token::ColumnType(ColumnType::Boolean))
                 } else if self.advance_if_next_string_eq("LOB") {
-                    Ok(Token::ColumnType(ColumnType::BLOB))
+                    Ok(Token::ColumnType(ColumnType::Blob))
                 } else {
                     //Adjust, so that next points to the first char of the indentifier
                     self.next -= 1;
@@ -97,6 +97,7 @@ impl Tokenizer {
             'K' => self.match_string_or_other_identifier("EY", Token::Key, 1),
             'P' => self.match_string_or_other_identifier("RIMARY", Token::Primary, 1),
             'O' => self.match_string_or_other_identifier("R", Token::Or, 1),
+            'N' => self.match_string_or_other_identifier("ULL", Token::Null, 1),
             'R' => {
                 if self.advance_if_next_string_eq("OLLBACK") {
                     Ok(Token::Rollback)
@@ -171,7 +172,7 @@ impl Tokenizer {
             },
             'D' => {
                 if self.advance_if_next_string_eq("ATE") {
-                    Ok(Token::ColumnType(ColumnType::DATE))
+                    Ok(Token::ColumnType(ColumnType::Date))
                 } else if self.advance_if_next_string_eq("ELETE"){
                     Ok(Token::Delete)
                 } else {
@@ -199,7 +200,7 @@ impl Tokenizer {
             },
             'V' => {
                 if self.advance_if_next_string_eq("ARCHAR") {
-                    Ok(Token::ColumnType(ColumnType::VARCHAR))
+                    Ok(Token::ColumnType(ColumnType::Varchar))
                 } else if self.advance_if_next_string_eq("ALUES") {
                     Ok(Token::Values)
                 } else {
@@ -534,7 +535,7 @@ mod test {
         assert!(matches!(tokenizer.get_token().unwrap(), Token::Comma));
 
         assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(nombre)));
-        assert!(matches!(tokenizer.get_token().unwrap(), Token::ColumnType(ColumnType::VARCHAR)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::ColumnType(ColumnType::Varchar)));
         assert!(matches!(tokenizer.get_token().unwrap(), Token::Comma));
 
         assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(dinero)));

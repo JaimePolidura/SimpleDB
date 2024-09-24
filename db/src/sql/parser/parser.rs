@@ -620,7 +620,7 @@ mod test {
                 assert_eq!(createStatement.table_name, String::from("personas"));
                 assert_eq!(createStatement.columns.len(), 3);
                 assert_eq!(createStatement.columns[0], (String::from("id"), ColumnType::I64, true));
-                assert_eq!(createStatement.columns[1], (String::from("nombre"), ColumnType::VARCHAR, false));
+                assert_eq!(createStatement.columns[1], (String::from("nombre"), ColumnType::Varchar, false));
                 assert_eq!(createStatement.columns[2], (String::from("dinero"), ColumnType::F64, false));
             },
             _ => panic!()

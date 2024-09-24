@@ -270,7 +270,7 @@ impl RangeScan {
 
     pub fn get_position(&self, other_key: &Bytes) -> RangeKeyPosition {
         if let Some(start_key) = self.start.as_ref() {
-            let start_key_bytes = start_key.get_bytes();
+            let start_key_bytes = start_key.serialize();
             let is_bellow = (self.start_inclusive && start_key_bytes.gt(other_key)) ||
                 (!self.start_inclusive && start_key_bytes.ge(other_key));
             if is_bellow {
@@ -278,7 +278,7 @@ impl RangeScan {
             }
         }
         if let Some(end_key) = self.end.as_ref() {
-            let end_key_bytes = end_key.get_bytes();
+            let end_key_bytes = end_key.serialize();
             let is_above = (self.end_inclusive && end_key_bytes.lt(other_key)) ||
                 (!self.end_inclusive && end_key_bytes.le(other_key));
             if is_above {

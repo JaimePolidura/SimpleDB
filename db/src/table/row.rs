@@ -3,6 +3,7 @@ use crate::table::table::Table;
 use bytes::Bytes;
 use shared::ColumnId;
 use std::sync::Arc;
+use crate::table::table_descriptor::ColumnDescriptor;
 
 #[derive(Clone)]
 pub struct Row {
@@ -37,5 +38,9 @@ impl Row {
         let column_id = *self.table.columns_by_name.get(column_name).unwrap()
             .value();
         self.storage_engine_record.get_value(column_id)
+    }
+
+    pub fn get_column_desc(&self, column_name: &str) -> Option<ColumnDescriptor> {
+        self.table.get_column_desc(column_name)
     }
 }

@@ -22,9 +22,9 @@ impl FilterStep {
 }
 
 impl PlanStep for FilterStep {
-    fn next(&mut self) -> Result<Option<&Row>, SimpleDbError> {
+    fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         while let Some(next_row) = self.source.next()? {
-            if evaluate_expression(next_row, &self.filter_expression)? {
+            if evaluate_expression(&next_row, &self.filter_expression)? {
                 return Ok(Some(next_row));
             }
         }

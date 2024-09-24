@@ -1,4 +1,4 @@
-use bytes::BufMut;
+use bytes::{BufMut, Bytes};
 use crate::ColumnType;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -21,6 +21,7 @@ pub enum Token {
 
     True, //15
     False,
+    Null,
     And,
     Or,
     Select,
@@ -66,6 +67,7 @@ impl Token {
                 bytes.put_f64_le(*number);
                 Ok(bytes::Bytes::from(bytes))
             },
+            Token::Null => Ok(Bytes::new()),
             _ => Err(()) //Cannot cast to bytes
         }
     }

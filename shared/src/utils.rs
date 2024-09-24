@@ -56,7 +56,7 @@ pub fn u16_vec_to_u8_vec(u16_vec: &Vec<u16>) -> Vec<u8> {
 }
 
 pub fn u16_to_u8_le(value: u16, start_index: usize, vector: &mut Vec<u8>) {
-    fill_u8_vec_if_emtpy(vector, start_index + 1, 0);
+    fill_u8_vec_if_empty(vector, start_index + 1, 0);
 
     vector[start_index] = (value & 0xff) as u8;
     vector[start_index + 1] = (value >> 8 & 0xff) as u8;
@@ -69,7 +69,7 @@ pub fn overflows_bytes_64(bytes: &Bytes, target_size_bytes: u8) -> bool {
 }
 
 pub fn u64_to_u8_le(value: u64, start_index: usize, vector: &mut Vec<u8>) {
-    fill_u8_vec_if_emtpy(vector, start_index + 7, 0);
+    fill_u8_vec_if_empty(vector, start_index + 7, 0);
 
     vector[start_index] =     (value & 0xff) as u8;
     vector[start_index + 1] = (value >> 8 & 0xff) as u8;
@@ -158,7 +158,7 @@ where
     }
 }
 
-pub fn fill_u8_vec_if_emtpy<T>(vec: &mut Vec<T>, index: usize, value: T)
+pub fn fill_u8_vec_if_empty<T>(vec: &mut Vec<T>, index: usize, value: T)
 where
     T: Copy
 {

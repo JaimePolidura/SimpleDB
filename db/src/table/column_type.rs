@@ -1,6 +1,7 @@
-use std::cmp::max;
 use bytes::Bytes;
-use shared::{utils, SimpleDbError};
+use shared::utils;
+use std::cmp::max;
+use crate::ColumnType::Varchar;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ColumnType {
@@ -14,10 +15,12 @@ pub enum ColumnType {
     I64,
     F32,
     F64,
-    BOOLEAN,
-    VARCHAR, //AKA Strings
-    DATE, //TODO
-    BLOB //TODO
+    Boolean,
+    Varchar, //AKA Strings
+    Date, //TODO
+    Blob, //TODO
+    //This cannot be used by users, it is just a "wildcard" to easily evaluate expressions with NULL keywords
+    Null,
 }
 
 impl ColumnType {
@@ -33,10 +36,11 @@ impl ColumnType {
             ColumnType::I64 => other.is_numeric(),
             ColumnType::F32 => other.is_numeric(),
             ColumnType::F64 => other.is_numeric(),
-            ColumnType::BOOLEAN => other.is_numeric(),
-            ColumnType::VARCHAR => matches!(other, ColumnType::VARCHAR),
-            ColumnType::DATE => matches!(other, ColumnType::DATE),
-            ColumnType::BLOB => matches!(other, ColumnType::BLOB)
+            ColumnType::Boolean => other.is_numeric(),
+            ColumnType::Varchar => matches!(other, ColumnType::Varchar),
+            ColumnType::Date => matches!(other, ColumnType::Date),
+            ColumnType::Blob => matches!(other, ColumnType::Blob),
+            ColumnType::Null => true,
         }
     }
 
@@ -95,10 +99,13 @@ impl ColumnType {
     }
 
     pub fn is_comparable(&self, other: ColumnType) -> bool {
-        if self.is_numeric() && other.is_numeric() {
+        //Null types can always be compared
+        if self.is_numeric() && other.is_numeric() ||
+            matches!(other, ColumnType::Null) {
+
             true
         } else {
-            *self == other
+            utils::enum_eq(self, &other)
         }
     }
 
@@ -119,9 +126,10 @@ impl ColumnType {
     }
 
     pub fn is_boolean(&self) -> bool {
-        matches!(self, ColumnType::BOOLEAN)
+        matches!(self, ColumnType::Boolean)
     }
 
+    //Nulls
     pub fn has_valid_format(&self, bytes: &Bytes) -> bool {
         match *self {
             ColumnType::I8 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 1),
@@ -134,13 +142,14 @@ impl ColumnType {
             ColumnType::I64 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 8),
             ColumnType::F32 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 4),
             ColumnType::F64 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 8),
-            ColumnType::BOOLEAN => {
+            ColumnType::Boolean => {
                 let vec = bytes.to_vec();
                 vec.len() == 1 && (vec[0] == 0x00 || vec[1] == 0x01)
             },
-            ColumnType::VARCHAR => String::from_utf8(bytes.to_vec()).is_ok(),
-            ColumnType::DATE => todo!(),
-            ColumnType::BLOB => true,
+            ColumnType::Varchar => String::from_utf8(bytes.to_vec()).is_ok(),
+            ColumnType::Date => todo!(),
+            ColumnType::Blob => true,
+            ColumnType::Null => bytes.eq(&Bytes::copy_from_slice(&vec![]))
         }
     }
 
@@ -156,10 +165,11 @@ impl ColumnType {
             ColumnType::I64 => 8,
             ColumnType::F32 => 9,
             ColumnType::F64 => 10,
-            ColumnType::BOOLEAN => 11,
-            ColumnType::VARCHAR => 12,
-            ColumnType::DATE => 13,
-            ColumnType::BLOB => 14,
+            ColumnType::Boolean => 11,
+            ColumnType::Varchar => 12,
+            ColumnType::Date => 13,
+            ColumnType::Blob => 14,
+            ColumnType::Null => panic!("Illegal code path")
         }
     }
 
@@ -175,10 +185,10 @@ impl ColumnType {
             8 =>  Ok(ColumnType::I64),
             9 =>  Ok(ColumnType::F32),
             10 => Ok(ColumnType::F64) ,
-            11 => Ok(ColumnType::BOOLEAN),
-            12 => Ok(ColumnType::VARCHAR),
-            13 => Ok(ColumnType::DATE),
-            14 => Ok(ColumnType::BLOB),
+            11 => Ok(ColumnType::Boolean),
+            12 => Ok(ColumnType::Varchar),
+            13 => Ok(ColumnType::Date),
+            14 => Ok(ColumnType::Blob),
             _ => Err((value))
         }
     }

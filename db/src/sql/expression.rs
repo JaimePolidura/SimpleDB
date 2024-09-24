@@ -1,6 +1,8 @@
+use crate::ColumnType;
 use bytes::Bytes;
-use shared::SimpleDbError;
+use shared::{utils, SimpleDbError};
 use std::cmp::PartialEq;
+use std::f32::consts::E;
 use SimpleDbError::MalformedQuery;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -14,6 +16,7 @@ pub enum Expression {
     Boolean(bool),
     NumberF64(f64),
     NumberI64(i64),
+    Null,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -46,7 +49,32 @@ impl Expression {
         }
     }
 
-    pub fn get_bytes(&self) -> Bytes {
+    pub fn deserialize(
+        column_type: ColumnType,
+        bytes: &Bytes,
+    ) -> Result<Expression, SimpleDbError> {
+        match column_type {
+            ColumnType::I8 => Ok(Expression::NumberI64(utils::bytes_to_i8(bytes) as i64)),
+            ColumnType::U8 => Ok(Expression::NumberI64(utils::bytes_to_u8(bytes) as i64)),
+            ColumnType::I16 => Ok(Expression::NumberI64(utils::bytes_to_i16_le(bytes) as i64)),
+            ColumnType::U16 => Ok(Expression::NumberI64(utils::bytes_to_u16_le(bytes) as i64)),
+            ColumnType::U32 => Ok(Expression::NumberI64(utils::bytes_to_u32_le(bytes) as i64)),
+            ColumnType::I32 => Ok(Expression::NumberI64(utils::bytes_to_i32_le(bytes) as i64)),
+            ColumnType::U64 => Ok(Expression::NumberI64(utils::bytes_to_u64_le(bytes) as i64)),
+            ColumnType::I64 => Ok(Expression::NumberI64(utils::bytes_to_i64_le(bytes))),
+            ColumnType::F32 => Ok(Expression::NumberF64(utils::bytes_to_f32_le(bytes) as f64)),
+            ColumnType::F64 => Ok(Expression::NumberF64(utils::bytes_to_f64_le(bytes))),
+            ColumnType::Boolean => Ok(Expression::Boolean(bytes[0] != 0x00)),
+            ColumnType::Varchar => Ok(Expression::String(String::from_utf8(bytes.to_vec())
+                .map_err(|e| MalformedQuery(String::from("Cannot parse from string")))?
+            )),
+            ColumnType::Date => todo!(),
+            ColumnType::Blob => todo!(),
+            ColumnType::Null => panic!("Invalid code path"),
+        }
+    }
+
+    pub fn serialize(&self) -> Bytes {
         match self {
             Expression::String(string) => Bytes::copy_from_slice(string.as_bytes()),
             Expression::Boolean(boolean_value) => {
@@ -58,6 +86,7 @@ impl Expression {
             }
             Expression::NumberF64(number_f64) => Bytes::copy_from_slice(&number_f64.to_le_bytes()),
             Expression::NumberI64(number_i64) => Bytes::copy_from_slice(&number_i64.to_le_bytes()),
+            Expression::Null => Bytes::copy_from_slice(&vec![]),
             _ => panic!("")
         }
     }
@@ -92,13 +121,14 @@ impl Expression {
         }
     }
 
-    pub fn  is_constant_expression(&self) -> bool {
+    pub fn is_constant_expression(&self) -> bool {
         match self {
             Expression::None => panic!(""),
             Expression::Binary(_, left, right) => {
                 left.is_constant_expression() && right.is_constant_expression()
             },
             Expression::Unary(_, expr) => expr.is_constant_expression(),
+            Expression::Null |
             Expression::String(_) |
             Expression::Boolean(_) |
             Expression::NumberF64(_) |
@@ -109,6 +139,7 @@ impl Expression {
 
     pub fn is_constant(&self) -> bool {
         match self {
+            Expression::Null |
             Expression::String(_) |
             Expression::Boolean(_) |
             Expression::NumberF64(_) |
@@ -142,38 +173,78 @@ impl Expression {
 
     pub fn and(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         match (self, other) {
+            (Expression::Null, _) |
+            (_, Expression::Null) => Ok(Expression::Null),
             (Expression::Boolean(a), Expression::Boolean(b)) => Ok(Expression::Boolean(*a && *b)),
             _ => Err(MalformedQuery(String::from("Cannot and values")))
         }
     }
 
     pub fn greater(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
-        self.comparation_op(other, |a, b| a > b, |a, b| a > b)
+        self.comparation_op(
+            other,
+            Expression::Null,
+            Expression::Null,
+            |a, b| a > b,
+            |a, b| a > b
+        )
     }
 
     pub fn greater_equal(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
-        self.comparation_op(other, |a, b| a >= b, |a, b| a >= b)
+        self.comparation_op(
+            other,
+            Expression::Null,
+            Expression::Null,
+            |a, b| a >= b,
+            |a, b| a >= b
+        )
     }
 
     pub fn less(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
-        self.comparation_op(other, |a, b| a < b, |a, b| a <= b)
+        self.comparation_op(
+            other,
+            Expression::Null,
+            Expression::Null,
+            |a, b| a < b,
+            |a, b| a <= b
+        )
     }
 
     pub fn less_equal(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
-        self.comparation_op(other, |a, b| a <= b, |a, b| a <= b)
+        self.comparation_op(
+            other,
+            Expression::Null,
+            Expression::Null,
+            |a, b| a <= b,
+            |a, b| a <= b
+        )
     }
 
     pub fn equal(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
-        self.comparation_op(other, |a, b| a == b, |a, b| a == b)
+        self.comparation_op(
+            other,
+            Expression::Boolean(true),
+            Expression::Boolean(false),
+            |a, b| a == b,
+            |a, b| a == b
+        )
     }
 
     pub fn not_equal(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
-        self.comparation_op(other, |a, b| a != b, |a, b| a != b)
+        self.comparation_op(
+            other,
+            Expression::Boolean(false),
+            Expression::Boolean(true),
+            |a, b| a != b,
+            |a, b| a != b
+        )
     }
 
     fn comparation_op(
         &self,
         other: &Expression,
+        null_null_return_value: Expression,
+        null_some_return_value: Expression,
         operation_f64: impl Fn(f64, f64) -> bool,
         operation_str: impl Fn(&str, &str) -> bool
     ) -> Result<Expression, SimpleDbError> {
@@ -193,6 +264,13 @@ impl Expression {
             (Expression::String(a), Expression::String(b)) => {
                 Ok(Expression::Boolean(operation_str(a, b)))
             },
+            (Expression::Null, Expression::Null) => {
+                Ok(null_null_return_value)
+            },
+            (Expression::Null, _) |
+            (_, Expression::Null) => {
+                Ok(null_some_return_value)
+            },
             _ => Err(MalformedQuery(String::from("Cannot compare values")))
         }
     }
@@ -201,6 +279,9 @@ impl Expression {
     where
         F: Fn(f64, f64) -> f64
     {
+        if matches!(other, Expression::Null) {
+            return Ok(Expression::Null);
+        }
         if !self.is_number() && !other.is_number() {
             return Err(MalformedQuery(String::from("")));
         }

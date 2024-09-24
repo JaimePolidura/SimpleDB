@@ -1,14 +1,56 @@
+use std::f32::consts::E;
+use bytes::Bytes;
+use crate::sql::expression::Expression::Binary;
 use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
+use crate::Row;
 use shared::SimpleDbError;
 use SimpleDbError::MalformedQuery;
-use crate::Row;
-use crate::sql::expression::Expression::Binary;
 
+//expression is expected to have been passed to evaluate_constant_expressions() before calling this function
+//If the row returns null, we will return false
 pub fn evaluate_expression(
     row: &Row,
     expression: &Expression
 ) -> Result<bool, SimpleDbError> {
-    Ok(true)
+    match do_evaluate_expression(row, expression)? {
+        Expression::Boolean(value) => Ok(value),
+        Expression::Null => Ok(false),
+        _ => Err(MalformedQuery(String::from("Expression should produce a boolean value")))
+    }
+}
+
+//If the row returns a null value, we will propagate the null value, the function will return a null expression
+fn do_evaluate_expression(
+    row: &Row,
+    expression: &Expression
+) -> Result<Expression, SimpleDbError> {
+    match expression {
+        Expression::Binary(operation, left, right) => {
+            let left = do_evaluate_expression(row, &*left.clone())?;
+            let right = do_evaluate_expression(row, &*right.clone())?;
+            evaluate_constant_binary_op(left, right, operation.clone())
+        },
+        Expression::Unary(operation, unary_expr) => {
+            let unary_expr = do_evaluate_expression(row, &*unary_expr.clone())?;
+            evaluate_constant_unary_op(unary_expr, operation.clone())
+        },
+        Expression::Identifier(column_name) => {
+            match row.get_column_value(column_name) {
+                Some(value) => {
+                    Ok(Expression::deserialize(row.get_column_desc(column_name)
+                        .ok_or(MalformedQuery(String::from("Unknown column")))?
+                        .column_type, value)?)
+                },
+                None => Ok(Expression::Null)
+            }
+        },
+        Expression::String(string) => Ok(Expression::String(string.clone())),
+        Expression::Boolean(boolean) => Ok(Expression::Boolean(*boolean)),
+        Expression::NumberI64(number) => Ok(Expression::NumberI64(*number)),
+        Expression::NumberF64(number) => Ok(Expression::NumberF64(*number)),
+        Expression::Null => Ok(Expression::Null),
+        Expression::None => panic!("Invalid code path")
+    }
 }
 
 pub fn evaluate_constant_expressions(
@@ -29,6 +71,7 @@ pub fn evaluate_constant_expressions(
         Expression::Boolean(_) => Ok(expression),
         Expression::NumberF64(_) => Ok(expression),
         Expression::NumberI64(_) => Ok(expression),
+        Expression::Null => Ok(expression),
         Expression::None => panic!(""),
     }
 }
@@ -50,6 +93,7 @@ fn evaluate_constant_unary_op(
             match expression {
                 Expression::NumberF64(f64) => Ok(Expression::NumberF64(- f64)),
                 Expression::NumberI64(i64) => Ok(Expression::NumberI64(- i64)),
+                Expression::Null => Ok(Expression::Null),
                 _ => panic!("")
             }
         }
@@ -83,8 +127,8 @@ fn evaluate_constant_binary_op(
 
 #[cfg(test)]
 mod test {
-    use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
     use crate::sql::expression::Expression::Binary;
+    use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
     use crate::sql::expression_evaluator::evaluate_constant_expressions;
 
     // dinero > (1 + 20) OR id > 10 -> dinero > 21 OR id > 10

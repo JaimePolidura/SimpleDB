@@ -55,7 +55,7 @@ impl StatementValidator {
         self.validate_where_expression(&statement.where_expr, &table)?;
 
         for (updated_column_name, updated_column_value_expr) in &statement.updated_values {
-            let column_data = table.get_column_data(updated_column_name)
+            let column_data = table.get_column_desc(updated_column_name)
                 .ok_or(SimpleDbError::ColumnNotFound(table.storage_keyspace_id, updated_column_name.clone()))?;
             let expression_type_result = self.validate_expression(updated_column_value_expr, &table)?;
 
@@ -100,7 +100,7 @@ impl StatementValidator {
         table: &Arc<Table>
     ) -> Result<(), SimpleDbError> {
         let type_produced = self.validate_expression(expression, &table)?;
-        if !matches!(type_produced, ColumnType::BOOLEAN) {
+        if !matches!(type_produced, ColumnType::Boolean) {
             Err(SimpleDbError::MalformedQuery(String::from("Expression should produce a boolean")))
         } else {
             Ok(())
@@ -119,15 +119,15 @@ impl StatementValidator {
                 let type_right = self.validate_expression(right, table)?;
 
                 if operator.is_logical() &&
-                    matches!(type_left, ColumnType::BOOLEAN) &&
-                    matches!(type_right, ColumnType::BOOLEAN) {
-                    Ok(ColumnType::BOOLEAN)
+                    matches!(type_left, ColumnType::Boolean) &&
+                    matches!(type_right, ColumnType::Boolean) {
+                    Ok(ColumnType::Boolean)
                 } else if operator.is_arithmetic() &&
                     type_left.is_numeric() &&
                     type_right.is_numeric() {
                     Ok(type_left.get_arithmetic_produced_type(type_right))
                 } else if operator.is_comparation() && type_left.is_comparable(type_right) {
-                    Ok(ColumnType::BOOLEAN)
+                    Ok(ColumnType::Boolean)
                 } else {
                     Err(SimpleDbError::MalformedQuery(String::from("Expression produces wrong type")))
                 }
@@ -141,14 +141,15 @@ impl StatementValidator {
                 }
             }
             Expression::Identifier(table_name) => {
-                table.get_column_data(table_name)
+                table.get_column_desc(table_name)
                     .ok_or(UnknownColumn(table_name.clone()))
                     .map(|it| it.column_type)
             },
-            Expression::String(_) => Ok(ColumnType::VARCHAR),
-            Expression::Boolean(_) => Ok(ColumnType::BOOLEAN),
+            Expression::String(_) => Ok(ColumnType::Varchar),
+            Expression::Boolean(_) => Ok(ColumnType::Boolean),
             Expression::NumberF64(_) => Ok(ColumnType::F64),
-            Expression::NumberI64(_) => Ok(ColumnType::I64)
+            Expression::NumberI64(_) => Ok(ColumnType::I64),
+            Expression::Null => Ok(ColumnType::Null),
         }
     }
 }

@@ -24,7 +24,7 @@ impl ExactScanStep {
 }
 
 impl PlanStep for ExactScanStep {
-    fn next(&mut self) -> Result<Option<&Row>, SimpleDbError> {
-        Ok(self.row.as_ref())
+    fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
+        Ok(self.row.take())
     }
 }

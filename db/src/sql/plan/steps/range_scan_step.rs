@@ -19,7 +19,7 @@ impl RangeScanStep {
         range: RangeScan
     ) -> Result<RangeScanStep, SimpleDbError> {
         let iterator = if let Some(star_range_key_expr) = range.start() {
-            let star_range_key_bytes = star_range_key_expr.get_bytes();
+            let star_range_key_bytes = star_range_key_expr.serialize();
             table.scan_from_key(&star_range_key_bytes, range.is_start_inclusive(), transaction, selection)
         } else {
             table.scan_all(transaction, selection)
@@ -33,13 +33,13 @@ impl RangeScanStep {
 }
 
 impl PlanStep for RangeScanStep {
-    fn next(&mut self) -> Result<Option<&Row>, SimpleDbError> {
+    fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         if self.iterator.next() {
             let current_row = self.iterator.row();
             let current_primary_column_value = current_row.get_primary_column_value();
 
             match self.range.get_position(current_primary_column_value) {
-                RangeKeyPosition::Inside => Ok(Some(current_row)),
+                RangeKeyPosition::Inside => Ok(Some(current_row.clone())),
                 RangeKeyPosition::Above => Ok(None),
                 //Not possible because, the iterator have been seeked in construction time
                 RangeKeyPosition::Bellow => panic!(""),

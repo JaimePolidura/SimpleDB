@@ -126,10 +126,11 @@ impl StatementExecutor {
                 ColumnType::I64 => Bytes::from(utils::bytes_to_i64_le(unformatted_column_value).to_le_bytes().to_vec()),
                 ColumnType::F32 => Bytes::from(utils::bytes_to_f32_le(unformatted_column_value).to_le_bytes().to_vec()),
                 ColumnType::F64 => Bytes::from(utils::bytes_to_f64_le(unformatted_column_value).to_le_bytes().to_vec()),
-                ColumnType::BOOLEAN => unformatted_column_value.clone(),
-                ColumnType::VARCHAR => unformatted_column_value.clone(),
-                ColumnType::DATE => unformatted_column_value.clone(),
-                ColumnType::BLOB => unformatted_column_value.clone()
+                ColumnType::Boolean => unformatted_column_value.clone(),
+                ColumnType::Varchar => unformatted_column_value.clone(),
+                ColumnType::Date => unformatted_column_value.clone(),
+                ColumnType::Blob => unformatted_column_value.clone(),
+                ColumnType::Null => unformatted_column_value.clone()
             };
 
             formatted_values.push((column_name.clone(), formatted_column_value));
