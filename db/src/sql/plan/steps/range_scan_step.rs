@@ -3,7 +3,7 @@ use shared::SimpleDbError;
 use storage::transactions::transaction::Transaction;
 use crate::{Row, Table, TableIterator};
 use crate::selection::Selection;
-use crate::sql::plan::plan_step::PlanStep;
+use crate::sql::plan::plan_step::{Plan, PlanStep};
 use crate::sql::plan::scan_type::{RangeKeyPosition, RangeScan};
 
 pub struct RangeScanStep {
@@ -17,7 +17,7 @@ impl RangeScanStep {
         selection: Selection,
         transaction: &Transaction,
         range: RangeScan
-    ) -> Result<RangeScanStep, SimpleDbError> {
+    ) -> Result<Plan, SimpleDbError> {
         let iterator = if let Some(star_range_key_expr) = range.start() {
             let star_range_key_bytes = star_range_key_expr.serialize();
             table.scan_from_key(&star_range_key_bytes, range.is_start_inclusive(), transaction, selection)
@@ -25,10 +25,10 @@ impl RangeScanStep {
             table.scan_all(transaction, selection)
         }?;
 
-        Ok(RangeScanStep{
+        Ok(Box::new(RangeScanStep{
             iterator,
             range,
-        })
+        }))
     }
 }
 

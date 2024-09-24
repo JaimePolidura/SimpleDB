@@ -1,11 +1,11 @@
 use shared::SimpleDbError;
 use crate::Row;
-use crate::sql::plan::plan_step::PlanStep;
+use crate::sql::plan::plan_step::{Plan, PlanStep};
 use crate::sql::statement::Limit;
 
 pub struct LimitStep {
     limit: Limit,
-    source: Box<dyn PlanStep>,
+    source: Plan,
 
     count: usize
 }
@@ -13,13 +13,13 @@ pub struct LimitStep {
 impl LimitStep {
     pub fn create(
         limit: Limit,
-        source: Box<dyn PlanStep>
-    ) -> LimitStep {
-        LimitStep {
+        source: Plan
+    ) -> Plan {
+        Box::new(LimitStep {
             count: 0,
             source,
             limit,
-        }
+        })
     }
 }
 

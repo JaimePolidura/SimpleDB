@@ -3,7 +3,7 @@ use shared::SimpleDbError;
 use storage::transactions::transaction::Transaction;
 use crate::{Row, Table, TableIterator};
 use crate::selection::Selection;
-use crate::sql::plan::plan_step::PlanStep;
+use crate::sql::plan::plan_step::{Plan, PlanStep};
 
 pub struct FullScanStep {
     iterator: TableIterator,
@@ -14,10 +14,10 @@ impl FullScanStep {
         table: Arc<Table>,
         selection: Selection,
         transaction: &Transaction
-    ) -> Result<FullScanStep, SimpleDbError> {
-        Ok(FullScanStep {
+    ) -> Result<Plan, SimpleDbError> {
+        Ok(Box::new(FullScanStep {
             iterator: table.scan_all(transaction, selection)?
-        })
+        }))
     }
 }
 

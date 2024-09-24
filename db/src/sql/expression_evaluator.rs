@@ -130,7 +130,6 @@ mod test {
     use crate::sql::expression_evaluator::{evaluate_constant_expressions, evaluate_where_expression};
     use crate::sql::parser::parser::Parser;
     use crate::table::record::Record;
-    use crate::table::table_descriptor::ColumnDescriptor;
     use crate::{ColumnType, Row, Table};
     use bytes::Bytes;
     use crossbeam_skiplist::SkipMap;

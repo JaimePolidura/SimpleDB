@@ -1,5 +1,5 @@
 use crate::selection::Selection;
-use crate::sql::plan::plan_step::PlanStep;
+use crate::sql::plan::plan_step::{Plan, PlanStep};
 use crate::{Row, Table};
 use bytes::Bytes;
 use shared::SimpleDbError;
@@ -16,10 +16,10 @@ impl ExactScanStep {
         id: Bytes,
         selection: Selection,
         transaction: &Transaction
-    ) -> Result<ExactScanStep, SimpleDbError> {
-        Ok(ExactScanStep {
+    ) -> Result<Plan, SimpleDbError> {
+        Ok(Box::new(ExactScanStep {
             row: table.get_by_primary_column(&id, transaction, selection)?
-        })
+        }))
     }
 }
 

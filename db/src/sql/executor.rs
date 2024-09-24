@@ -1,4 +1,4 @@
-use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Statement};
+use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement};
 use crate::{ColumnType, Database, Table};
 use bytes::Bytes;
 use shared::{utils, SimpleDbError, SimpleDbOptions};
@@ -32,8 +32,7 @@ impl StatementExecutor {
         statement: Statement,
     ) -> Result<StatementResult, SimpleDbError> {
         self.validator.validate(&database, &statement)?;
-
-        let statement = self.evaluate_expressions(statement)?;
+        let statement = self.evaluate_constant_expressions(statement)?;
 
         match statement {
             Statement::Select(select_statement) => todo!(),
@@ -45,6 +44,15 @@ impl StatementExecutor {
             Statement::Rollback => self.rollback_transaction(database, transaction),
             Statement::Commit => self.commit_transaction(database, transaction),
         }
+    }
+
+    fn select(
+        &self,
+        transaction: &Transaction,
+        select_statement: SelectStatement,
+        database: &Arc<Database>
+    ) -> Result<StatementResult, SimpleDbError> {
+        todo!()
     }
 
     fn delete(
@@ -139,7 +147,7 @@ impl StatementExecutor {
         formatted_values
     }
 
-    fn evaluate_expressions(&self, mut statement: Statement) -> Result<Statement, SimpleDbError> {
+    fn evaluate_constant_expressions(&self, mut statement: Statement) -> Result<Statement, SimpleDbError> {
         match statement {
             Statement::Select(mut select) => {
                 select.where_expr = evaluate_constant_expressions(select.where_expr)?;

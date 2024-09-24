@@ -59,3 +59,14 @@ impl Statement {
         }
     }
 }
+
+impl UpdateStatement {
+    pub fn get_updated_values(&self) -> Selection {
+        let mut column_names = Vec::new();
+        for (column_name, _) in &self.updated_values {
+            column_names.push(column_name.clone());
+        }
+
+        Selection::Some(column_names)
+    }
+}
