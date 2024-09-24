@@ -22,9 +22,25 @@ pub struct StorageEngineItertor<I: StorageIterator> {
 
     transaction_manager: Option<Arc<TransactionManager>>,
     transaction: Option<Transaction>,
+
+    seeked_key: Option<Bytes>,
+    is_seeked_key_inclusive: bool,
 }
 
 impl<I: StorageIterator> StorageEngineItertor<I> {
+    //For efficiency, you should call seek_key() in the inner iterator
+    pub fn create_seeked_key(
+        options: &Arc<shared::SimpleDbOptions>,
+        mut iterator: I,
+        seeked_key: Bytes,
+        inclusive: bool,
+    ) -> StorageEngineItertor<I> {
+        let mut iterator = Self::create(options, iterator);
+        iterator.is_seeked_key_inclusive = inclusive;
+        iterator.seeked_key = Some(seeked_key);
+        iterator
+    }
+
     pub fn create(options: &Arc<shared::SimpleDbOptions>, mut iterator: I) -> StorageEngineItertor<I> {
         if iterator.has_next() {
             iterator.next();
@@ -38,6 +54,8 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
             current_value: None,
             current_key: None,
             transaction: None,
+            seeked_key: None,
+            is_seeked_key_inclusive: false
         }
     }
 
@@ -104,10 +122,8 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
         let (final_key, final_value) = prev_merged_value.take().unwrap();
         self.entries_to_return.push_front((final_key, final_value));
     }
-}
 
-impl<I: StorageIterator> StorageIterator for StorageEngineItertor<I> {
-    fn next(&mut self) -> bool {
+    fn do_do_next(&mut self) -> bool {
         if !self.inner_iterator.has_next() && self.entries_to_return.len() > 0 {
             return false
         }
@@ -120,6 +136,27 @@ impl<I: StorageIterator> StorageIterator for StorageEngineItertor<I> {
         self.current_key = Some(next_key);
 
         true
+    }
+}
+
+impl<I: StorageIterator> StorageIterator for StorageEngineItertor<I> {
+    fn next(&mut self) -> bool {
+        while self.do_do_next() {
+            if let Some(seeked_key) = self.seeked_key.as_ref() {
+                let is_inbound = if self.is_seeked_key_inclusive {
+                    self.key().bytes().ge(seeked_key)
+                } else {
+                    self.key().bytes().gt(seeked_key)
+                };
+
+                if is_inbound {
+                    self.seeked_key.take();
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     fn has_next(&self) -> bool {

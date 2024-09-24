@@ -63,10 +63,11 @@ impl Storage {
     pub fn scan_from(
         &self,
         keyspace_id: shared::KeyspaceId,
-        key: &Bytes
+        key: &Bytes,
+        inclusive: bool
     ) -> Result<SimpleDbStorageIterator, shared::SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
-        let mut iterator = self.scan_from_key_with_transaction(&transaction, keyspace_id, key)?;
+        let mut iterator = self.scan_from_key_with_transaction(&transaction, keyspace_id, key, inclusive)?;
         iterator.set_transaction_standalone(&self.transaction_manager, transaction);
         Ok(iterator)
     }
@@ -75,10 +76,11 @@ impl Storage {
         &self,
         transaction: &Transaction,
         keyspace_id: shared::KeyspaceId,
-        key: &Bytes
+        key: &Bytes,
+        inclusive: bool,
     ) -> Result<SimpleDbStorageIterator, shared::SimpleDbError> {
         let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
-        Ok(keyspace.scan_from_key_with_transaction(transaction, key))
+        Ok(keyspace.scan_from_key_with_transaction(transaction, key, inclusive))
     }
 
     pub fn scan_all_with_transaction(

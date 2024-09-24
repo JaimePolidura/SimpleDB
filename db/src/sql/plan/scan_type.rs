@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use crate::sql::expression::{BinaryOperator, Expression};
 use crate::sql::statement::Limit;
 use shared::{utils, SimpleDbError};
@@ -9,7 +10,7 @@ pub enum ScanType {
     // min < values < expression
     Range(RangeScan),
     //This expression should produce the literal value which will be the primary key
-    Exact(Expression)
+    Exact(Expression),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -20,6 +21,12 @@ pub struct RangeScan {
     end_inclusive: bool,
 }
 
+pub enum RangeKeyPosition {
+    Bellow,
+    Inside,
+    Above
+}
+
 impl ScanType {
     //Expect expressions to have been passed to evaluate_constant() before calling this function
     pub fn get_scan_type(
@@ -27,8 +34,6 @@ impl ScanType {
         limit: &Limit,
         expression: &Expression,
     ) -> Result<ScanType, SimpleDbError> {
-        println!("HOla");
-
         match expression {
             Expression::Binary(operator, left, right) => {
                 Self::get_scan_type_binary_expr(primary_column_name, *operator, left, right, limit)
@@ -263,6 +268,31 @@ impl RangeScan {
         Ok(())
     }
 
+    pub fn get_position(&self, other_key: &Bytes) -> RangeKeyPosition {
+        if let Some(start_key) = self.start.as_ref() {
+            let start_key_bytes = start_key.get_bytes();
+            let is_bellow = (self.start_inclusive && start_key_bytes.gt(other_key)) ||
+                (!self.start_inclusive && start_key_bytes.ge(other_key));
+            if is_bellow {
+                return RangeKeyPosition::Bellow;
+            }
+        }
+        if let Some(end_key) = self.end.as_ref() {
+            let end_key_bytes = end_key.get_bytes();
+            let is_above = (self.end_inclusive && end_key_bytes.lt(other_key)) ||
+                (!self.end_inclusive && end_key_bytes.le(other_key));
+            if is_above {
+                return RangeKeyPosition::Above;
+            }
+        }
+
+        RangeKeyPosition::Inside
+    }
+
+    pub fn is_start_inclusive(&self) -> bool {
+        self.start_inclusive
+    }
+
     pub fn has_end(&self) -> bool {
         self.end.is_some()
     }
@@ -277,6 +307,14 @@ impl RangeScan {
 
     pub fn has_only_end(&self) -> bool {
         self.start.is_none() && self.end.is_some()
+    }
+
+    pub fn start(&self) -> Option<&Expression> {
+        self.start.as_ref()
+    }
+
+    pub fn end(&self) -> Option<&Expression> {
+        self.end.as_ref()
     }
 
     pub fn empty() -> RangeScan {

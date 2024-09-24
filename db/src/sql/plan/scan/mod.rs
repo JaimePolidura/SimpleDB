@@ -1,4 +1,4 @@
-pub mod exact_scan;
-pub mod full_scan;
-pub mod range_scan;
+pub mod exact_scan_step;
+pub mod full_scan_step;
+pub mod range_scan_step;
 

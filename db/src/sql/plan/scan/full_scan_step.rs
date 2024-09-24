@@ -5,23 +5,23 @@ use crate::{Row, Table, TableIterator};
 use crate::selection::Selection;
 use crate::sql::plan::plan_step::PlanStep;
 
-pub struct FullScan {
+pub struct FullScanStep {
     iterator: TableIterator,
 }
 
-impl FullScan {
+impl FullScanStep {
     pub fn create(
         table: Arc<Table>,
         selection: Selection,
         transaction: &Transaction
-    ) -> Result<FullScan, SimpleDbError> {
-        Ok(FullScan {
+    ) -> Result<FullScanStep, SimpleDbError> {
+        Ok(FullScanStep {
             iterator: table.scan_all(transaction, selection)?
         })
     }
 }
 
-impl PlanStep for FullScan {
+impl PlanStep for FullScanStep {
     fn next(&mut self) -> Option<&Row> {
         if self.iterator.next() {
             Some(self.iterator.row())

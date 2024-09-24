@@ -61,13 +61,16 @@ impl Keyspace {
         &self,
         transaction: &Transaction,
         key: &Bytes,
+        inclusive: bool,
     ) -> SimpleDbStorageIterator {
-        StorageEngineItertor::create(
+        StorageEngineItertor::create_seeked_key(
             &self.options,
             TwoMergeIterator::create(
                 self.memtables.scan_from_key(&transaction, key),
                 self.sstables.scan_from_key(&transaction, key),
-            )
+            ),
+            key.clone(),
+            inclusive
         )
     }
 

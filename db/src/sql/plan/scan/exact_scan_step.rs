@@ -6,24 +6,24 @@ use shared::SimpleDbError;
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 
-pub struct ExactScan {
+pub struct ExactScanStep {
     row: Option<Row>
 }
 
-impl ExactScan {
+impl ExactScanStep {
     pub fn create(
         table: Arc<Table>,
         id: Bytes,
         selection: Selection,
         transaction: &Transaction
-    ) -> Result<ExactScan, SimpleDbError> {
-        Ok(ExactScan {
+    ) -> Result<ExactScanStep, SimpleDbError> {
+        Ok(ExactScanStep {
             row: table.get_by_primary_column(&id, transaction, selection)?
         })
     }
 }
 
-impl PlanStep for ExactScan {
+impl PlanStep for ExactScanStep {
     fn next(&mut self) -> Option<&Row> {
         self.row.as_ref()
     }

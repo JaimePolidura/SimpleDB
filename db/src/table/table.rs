@@ -1,10 +1,12 @@
 use crate::selection::Selection;
 use crate::table::record::Record;
+use crate::table::row::Row;
 use crate::table::table_descriptor::{ColumnDescriptor, TableDescriptor};
 use crate::table::table_iteartor::TableIterator;
+use crate::ColumnType;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
-use shared::SimpleDbError::{ColumnNameAlreadyDefined, PrimaryColumnNotIncluded, OnlyOnePrimaryColumnAllowed, UnknownColumn, InvalidType};
+use shared::SimpleDbError::{ColumnNameAlreadyDefined, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
 use shared::{ColumnId, SimpleDbError, SimpleDbFileWrapper};
 use std::cell::UnsafeCell;
 use std::collections::{HashMap, HashSet};
@@ -12,10 +14,7 @@ use std::hash::Hasher;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
-use crossbeam_skiplist::map::Entry;
 use storage::transactions::transaction::Transaction;
-use crate::ColumnType;
-use crate::table::row::Row;
 
 pub struct Table {
     pub(crate) storage_keyspace_id: shared::KeyspaceId,
@@ -68,11 +67,15 @@ impl Table {
     pub fn scan_from_key(
         self: Arc<Self>,
         key: &Bytes,
+        inclusive: bool,
         transaction: &Transaction,
         selection: Selection,
     ) -> Result<TableIterator, SimpleDbError> {
         let selection = self.selection_to_columns_id(selection)?;
-        let storage_iterator = self.storage.scan_from_key_with_transaction(transaction, self.storage_keyspace_id, key)?;
+        let storage_iterator = self.storage.scan_from_key_with_transaction(
+            transaction,
+            self.storage_keyspace_id,
+            key)?;
 
         Ok(TableIterator::create(
             storage_iterator,
