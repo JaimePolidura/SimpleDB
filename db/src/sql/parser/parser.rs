@@ -41,6 +41,12 @@ impl Parser {
         Ok(Some(query))
     }
 
+    //Only used for testing
+    pub(crate) fn parse_expression(&mut self) -> Result<Expression, SimpleDbError> {
+        self.tokenizer.next_token()?;
+        self.expression(0)
+    }
+
     fn select(&mut self) -> Result<Statement, SimpleDbError> {
         self.advance()?;
         let selection = self.selection()?;

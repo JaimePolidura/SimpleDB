@@ -7,11 +7,11 @@ use crate::table::table_descriptor::ColumnDescriptor;
 
 #[derive(Clone)]
 pub struct Row {
-    storage_engine_record: Record,
-    key_bytes: Bytes,
+    pub(crate) storage_engine_record: Record,
+    pub(crate) key_bytes: Bytes,
 
-    selection: Arc<Vec<ColumnId>>,
-    table: Arc<Table>
+    pub(crate) selection: Arc<Vec<ColumnId>>,
+    pub(crate) table: Arc<Table>
 }
 
 impl Row {

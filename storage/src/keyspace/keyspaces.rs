@@ -17,6 +17,15 @@ pub struct Keyspaces {
 }
 
 impl Keyspaces {
+    pub fn mock(options: Arc<shared::SimpleDbOptions>) -> Keyspaces {
+        Keyspaces {
+            keyspaces: SkipMap::new(),
+            next_keyspace_id: AtomicUsize::new(0),
+            transaction_manager: Arc::new(TransactionManager::create_mock(options.clone())),
+            options
+        }
+    }
+
     pub fn load_keyspaces(
         transaction_manager: Arc<TransactionManager>,
         options: Arc<shared::SimpleDbOptions>

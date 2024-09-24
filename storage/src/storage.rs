@@ -10,7 +10,7 @@ use bytes::Bytes;
 use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use shared::SimpleDbError;
+use shared::{SimpleDbError, SimpleDbOptions};
 
 pub struct Storage {
     transaction_manager: Arc<TransactionManager>,
@@ -50,6 +50,14 @@ pub fn create(options: Arc<shared::SimpleDbOptions>) -> Result<Storage, shared::
     println!("Storage engine started!");
 
     Ok(storage)
+}
+
+pub fn mock(simple_db_options: &Arc<SimpleDbOptions>) -> Storage {
+    Storage {
+        transaction_manager: Arc::new(TransactionManager::create_mock(simple_db_options.clone())),
+        keyspaces: Keyspaces::mock(simple_db_options.clone()),
+        options: simple_db_options.clone(),
+    }
 }
 
 impl Storage {

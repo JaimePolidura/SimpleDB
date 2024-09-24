@@ -1,5 +1,3 @@
-use std::f32::consts::E;
-use bytes::Bytes;
 use crate::sql::expression::Expression::Binary;
 use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
 use crate::Row;
@@ -8,7 +6,7 @@ use SimpleDbError::MalformedQuery;
 
 //expression is expected to have been passed to evaluate_constant_expressions() before calling this function
 //If the row returns null, we will return false
-pub fn evaluate_expression(
+pub fn evaluate_where_expression(
     row: &Row,
     expression: &Expression
 ) -> Result<bool, SimpleDbError> {
@@ -128,28 +126,56 @@ fn evaluate_constant_binary_op(
 #[cfg(test)]
 mod test {
     use crate::sql::expression::Expression::Binary;
-    use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
-    use crate::sql::expression_evaluator::evaluate_constant_expressions;
+    use crate::sql::expression::{BinaryOperator, Expression};
+    use crate::sql::expression_evaluator::{evaluate_constant_expressions, evaluate_where_expression};
+    use crate::sql::parser::parser::Parser;
+    use crate::table::record::Record;
+    use crate::table::table_descriptor::ColumnDescriptor;
+    use crate::{ColumnType, Row, Table};
+    use bytes::Bytes;
+    use crossbeam_skiplist::SkipMap;
+    use shared::{SimpleDbFile, SimpleDbFileWrapper, SimpleDbOptions};
+    use std::cell::UnsafeCell;
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::Arc;
 
-    // dinero > (1 + 20) OR id > 10 -> dinero > 21 OR id > 10
+    //Where id == 10 OR dinero > 100
     #[test]
-    fn mixed() {
-        let result = evaluate_constant_expressions(Binary(
-            BinaryOperator::Or,
-            Box::new(Binary(
-                BinaryOperator::Greater,
-                Box::new(Expression::Identifier(String::from("dinero"))),
-                Box::new(Expression::Binary(
-                    BinaryOperator::Add,
-                    Box::new(Expression::NumberI64(1)),
-                    Box::new(Expression::NumberI64(20)),
-                )))),
-            Box::new(Binary(
-                BinaryOperator::Greater,
-                Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::NumberI64(10))
-            ))
-        ));
+    fn where_no_nulls() {
+        let mut parser = Parser::create(String::from("id == 10 OR dinero > 100"));
+        let expression = parser.parse_expression().unwrap();
+        let row = id_dinero_nombre_row(11, Some(110), None);
+        let result = evaluate_where_expression(&row, &expression);
+
+        assert!(result.unwrap());
+    }
+
+    //Where id == 10 AND (dinero > 100 OR nombre == 'Jaime')
+    #[test]
+    fn where_null_nombre_or() {
+        let mut parser = Parser::create(String::from("id == 10 AND (dinero > 100 OR nombre == \"Jaime\")"));
+        let expression = parser.parse_expression().unwrap();
+        let row = id_dinero_nombre_row(10, Some(110), None);
+        let result = evaluate_where_expression(&row, &expression);
+
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn where_null_nombre_and() {
+        let mut parser = Parser::create(String::from("id == 10 AND (dinero > 100 AND nombre == \"Jaime\")"));
+        let expression = parser.parse_expression().unwrap();
+        let row = id_dinero_nombre_row(10, Some(110), None);
+        let result = evaluate_where_expression(&row, &expression);
+
+        assert!(!result.unwrap());
+    }
+
+    #[test]
+    fn constant_mixed() {
+        let mut parser = Parser::create(String::from("dinero > (1 + 20) OR id > 10"));
+        let expression = parser.parse_expression().unwrap();
+        let result = evaluate_constant_expressions(expression);
 
         assert!(result.is_ok());
         let result = result.unwrap();
@@ -168,28 +194,11 @@ mod test {
         ))
     }
 
-    // (1 + 2) + (3.1 + -(4 * 2))
     #[test]
-    fn arithmetic_operations() {
-        let result = evaluate_constant_expressions(Binary(
-            BinaryOperator::Add,
-            Box::new(Binary(
-                BinaryOperator::Add,
-                Box::new(Expression::NumberI64(1)),
-                Box::new(Expression::NumberI64(2)))),
-            Box::new(Binary(
-                BinaryOperator::Add,
-                Box::new(Expression::NumberF64(3.1)),
-                Box::new(Expression::Unary(
-                    UnaryOperator::Minus,
-                    Box::new(Binary(
-                        BinaryOperator::Multiply,
-                        Box::new(Expression::NumberI64(4)),
-                        Box::new(Expression::NumberI64(2))
-                    ))
-                ))
-            ))
-        ));
+    fn constant_arithmetic_operations() {
+        let mut parser = Parser::create(String::from("(1 + 2) + (3.1 + -(4 * 2))"));
+        let expression = parser.parse_expression().unwrap();
+        let result = evaluate_constant_expressions(expression);
 
         assert!(result.is_ok());
         let result = result.unwrap();
@@ -197,33 +206,55 @@ mod test {
         assert_eq!(result.get_f64().unwrap(), (1 + 2) as f64 + (3.1 + -(4 * 2) as f64));
     }
 
-    //((1 > 2) OR (1 <= 2)) AND (1 == 1)
     #[test]
-    fn comparation_logical_operations() {
-        let result = evaluate_constant_expressions(Binary(
-            BinaryOperator::And,
-            Box::new(Binary(
-                BinaryOperator::Equal,
-                Box::new(Expression::NumberI64(1)),
-                Box::new(Expression::NumberI64(1)))),
-            Box::new(Binary(
-                BinaryOperator::Or,
-                Box::new(Expression::Binary(
-                    BinaryOperator::Greater,
-                    Box::new(Expression::NumberI64(1)),
-                    Box::new(Expression::NumberI64(2))
-                )),
-                Box::new(Expression::Binary(
-                    BinaryOperator::LessEqual,
-                    Box::new(Expression::NumberI64(1)),
-                    Box::new(Expression::NumberI64(2))
-                )),
-            ))
-        ));
+    fn constant_comparation_logical_operations() {
+        let mut parser = Parser::create(String::from("((1 > 2) OR (1 <= 2)) AND (1 == 1)"));
+        let expression = parser.parse_expression().unwrap();
+        let result = evaluate_constant_expressions(expression);
 
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(matches!(result, Expression::Boolean(_)));
         assert_eq!(result.get_boolean().unwrap(), ((1 > 2) || (1 <= 2)) && (1 == 1));
+    }
+
+    fn id_dinero_nombre_row(
+        id: usize, //0
+        dinero: Option<usize>, //1
+        nombre: Option<&str> //2
+    ) -> Row {
+        let mut record = Record::builder();
+
+        record.add_column(0, Bytes::copy_from_slice(id.to_le_bytes().as_slice()));
+        if let Some(dinero) = dinero {
+            record.add_column(1, Bytes::copy_from_slice(dinero.to_le_bytes().as_slice()));
+        }
+        if let Some(nombre) = nombre {
+            record.add_column(2, Bytes::copy_from_slice(nombre.as_bytes()));
+        }
+
+        let mut table = Table {
+            table_descriptor_file: SimpleDbFileWrapper{ file: UnsafeCell::new(SimpleDbFile::mock()) },
+            storage: Arc::new(storage::mock(&Arc::new(SimpleDbOptions::default()))),
+            primary_column_name: String::from("id"),
+            table_name: String::from("personas"),
+            next_column_id: AtomicUsize::new(0),
+            storage_keyspace_id: 1,
+            columns_by_name: SkipMap::new(),
+            columns_by_id: SkipMap::new(),
+        };
+
+        table.add_columns(vec![
+            (String::from("id"), ColumnType::I64, true),
+            (String::from("dinero"), ColumnType::I64, false),
+            (String::from("nombre"), ColumnType::Varchar, false),
+        ]);
+
+        Row {
+            selection: Arc::new(Vec::new()),
+            key_bytes: Bytes::copy_from_slice(id.to_le_bytes().as_slice()),
+            storage_engine_record: record.build(),
+            table: Arc::new(table),
+        }
     }
 }
