@@ -6,7 +6,7 @@ use crate::sql::parser::token::Token;
 
 pub struct Tokenizer {
     string: String,
-    //This will point to the next character to scan before calling next_token()
+    //This will point to the next character to steps before calling next_token()
     next: usize,
 
     current_line: usize,

@@ -49,7 +49,7 @@ impl ScanType {
                 if identifier == &primary_column_name {
                     Ok(ScanType::Exact(expression.clone()))
                 } else {
-                    //Not querying by primary key -> full scan
+                    //Not querying by primary key -> full steps
                     Ok(ScanType::Full)
                 }
             }

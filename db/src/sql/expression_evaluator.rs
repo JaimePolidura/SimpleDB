@@ -1,7 +1,15 @@
 use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
 use shared::SimpleDbError;
 use SimpleDbError::MalformedQuery;
+use crate::Row;
 use crate::sql::expression::Expression::Binary;
+
+pub fn evaluate_expression(
+    row: &Row,
+    expression: &Expression
+) -> Result<bool, SimpleDbError> {
+    Ok(true)
+}
 
 pub fn evaluate_constant_expressions(
     expression: Expression

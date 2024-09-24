@@ -91,12 +91,12 @@ impl Planner {
         match scan_type {
             ScanType::Full => {
                 if !self.options.db_full_scan_allowed {
-                    return Err(MalformedQuery(String::from("Full scan is not allowed")));
+                    return Err(MalformedQuery(String::from("Full steps is not allowed")));
                 }
             },
             ScanType::Range(_) => {
                 if !self.options.db_range_scan_allowed {
-                    return Err(MalformedQuery(String::from("Range scan is not allowed")));
+                    return Err(MalformedQuery(String::from("Range steps is not allowed")));
                 }
             }
             ScanType::Exact(_) => {}

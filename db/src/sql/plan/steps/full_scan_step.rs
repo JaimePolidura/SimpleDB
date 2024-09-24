@@ -22,11 +22,11 @@ impl FullScanStep {
 }
 
 impl PlanStep for FullScanStep {
-    fn next(&mut self) -> Option<&Row> {
+    fn next(&mut self) -> Result<Option<&Row>, SimpleDbError> {
         if self.iterator.next() {
-            Some(self.iterator.row())
+            Ok(Some(self.iterator.row()))
         } else {
-            None
+            Ok(None)
         }
     }
 }

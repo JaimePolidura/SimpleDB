@@ -258,7 +258,7 @@ impl Debug for SimpleDbError {
                 write!(f, "Invalid type for column: {}", column_name)
             }
             SimpleDbError::FullScanNotAllowed() => {
-                write!(f, "Full scan is not allowed")
+                write!(f, "Full steps is not allowed")
             }
         }
     }

@@ -33,18 +33,19 @@ impl RangeScanStep {
 }
 
 impl PlanStep for RangeScanStep {
-    fn next(&mut self) -> Option<&Row> {
+    fn next(&mut self) -> Result<Option<&Row>, SimpleDbError> {
         if self.iterator.next() {
             let current_row = self.iterator.row();
             let current_primary_column_value = current_row.get_primary_column_value();
 
             match self.range.get_position(current_primary_column_value) {
-                RangeKeyPosition::Inside => Some(current_row),
-                RangeKeyPosition::Bellow => None,
-                RangeKeyPosition::Above => None
+                RangeKeyPosition::Inside => Ok(Some(current_row)),
+                RangeKeyPosition::Above => Ok(None),
+                //Not possible because, the iterator have been seeked in construction time
+                RangeKeyPosition::Bellow => panic!(""),
             }
         } else {
-            None
+            Ok(None)
         }
     }
 }
