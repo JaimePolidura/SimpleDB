@@ -10,7 +10,7 @@ pub fn evaluate_where_expression(
     row: &Row,
     expression: &Expression
 ) -> Result<bool, SimpleDbError> {
-    match do_evaluate_expression(row, expression)? {
+    match evaluate_expression(row, expression)? {
         Expression::Boolean(value) => Ok(value),
         Expression::Null => Ok(false),
         _ => Err(MalformedQuery(String::from("Expression should produce a boolean value")))
@@ -18,18 +18,18 @@ pub fn evaluate_where_expression(
 }
 
 //If the row returns a null value, we will propagate the null value, the function will return a null expression
-fn do_evaluate_expression(
+pub fn evaluate_expression(
     row: &Row,
     expression: &Expression
 ) -> Result<Expression, SimpleDbError> {
     match expression {
         Expression::Binary(operation, left, right) => {
-            let left = do_evaluate_expression(row, &*left.clone())?;
-            let right = do_evaluate_expression(row, &*right.clone())?;
+            let left = evaluate_expression(row, &*left.clone())?;
+            let right = evaluate_expression(row, &*right.clone())?;
             evaluate_constant_binary_op(left, right, operation.clone())
         },
         Expression::Unary(operation, unary_expr) => {
-            let unary_expr = do_evaluate_expression(row, &*unary_expr.clone())?;
+            let unary_expr = evaluate_expression(row, &*unary_expr.clone())?;
             evaluate_constant_unary_op(unary_expr, operation.clone())
         },
         Expression::Identifier(column_name) => {

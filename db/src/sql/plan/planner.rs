@@ -14,7 +14,7 @@ use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use crate::sql::plan::plan_step::Plan;
 
-struct Planner {
+pub struct Planner {
     options: Arc<SimpleDbOptions>
 }
 
@@ -25,30 +25,7 @@ impl Planner {
         }
     }
 
-    pub fn plan(
-        &self,
-        statement: Statement,
-        transaction: &Transaction,
-        table: &Arc<Table>,
-    ) -> Result<Plan, SimpleDbError> {
-        match statement {
-            Statement::Select(statement) => self.plan_select(table, statement, transaction),
-            Statement::Delete(statement) => self.plan_delete(table, statement, transaction),
-            Statement::Update(statement) => self.plan_update(table, statement, transaction),
-            _ => panic!("Query cannot be planned")
-        }
-    }
-
-    pub fn can_be_planned(&self, statement: &Statement) -> bool {
-        match statement {
-            Statement::Select(_) |
-            Statement::Update(_) |
-            Statement::Delete(_) => true,
-            _ => false
-        }
-    }
-
-    fn plan_select(
+    pub fn plan_select(
         &self,
         table: &Arc<Table>,
         select_statement: SelectStatement,
@@ -71,10 +48,10 @@ impl Planner {
         Ok(last_step)
     }
 
-    fn plan_update(
+    pub fn plan_update(
         &self,
         table: &Arc<Table>,
-        update_statement: UpdateStatement,
+        update_statement: &UpdateStatement,
         transaction: &Transaction,
     ) -> Result<Plan, SimpleDbError> {
         let scan_type = self.get_and_validate_scan_type(
@@ -86,13 +63,13 @@ impl Planner {
         let mut last_step = self.build_scan_step(scan_type, transaction, updated_values, table)?;
 
         if !matches!(update_statement.where_expr, Expression::None) {
-            last_step = FilterStep::create(update_statement.where_expr, last_step);
+            last_step = FilterStep::create(update_statement.where_expr.clone(), last_step);
         }
 
         Ok(last_step)
     }
 
-    fn plan_delete(
+    pub fn plan_delete(
         &self,
         table: &Arc<Table>,
         select_statement: DeleteStatement,

@@ -1,10 +1,9 @@
 use crate::database::databases::Databases;
+use crate::sql::executor::{StatementExecutor, StatementResult};
+use crate::sql::parser::parser::Parser;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use crate::sql::executor::{StatementExecutor, StatementResult};
-use crate::sql::parser::parser::Parser;
-use crate::sql::validator::StatementValidator;
 
 pub struct SimpleDb {
     statement_executor: StatementExecutor,
@@ -12,10 +11,6 @@ pub struct SimpleDb {
     databases: Databases,
 
     options: Arc<SimpleDbOptions>
-}
-
-pub struct SimpleDbTransaction {
-    transaction: Option<Transaction>,
 }
 
 impl SimpleDb {
@@ -33,7 +28,7 @@ impl SimpleDb {
 
     pub fn execute(
         &self,
-        transaction: Option<Transaction>,
+        transaction: &Transaction,
         database: &str,
         query: String,
     ) -> Result<Vec<StatementResult>, SimpleDbError> {

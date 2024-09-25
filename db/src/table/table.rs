@@ -116,25 +116,16 @@ impl Table {
         self.update(transaction, id_value, to_insert_data)
     }
 
-    fn has_primary_value(&self, data: &Vec<(String, Bytes)>) -> bool {
-        for (column_name, _) in data.iter() {
-            if column_name.eq(&self.primary_column_name) {
-                return true
-            }
-        }
-
-        false
-    }
-
-    fn extract_primary_value(&self, data: &mut Vec<(String, Bytes)>) -> Option<Bytes> {
-        for (index, column_entry) in data.iter().enumerate() {
-            let (column_name, _) = column_entry;
-            if column_name.eq(&self.primary_column_name) {
-                let (_, column_value) = data.remove(index);
-                return Some(column_value);
-            }
-        }
-        None
+    pub fn delete(
+        &self,
+        transaction: &Transaction,
+        id: Bytes
+    ) -> Result<(), SimpleDbError> {
+        self.storage.delete_with_transaction(
+            self.storage_keyspace_id,
+            transaction,
+            id
+        )
     }
 
     pub fn update(
@@ -247,6 +238,27 @@ impl Table {
         }
 
         Ok(())
+    }
+
+    fn has_primary_value(&self, data: &Vec<(String, Bytes)>) -> bool {
+        for (column_name, _) in data.iter() {
+            if column_name.eq(&self.primary_column_name) {
+                return true
+            }
+        }
+
+        false
+    }
+
+    fn extract_primary_value(&self, data: &mut Vec<(String, Bytes)>) -> Option<Bytes> {
+        for (index, column_entry) in data.iter().enumerate() {
+            let (column_name, _) = column_entry;
+            if column_name.eq(&self.primary_column_name) {
+                let (_, column_value) = data.remove(index);
+                return Some(column_value);
+            }
+        }
+        None
     }
 
     fn build_record(&self, data_records: &Vec<(String, Bytes)>) -> Result<Record, SimpleDbError> {

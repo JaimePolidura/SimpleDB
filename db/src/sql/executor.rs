@@ -1,19 +1,24 @@
-use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement};
+use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
 use crate::{ColumnType, Database, Table};
 use bytes::Bytes;
 use shared::{utils, SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use crate::sql::expression_evaluator::evaluate_constant_expressions;
+use crate::sql::expression::Expression;
+use crate::sql::expression_evaluator::{evaluate_constant_expressions, evaluate_expression};
+use crate::sql::plan::planner::Planner;
+use crate::sql::query_iterator::QueryIterator;
 use crate::sql::validator::StatementValidator;
 
 pub struct StatementExecutor {
     options: Arc<SimpleDbOptions>,
     validator: StatementValidator,
+    planner: Planner
 }
 
 pub enum StatementResult {
     TransactionStarted(Transaction),
+    Data(QueryIterator),
     Ok(usize), //usize number of rows affected
 }
 
@@ -21,13 +26,14 @@ impl StatementExecutor {
     pub fn create(options: &Arc<SimpleDbOptions>) -> StatementExecutor {
         StatementExecutor {
             validator: StatementValidator::create(options),
+            planner: Planner::create(options.clone()),
             options: options.clone(),
         }
     }
 
     pub fn execute(
         &self,
-        transaction: &Option<Transaction>,
+        transaction: &Transaction,
         database: Arc<Database>,
         statement: Statement,
     ) -> Result<StatementResult, SimpleDbError> {
@@ -35,8 +41,8 @@ impl StatementExecutor {
         let statement = self.evaluate_constant_expressions(statement)?;
 
         match statement {
-            Statement::Select(select_statement) => todo!(),
-            Statement::Update(update_statement) => todo!(),
+            Statement::Select(select_statement) => self.select(database, transaction, select_statement),
+            Statement::Update(update_statement) => self.update(database, transaction, update_statement),
             Statement::Delete(delete_statement) => self.delete(database, transaction, delete_statement),
             Statement::Insert(insert_statement) => self.insert(database, transaction, insert_statement),
             Statement::CreateTable(create_table_statement) => self.create_table(database, create_table_statement),
@@ -48,31 +54,72 @@ impl StatementExecutor {
 
     fn select(
         &self,
+        database: Arc<Database>,
         transaction: &Transaction,
         select_statement: SelectStatement,
-        database: &Arc<Database>
     ) -> Result<StatementResult, SimpleDbError> {
-        todo!()
+        let table = database.get_table(&select_statement.table_name)?;
+        let select_plan = self.planner.plan_select(&table, select_statement, transaction)?;
+
+        Ok(StatementResult::Data(QueryIterator::create(select_plan)))
+    }
+
+    fn update(
+        &self,
+        database: Arc<Database>,
+        transaction: &Transaction,
+        update_statement: UpdateStatement,
+    ) -> Result<StatementResult, SimpleDbError> {
+        let table = database.get_table(&update_statement.table_name)?;
+        let mut update_plan = self.planner.plan_update(&table, &update_statement, transaction)?;
+        let mut updated_rows = 0;
+
+        while let Some(row_to_update) = update_plan.next()? {
+            let id = row_to_update.get_primary_column_value().clone();
+            let mut new_values = Vec::new();
+
+            for (updated_column_name, new_value_expr) in &update_statement.updated_values {
+                let new_value_bytes = match evaluate_expression(&row_to_update, new_value_expr)? {
+                    Expression::Null => continue,
+                    other => other.serialize(),
+                };
+
+                new_values.push((updated_column_name.clone(), new_value_bytes));
+            }
+
+            table.update(transaction, id, &new_values)?;
+            updated_rows += 1;
+        }
+
+        Ok(StatementResult::Ok(updated_rows))
     }
 
     fn delete(
         &self,
         database: Arc<Database>,
-        transaction: &Option<Transaction>,
+        transaction: &Transaction,
         delete_statement: DeleteStatement
     ) -> Result<StatementResult, SimpleDbError> {
         let table = database.get_table(delete_statement.table_name.as_str())?;
-        Ok(StatementResult::Ok(0))
+        let mut delete_plan = self.planner.plan_delete(&table, delete_statement, transaction)?;
+        let mut deleted_rows = 0;
+
+        while let Some(row_to_delete) = delete_plan.next()? {
+            let id = row_to_delete.get_primary_column_value();
+            table.delete(transaction, id.clone())?;
+            deleted_rows += 1;
+        }
+
+        Ok(StatementResult::Ok(deleted_rows))
     }
 
     fn insert(
         &self,
         database: Arc<Database>,
-        transaction: &Option<Transaction>,
+        transaction: &Transaction,
         mut insert_statement: InsertStatement,
     ) -> Result<StatementResult, SimpleDbError> {
         let table = database.get_table(insert_statement.table_name.as_str())?;
-        let transaction = transaction.as_ref().unwrap();
         let mut inserted_values = self.format_column_values(&table, &insert_statement.values);
         table.insert(transaction, &mut inserted_values)?;
         Ok(StatementResult::Ok(1))
@@ -98,7 +145,7 @@ impl StatementExecutor {
     fn rollback_transaction(
         &self,
         database: Arc<Database>,
-        transaction: &Option<Transaction>
+        transaction: &Transaction
     ) -> Result<StatementResult, SimpleDbError> {
         database.rollback_transaction(transaction.as_ref().unwrap())?;
         Ok(StatementResult::Ok(0))
@@ -107,7 +154,7 @@ impl StatementExecutor {
     fn commit_transaction(
         &self,
         database: Arc<Database>,
-        transaction: &Option<Transaction>
+        transaction: &Transaction
     ) -> Result<StatementResult, SimpleDbError> {
         database.commit_transaction(transaction.as_ref().unwrap())?;
         Ok(StatementResult::Ok(0))

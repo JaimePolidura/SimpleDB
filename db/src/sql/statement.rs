@@ -3,7 +3,6 @@ use crate::ColumnType;
 use crate::selection::Selection;
 use crate::sql::expression::Expression;
 
-
 pub enum Statement {
     Select(SelectStatement),
     Update(UpdateStatement),

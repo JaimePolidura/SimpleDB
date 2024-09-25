@@ -1,5 +1,5 @@
-mod scan_type;
-
 pub mod planner;
-mod plan_step;
+pub mod plan_step;
+
+mod scan_type;
 mod steps;
