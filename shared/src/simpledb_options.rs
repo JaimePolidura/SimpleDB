@@ -158,8 +158,12 @@ impl SimpleDbOptionsBuilder {
         self
     }
 
-    pub fn build(&self) -> Arc<SimpleDbOptions> {
+    pub fn build_arc(&self) -> Arc<SimpleDbOptions> {
         Arc::new(self.options.clone())
+    }
+
+    pub fn build(&self) -> SimpleDbOptions {
+        self.options.clone()
     }
 }
 

@@ -130,13 +130,15 @@ mod test {
     use crate::sql::expression_evaluator::{evaluate_constant_expressions, evaluate_where_expression};
     use crate::sql::parser::parser::Parser;
     use crate::table::record::Record;
-    use crate::{ColumnType, Row, Table};
     use bytes::Bytes;
     use crossbeam_skiplist::SkipMap;
     use shared::{SimpleDbFile, SimpleDbFileWrapper, SimpleDbOptions};
     use std::cell::UnsafeCell;
     use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
+    use crate::Row;
+    use crate::table::column_type::ColumnType;
+    use crate::table::table::Table;
 
     //Where id == 10 OR dinero > 100
     #[test]

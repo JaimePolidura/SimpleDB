@@ -1,9 +1,11 @@
 use std::sync::Arc;
 use shared::SimpleDbError;
 use storage::transactions::transaction::Transaction;
-use crate::{Row, Table, TableIterator};
+use crate::{Row};
 use crate::selection::Selection;
 use crate::sql::plan::plan_step::{Plan, PlanStep};
+use crate::table::table::Table;
+use crate::table::table_iteartor::TableIterator;
 
 pub struct FullScanStep {
     iterator: TableIterator,

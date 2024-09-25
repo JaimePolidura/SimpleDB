@@ -1,11 +1,13 @@
+use std::io::empty;
 use crate::database::database_descriptor::DatabaseDescriptor;
+use crate::table::column_type::ColumnType;
 use crate::table::table::Table;
 use crossbeam_skiplist::SkipMap;
-use shared::SimpleDbError::TableAlreadyExists;
-use shared::{SimpleDbError, SimpleDbOptions};
+use shared::SimpleDbError::{CannotCreateDatabaseFolder, PrimaryColumnNotIncluded, TableAlreadyExists};
+use shared::{utils, SimpleDbError, SimpleDbOptions};
 use std::sync::{Arc, Mutex};
 use storage::transactions::transaction::Transaction;
-use crate::ColumnType;
+use crate::sql::statement::CreateTableStatement;
 
 pub struct Database {
     name: String,
@@ -17,15 +19,52 @@ pub struct Database {
 }
 
 impl Database {
+    pub(crate) fn create(
+        options: &Arc<SimpleDbOptions>,
+        database_name: &str
+    ) -> Result<Arc<Database>, SimpleDbError> {
+        //Create database base folder
+        utils::create_paths(&options.base_path)
+            .map_err(|e| CannotCreateDatabaseFolder(database_name.to_string(), e))?;
+
+        Ok(Arc::new(Database {
+            database_descriptor: Mutex::new(DatabaseDescriptor::create(options, &database_name.to_string())?),
+            storage: Arc::new(storage::create(options.clone())?),
+            name: database_name.to_string(),
+            options: options.clone(),
+            tables: SkipMap::new(),
+        }))
+    }
+
+    pub(crate) fn load_database(
+        database_options: &Arc<SimpleDbOptions>,
+        database_name: &str
+    ) -> Result<Arc<Database>, SimpleDbError> {
+        let storage = Arc::new(storage::create(database_options.clone())?);
+        let mut tables = Table::load_tables(database_options, &storage)?;
+        let database_descriptor = DatabaseDescriptor::load_database_descriptor(
+            database_options,
+            &String::from(database_name),
+        )?;
+
+        Ok(Arc::new(Database {
+            database_descriptor: Mutex::new(database_descriptor),
+            name: String::from(database_name),
+            options: database_options.clone(),
+            tables: Self::index_by_table_name(&mut tables),
+            storage,
+        }))
+    }
+
     pub fn validate_create_table(
         &self,
-        table_name: &str,
-        columns: &Vec<(String, ColumnType, bool)>
+        statement: &CreateTableStatement
     ) -> Result<(), SimpleDbError> {
-        self.validate_table_name(table_name)?;
-        let table = self.tables.get(table_name).unwrap();
-        let table = table.value();
-        table.validate_new_columns(columns)?;
+        if self.tables.contains_key(&statement.table_name) {
+            return Err(TableAlreadyExists(statement.table_name.to_string()))
+        }
+
+        Table::validate_new_columns(&statement.columns)?;
         Ok(())
     }
 
@@ -34,10 +73,17 @@ impl Database {
         table_name: &str,
         columns: Vec<(String, ColumnType, bool)>
     ) -> Result<Arc<Table>, SimpleDbError> {
+        let primary_column_name = columns.iter()
+            .filter(|(_, _, is_primary)| *is_primary)
+            .map(|(name,_, _)| name.clone())
+            .find(|_| true) //Find first
+            .ok_or(PrimaryColumnNotIncluded())?;
+
         let table = Table::create(
             table_name,
             &self.options,
             &self.storage,
+            primary_column_name
         )?;
 
         let mut lock_result = self.database_descriptor.lock();
@@ -45,6 +91,9 @@ impl Database {
         database_descriptor.add_table(table_name, table.storage_keyspace_id)?;
 
         table.add_columns(columns)?;
+
+        self.tables.insert(table.table_name.clone(), table.clone());
+
         Ok(table)
     }
 
@@ -77,39 +126,6 @@ impl Database {
 
     pub fn name(&self) -> &String {
         &self.name
-    }
-
-    pub(crate) fn create(
-        options: &Arc<SimpleDbOptions>,
-        database_name: &str
-    ) -> Result<Arc<Database>, SimpleDbError> {
-        Ok(Arc::new(Database {
-            database_descriptor: Mutex::new(DatabaseDescriptor::create(options, &database_name.to_string())?),
-            storage: Arc::new(storage::create(options.clone())?),
-            name: database_name.to_string(),
-            options: options.clone(),
-            tables: SkipMap::new(),
-        }))
-    }
-
-    pub(crate) fn load_database(
-        database_options: &Arc<SimpleDbOptions>,
-        database_name: &str
-    ) -> Result<Arc<Database>, SimpleDbError> {
-        let storage = Arc::new(storage::create(database_options.clone())?);
-        let mut tables = Table::load_tables(database_options, &storage)?;
-        let database_descriptor = DatabaseDescriptor::load_database_descriptor(
-            database_options,
-            &String::from(database_name),
-        )?;
-
-        Ok(Arc::new(Database {
-            database_descriptor: Mutex::new(database_descriptor),
-            name: String::from(database_name),
-            options: database_options.clone(),
-            tables: Self::index_by_table_name(&mut tables),
-            storage,
-        }))
     }
 
     fn index_by_table_name(tables: &mut Vec<Arc<Table>>) -> SkipMap<String, Arc<Table>> {

@@ -1,7 +1,7 @@
 use bytes::Bytes;
-use crate::ColumnType;
 use crate::selection::Selection;
 use crate::sql::expression::Expression;
+use crate::table::column_type::ColumnType;
 
 pub enum Statement {
     Select(SelectStatement),
@@ -9,6 +9,7 @@ pub enum Statement {
     Delete(DeleteStatement),
     Insert(InsertStatement),
     CreateTable(CreateTableStatement),
+    CreateDatabase(String),
     StartTransaction,
     Rollback,
     Commit

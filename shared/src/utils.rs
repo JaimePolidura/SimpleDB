@@ -1,6 +1,8 @@
+use std::fs;
 use std::fs::DirEntry;
 use std::io::sink;
 use std::mem::size_of_val;
+use std::path::PathBuf;
 use crate::SimpleDbError;
 use bytes::{Buf, BufMut, Bytes};
 use crossbeam_skiplist::SkipMap;
@@ -65,7 +67,8 @@ pub fn u16_to_u8_le(value: u16, start_index: usize, vector: &mut Vec<u8>) {
 pub fn overflows_bytes_64(bytes: &Bytes, target_size_bytes: u8) -> bool {
     let byte_array: [u8; 8] = bytes[..8].try_into().expect("slice with incorrect length");
     let u64 = u64::from_le_bytes(byte_array);
-    u64 >> (target_size_bytes * 8) == 0x00
+    let (rest, _)  = u64.overflowing_shr((target_size_bytes * 8) as u32);
+    rest == 0x00
 }
 
 pub fn u64_to_u8_le(value: u64, start_index: usize, vector: &mut Vec<u8>) {
@@ -171,4 +174,10 @@ where
 
 pub fn enum_eq<T>(a: &T, b: &T) -> bool {
     std::mem::discriminant(a) == std::mem::discriminant(b)
+}
+
+pub fn create_paths(path: &String) -> Result<(), std::io::Error> {
+    let path = PathBuf::from(path);
+    let path = path.as_path();
+    fs::create_dir_all(path)
 }

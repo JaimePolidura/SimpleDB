@@ -1,63 +1,64 @@
-use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
-use crate::{ColumnType, Database, Table};
-use bytes::Bytes;
-use shared::{utils, SimpleDbError, SimpleDbOptions};
-use std::sync::Arc;
-use storage::transactions::transaction::Transaction;
+use crate::database::databases::Databases;
+use crate::simple_db::{Context, StatementResult};
 use crate::sql::expression::Expression;
 use crate::sql::expression_evaluator::{evaluate_constant_expressions, evaluate_expression};
 use crate::sql::plan::planner::Planner;
 use crate::sql::query_iterator::QueryIterator;
+use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
 use crate::sql::validator::StatementValidator;
+use crate::table::column_type::ColumnType;
+use crate::table::table::Table;
+use bytes::Bytes;
+use shared::{utils, SimpleDbError, SimpleDbOptions};
+use std::sync::Arc;
+use storage::transactions::transaction::Transaction;
 
 pub struct StatementExecutor {
     options: Arc<SimpleDbOptions>,
+    databases: Arc<Databases>,
+
     validator: StatementValidator,
     planner: Planner
 }
 
-pub enum StatementResult {
-    TransactionStarted(Transaction),
-    Data(QueryIterator),
-    Ok(usize), //usize number of rows affected
-}
-
 impl StatementExecutor {
-    pub fn create(options: &Arc<SimpleDbOptions>) -> StatementExecutor {
+    pub fn create(options: &Arc<SimpleDbOptions>, databases: &Arc<Databases>) -> StatementExecutor {
         StatementExecutor {
-            validator: StatementValidator::create(options),
+            validator: StatementValidator::create(databases, options),
             planner: Planner::create(options.clone()),
             options: options.clone(),
+            databases: databases.clone()
         }
     }
 
     pub fn execute(
         &self,
-        transaction: &Transaction,
-        database: Arc<Database>,
+        context: &Context,
         statement: Statement,
     ) -> Result<StatementResult, SimpleDbError> {
-        self.validator.validate(&database, &statement)?;
+        self.validator.validate(context, &statement)?;
         let statement = self.evaluate_constant_expressions(statement)?;
 
         match statement {
-            Statement::Select(select_statement) => self.select(database, transaction, select_statement),
-            Statement::Update(update_statement) => self.update(database, transaction, update_statement),
-            Statement::Delete(delete_statement) => self.delete(database, transaction, delete_statement),
-            Statement::Insert(insert_statement) => self.insert(database, transaction, insert_statement),
-            Statement::CreateTable(create_table_statement) => self.create_table(database, create_table_statement),
-            Statement::StartTransaction => self.start_transaction(database),
-            Statement::Rollback => self.rollback_transaction(database, transaction),
-            Statement::Commit => self.commit_transaction(database, transaction),
+            Statement::Select(select_statement) => self.select(context.database(), context.transaction(), select_statement),
+            Statement::Update(update_statement) => self.update(context.database(), context.transaction(), update_statement),
+            Statement::Delete(delete_statement) => self.delete(context.database(), context.transaction(), delete_statement),
+            Statement::Insert(insert_statement) => self.insert(context.database(), context.transaction(), insert_statement),
+            Statement::CreateTable(create_table_statement) => self.create_table(context.database(), create_table_statement),
+            Statement::StartTransaction => self.start_transaction(context.database()),
+            Statement::Rollback => self.rollback_transaction(context.database(), context.transaction()),
+            Statement::Commit => self.commit_transaction(context.database(), context.transaction()),
+            Statement::CreateDatabase(database_name) => self.create_databse(database_name)
         }
     }
 
     fn select(
         &self,
-        database: Arc<Database>,
+        database_name: &String,
         transaction: &Transaction,
         select_statement: SelectStatement,
     ) -> Result<StatementResult, SimpleDbError> {
+        let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table(&select_statement.table_name)?;
         let select_plan = self.planner.plan_select(&table, select_statement, transaction)?;
 
@@ -66,10 +67,11 @@ impl StatementExecutor {
 
     fn update(
         &self,
-        database: Arc<Database>,
+        database_name: &String,
         transaction: &Transaction,
         update_statement: UpdateStatement,
     ) -> Result<StatementResult, SimpleDbError> {
+        let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table(&update_statement.table_name)?;
         let mut update_plan = self.planner.plan_update(&table, &update_statement, transaction)?;
         let mut updated_rows = 0;
@@ -96,10 +98,11 @@ impl StatementExecutor {
 
     fn delete(
         &self,
-        database: Arc<Database>,
+        database_name: &String,
         transaction: &Transaction,
         delete_statement: DeleteStatement
     ) -> Result<StatementResult, SimpleDbError> {
+        let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table(delete_statement.table_name.as_str())?;
         let mut delete_plan = self.planner.plan_delete(&table, delete_statement, transaction)?;
         let mut deleted_rows = 0;
@@ -115,10 +118,11 @@ impl StatementExecutor {
 
     fn insert(
         &self,
-        database: Arc<Database>,
+        database_name: &String,
         transaction: &Transaction,
         mut insert_statement: InsertStatement,
     ) -> Result<StatementResult, SimpleDbError> {
+        let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table(insert_statement.table_name.as_str())?;
         let mut inserted_values = self.format_column_values(&table, &insert_statement.values);
         table.insert(transaction, &mut inserted_values)?;
@@ -127,36 +131,48 @@ impl StatementExecutor {
 
     fn create_table(
         &self,
-        database: Arc<Database>,
+        database_name: &String,
         create_table_statement: CreateTableStatement,
     ) -> Result<StatementResult, SimpleDbError> {
+        let database = self.databases.get_database_or_err(database_name)?;
         database.create_table(create_table_statement.table_name.as_str(), create_table_statement.columns)?;
         Ok(StatementResult::Ok(0))
     }
 
     fn start_transaction(
         &self,
-        database: Arc<Database>
+        database_name: &String
     ) -> Result<StatementResult, SimpleDbError> {
+        let database = self.databases.get_database_or_err(database_name)?;
         let transaction = database.start_transaction();
         Ok(StatementResult::TransactionStarted(transaction))
     }
 
     fn rollback_transaction(
         &self,
-        database: Arc<Database>,
+        database_name: &String,
         transaction: &Transaction
     ) -> Result<StatementResult, SimpleDbError> {
-        database.rollback_transaction(transaction.as_ref().unwrap())?;
+        let database = self.databases.get_database_or_err(database_name)?;
+        database.rollback_transaction(transaction)?;
         Ok(StatementResult::Ok(0))
     }
 
     fn commit_transaction(
         &self,
-        database: Arc<Database>,
+        database_name: &String,
         transaction: &Transaction
     ) -> Result<StatementResult, SimpleDbError> {
-        database.commit_transaction(transaction.as_ref().unwrap())?;
+        let database = self.databases.get_database_or_err(database_name)?;
+        database.commit_transaction(transaction)?;
+        Ok(StatementResult::Ok(0))
+    }
+
+    fn create_databse(
+        &self,
+        database_name: String
+    ) -> Result<StatementResult, SimpleDbError> {
+        self.databases.create_database(database_name.as_str())?;
         Ok(StatementResult::Ok(0))
     }
 

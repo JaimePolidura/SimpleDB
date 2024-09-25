@@ -1,9 +1,8 @@
-use crate::ColumnType;
 use bytes::Bytes;
 use shared::{utils, SimpleDbError};
 use std::cmp::PartialEq;
-use std::f32::consts::E;
 use SimpleDbError::MalformedQuery;
+use crate::table::column_type::ColumnType;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {

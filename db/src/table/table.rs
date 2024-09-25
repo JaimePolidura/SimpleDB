@@ -3,7 +3,6 @@ use crate::table::record::Record;
 use crate::table::row::Row;
 use crate::table::table_descriptor::{ColumnDescriptor, TableDescriptor};
 use crate::table::table_iteartor::TableIterator;
-use crate::ColumnType;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::{ColumnNameAlreadyDefined, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
@@ -15,6 +14,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::table::column_type::ColumnType;
 
 pub struct Table {
     pub(crate) storage_keyspace_id: shared::KeyspaceId,
@@ -168,10 +168,9 @@ impl Table {
     }
 
     pub fn validate_new_columns(
-        &self,
         columns: &Vec<(String, ColumnType, bool)>,
     ) -> Result<(), SimpleDbError> {
-        let mut primary_already_added = self.has_primary_key();
+        let mut primary_already_added = false;
         let mut column_names_added = HashSet::new();
 
         for (new_column_name, _, is_primary) in columns {
@@ -301,6 +300,8 @@ impl Table {
         table_name: &str,
         options: &Arc<shared::SimpleDbOptions>,
         storage: &Arc<storage::Storage>,
+        primary_column_name: String
+
     ) -> Result<Arc<Table>, SimpleDbError> {
         let table_keyspace_id = storage.create_keyspace()?;
         let (table_descriptor, table_descriptor_file) = TableDescriptor::create(
@@ -314,12 +315,12 @@ impl Table {
         Ok(Arc::new(Table {
             table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(table_descriptor_file)},
             next_column_id: AtomicUsize::new(max_column_id as usize + 1),
-            primary_column_name: table_descriptor.get_primary_column_name(),
             columns_by_id: table_descriptor.columns,
             table_name: table_descriptor.table_name,
             storage_keyspace_id: table_keyspace_id,
             columns_by_name: SkipMap::new(),
             storage: storage.clone(),
+            primary_column_name,
         }))
     }
 
@@ -349,7 +350,8 @@ impl Table {
     pub fn get_primary_column_data(&self) -> Option<ColumnDescriptor> {
         match self.columns_by_name.get(&self.primary_column_name) {
             Some(id) => {
-                let value = self.columns_by_id.get(id.value()).unwrap();
+                let value = self.columns_by_id.get(id.value())
+                    .unwrap();
                 Some(value.value().clone())
             },
             None => None

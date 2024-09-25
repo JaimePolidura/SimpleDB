@@ -4,11 +4,14 @@ use shared::{ColumnId, KeyspaceId, SimpleDbError, SimpleDbFile};
 use std::cmp::max;
 use std::path::PathBuf;
 use std::sync::Arc;
-use crate::ColumnType;
+use crate::table::column_type::ColumnType;
 
 //Maintains information about column ID with its column name, column type, is_primary etc.
 //This file is stored in binary format
-//There is one file of these for each table
+//There is one file of these for each tabl
+
+// Table name length (u16) | Table name bytes...
+// [ Column ID (u16) | Column type (u8) | Is primary (u8) | name length (u32) | name bytes... ]
 pub struct TableDescriptor {
     pub(crate) columns: SkipMap<ColumnId, ColumnDescriptor>,
     pub(crate) table_name: String,
@@ -24,25 +27,6 @@ pub struct ColumnDescriptor {
 }
 
 impl TableDescriptor {
-    pub fn get_max_column_id(&self) -> ColumnId {
-        if let Some(entry) = self.columns.back() {
-            *entry.key()
-        } else {
-            0
-        }
-    }
-
-    pub fn get_primary_column_name(&self) -> String {
-        self.columns.get(&self.primary_column_id).unwrap()
-            .value()
-            .column_name
-            .clone()
-    }
-
-    pub fn name(&self) -> String {
-        self.table_name.clone()
-    }
-
     pub fn create(
         keyspace_id: KeyspaceId,
         options: &Arc<shared::SimpleDbOptions>,
@@ -91,6 +75,25 @@ impl TableDescriptor {
         }, table_descriptor_file))
     }
 
+    pub fn get_max_column_id(&self) -> ColumnId {
+        if let Some(entry) = self.columns.back() {
+            *entry.key()
+        } else {
+            0
+        }
+    }
+
+    pub fn get_primary_column_name(&self) -> String {
+        self.columns.get(&self.primary_column_id).unwrap()
+            .value()
+            .column_name
+            .clone()
+    }
+
+    pub fn name(&self) -> String {
+        self.table_name.clone()
+    }
+
     fn max_column_id(column_descriptors: &Vec<ColumnDescriptor>) -> ColumnId {
         let mut max_column_id = 0;
         for column_descriptor in column_descriptors {
@@ -125,7 +128,7 @@ impl TableDescriptor {
                     offset: 0,
                 }))?;
             let is_primary = current_ptr.get_u8() != 0;
-            let name_bytes_length = current_ptr.get_u16_le() as usize;
+            let name_bytes_length = current_ptr.get_u32_le() as usize;
             let name_bytes = &current_ptr[..name_bytes_length];
             current_ptr.advance(name_bytes_length);
 
@@ -134,6 +137,8 @@ impl TableDescriptor {
             }
 
             let column_name = Self::decode_string(name_bytes, keyspace_id, path, columns_descriptor.len())?;
+
+            println!("Hola");
 
             columns_descriptor.push(ColumnDescriptor {
                 column_name,
@@ -150,9 +155,9 @@ impl TableDescriptor {
         String::from_utf8(bytes.to_vec())
             .map_err(|e| shared::SimpleDbError::CannotDecodeTableDescriptor(keyspace_id, shared::DecodeError {
                 error_type: shared::DecodeErrorType::Utf8Decode(e),
-                index: index,
                 path: path.clone(),
                 offset: 0,
+                index,
             }))
     }
 
@@ -184,7 +189,7 @@ impl ColumnDescriptor {
         serialized.put_u8(self.column_type.serialize());
         serialized.put_u8(self.is_primary as u8);
         let name_bytes = self.column_name.bytes();
-        serialized.put_u64_le(name_bytes.len() as u64);
+        serialized.put_u32_le(name_bytes.len() as u32);
         serialized.extend(name_bytes);
         serialized
     }

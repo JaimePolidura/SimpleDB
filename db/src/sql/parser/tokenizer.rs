@@ -1,8 +1,8 @@
 use std::str::FromStr;
 use shared::SimpleDbError::{IllegalToken};
 use shared::TokenLocation;
-use crate::ColumnType;
 use crate::sql::parser::token::Token;
+use crate::table::column_type::ColumnType;
 
 pub struct Tokenizer {
     string: String,
@@ -175,6 +175,8 @@ impl Tokenizer {
                     Ok(Token::ColumnType(ColumnType::Date))
                 } else if self.advance_if_next_string_eq("ELETE"){
                     Ok(Token::Delete)
+                } else if self.advance_if_next_string_eq("ATABASE"){
+                    Ok(Token::Database)
                 } else {
                     self.next -= 1;
                     Ok(self.other_identifier())
@@ -403,9 +405,9 @@ impl Tokenizer {
 
 #[cfg(test)]
 mod test {
-    use crate::ColumnType;
     use crate::sql::parser::token::Token;
     use crate::sql::parser::tokenizer::Tokenizer;
+    use crate::table::column_type::ColumnType;
 
     #[test]
     fn select() {

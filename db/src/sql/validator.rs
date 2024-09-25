@@ -1,32 +1,42 @@
+use crate::database::databases::Databases;
 use crate::sql::expression::Expression;
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
-use crate::{ColumnType, Database, Table};
+use crate::table::column_type::ColumnType;
+use crate::table::table::Table;
 use shared::SimpleDbError::UnknownColumn;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
+use crate::simple_db::Context;
 
 pub struct StatementValidator {
-    options: Arc<SimpleDbOptions>
+    databases: Arc<Databases>,
+
+    options: Arc<SimpleDbOptions>,
 }
 
 impl StatementValidator {
     pub fn create(
+        databases: &Arc<Databases>,
         options: &Arc<SimpleDbOptions>
     ) -> StatementValidator {
-        StatementValidator { options: options.clone() }
+        StatementValidator {
+            databases: databases.clone(),
+            options: options.clone(),
+        }
     }
 
     pub fn validate(
         &self,
-        database: &Arc<Database>,
+        context: &Context,
         statement: &Statement,
     ) -> Result<(), SimpleDbError> {
         match statement {
-            Statement::Select(statement) => self.validate_select(database, statement),
-            Statement::Update(statement) => self.validate_update(database, statement),
-            Statement::Delete(statement) => self.validate_delete(database, statement),
-            Statement::Insert(statement) => self.validate_insert(database, statement),
-            Statement::CreateTable(statement) => self.validate_create_table(database, statement),
+            Statement::Select(statement) => self.validate_select(context.database(), statement),
+            Statement::Update(statement) => self.validate_update(context.database(), statement),
+            Statement::Delete(statement) => self.validate_delete(context.database(), statement),
+            Statement::Insert(statement) => self.validate_insert(context.database(), statement),
+            Statement::CreateTable(statement) => self.validate_create_table(context.database(), statement),
+            Statement::CreateDatabase(database_name) => self.validate_create_database(database_name),
             Statement::Rollback |
             Statement::Commit |
             Statement::StartTransaction => {
@@ -35,11 +45,22 @@ impl StatementValidator {
         }
     }
 
+    fn validate_create_database(
+        &self,
+        database_name: &String
+    ) -> Result<(), SimpleDbError> {
+        match self.databases.get_database(database_name) {
+            Some(_) => Err(SimpleDbError::DatabaseAlreadyExists(database_name.to_string())),
+            None => Ok(())
+        }
+    }
+
     fn validate_select(
         &self,
-        database: &Arc<Database>,
+        database_name: &String,
         statement: &SelectStatement
     ) -> Result<(), SimpleDbError> {
+        let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table(&statement.table_name)?;
         self.validate_where_expression(&statement.where_expr, &table)?;
         table.validate_selection(&statement.selection)?;
@@ -48,9 +69,10 @@ impl StatementValidator {
 
     fn validate_update(
         &self,
-        database: &Arc<Database>,
+        database_name: &String,
         statement: &UpdateStatement
     ) -> Result<(), SimpleDbError> {
+        let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table(&statement.table_name)?;
         self.validate_where_expression(&statement.where_expr, &table)?;
 
@@ -69,26 +91,29 @@ impl StatementValidator {
 
     fn validate_insert(
         &self,
-        database: &Arc<Database>,
+        database_namae: &String,
         statement: &InsertStatement
     ) -> Result<(), SimpleDbError> {
+        let database = self.databases.get_database_or_err(database_namae)?;
         let table = database.get_table(statement.table_name.as_str())?;
         table.validate_column_values(&statement.values)
     }
 
     fn validate_create_table(
         &self,
-        database: &Arc<Database>,
+        database_name: &String,
         statement: &CreateTableStatement
     ) -> Result<(), SimpleDbError> {
-        database.validate_create_table(&statement.table_name, &statement.columns)
+        let database = self.databases.get_database_or_err(database_name)?;
+        database.validate_create_table(&statement)
     }
 
     fn validate_delete(
         &self,
-        database: &Arc<Database>,
+        database_name: &String,
         statement: &DeleteStatement,
     ) -> Result<(), SimpleDbError> {
+        let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table(&statement.table_name)?;
         self.validate_where_expression(&statement.where_expr, &table)?;
         Ok(())

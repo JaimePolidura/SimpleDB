@@ -20,6 +20,19 @@ impl QueryIterator {
     pub fn next_n(&mut self, n: usize) -> Result<Vec<Row>, SimpleDbError> {
         let mut results = Vec::new();
 
+        while results.len() <= n {
+            match self.plan.next()? {
+                Some(row) => results.push(row),
+                None => break
+            };
+        }
+
+        Ok(results)
+    }
+
+    pub fn all(&mut self) -> Result<Vec<Row>, SimpleDbError> {
+        let mut results = Vec::new();
+
         while let Some(row) = self.plan.next()? {
             results.push(row);
         }

@@ -1,7 +1,6 @@
 use bytes::Bytes;
 use shared::utils;
 use std::cmp::max;
-use crate::ColumnType::Varchar;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ColumnType {

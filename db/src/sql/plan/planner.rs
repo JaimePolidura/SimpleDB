@@ -7,12 +7,12 @@ use crate::sql::plan::steps::full_scan_step::FullScanStep;
 use crate::sql::plan::steps::limit_step::LimitStep;
 use crate::sql::plan::steps::range_scan_step::RangeScanStep;
 use crate::sql::statement::{DeleteStatement, Limit, SelectStatement, Statement, UpdateStatement};
-use crate::Table;
 use shared::SimpleDbError::MalformedQuery;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use crate::sql::plan::plan_step::Plan;
+use crate::table::table::Table;
 
 pub struct Planner {
     options: Arc<SimpleDbOptions>

@@ -1,13 +1,13 @@
 use crate::selection::Selection;
 use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Limit, SelectStatement, Statement, UpdateStatement};
-use crate::ColumnType;
 use bytes::Bytes;
 use shared::SimpleDbError;
 use shared::SimpleDbError::IllegalToken;
 use std::cmp::PartialEq;
 use crate::sql::parser::token::Token;
 use crate::sql::parser::tokenizer::Tokenizer;
+use crate::table::column_type::ColumnType;
 
 const MAX_PRECEDENCE: u8 = u8::MAX;
 
@@ -30,7 +30,7 @@ impl Parser {
             Token::Update => self.update(),
             Token::Delete => self.delete(),
             Token::Insert => self.insert(),
-            Token::Create => self.create_table(),
+            Token::Create => self.create_some(),
             Token::StartTransaction => self.start_transaction(),
             Token::Commit => self.commit(),
             Token::Rollback => self.rollback(),
@@ -299,11 +299,16 @@ impl Parser {
         Ok(column_values)
     }
 
-    fn create_table(&mut self) -> Result<Statement, SimpleDbError> {
+    fn create_some(&mut self) -> Result<Statement, SimpleDbError> {
         self.advance()?;
-        self.expect_token(Token::Table)?;
+        match self.advance()? {
+            Token::Database => self.create_database(),
+            Token::Table => self.create_table(),
+            _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Invalid token after create")))
+        }
+    }
 
-        //Table name token
+    fn create_table(&mut self) -> Result<Statement, SimpleDbError> {
         match self.advance()? {
             Token::Identifier(table_name) => {
                 self.expect_token(Token::OpenParen)?;
@@ -318,13 +323,20 @@ impl Parser {
         }
     }
 
+    fn create_database(&mut self) -> Result<Statement, SimpleDbError> {
+        match self.advance()? {
+            Token::Identifier(database_name) => Ok(Statement::CreateDatabase(database_name)),
+            _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Expect table name")))
+        }
+    }
+
     fn create_table_columns(&mut self) -> Result<Vec<(String, ColumnType, bool)>, SimpleDbError> {
         let mut columns = Vec::new();
 
         while !self.maybe_expect_token(Token::CloseParen)? {
             let table_name = self.identifier()?;
-            let is_primary = self.is_primary_key()?;
             let column_type = self.column_type()?;
+            let is_primary = self.is_primary_key()?;
 
             columns.push((table_name, column_type, is_primary));
 
@@ -419,9 +431,9 @@ mod test {
     use crate::selection::Selection;
     use crate::sql::expression::{BinaryOperator, Expression};
     use crate::sql::statement::{Limit, Statement};
-    use crate::ColumnType;
     use crate::sql::parser::parser::Parser;
     use crate::sql::parser::token::Token;
+    use crate::table::column_type::ColumnType;
 
     #[test]
     fn update_all() {
@@ -613,7 +625,7 @@ mod test {
     fn create_table() {
         let mut parser = Parser::create(String::from(
             r#"CREATE TABLE personas (
-                id PRIMARY KEY i64,
+                id i64 PRIMARY KEY,
                 nombre VARCHAR,
                 dinero f64
                );"#

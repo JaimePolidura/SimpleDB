@@ -1,5 +1,5 @@
 use bytes::{BufMut, Bytes};
-use crate::ColumnType;
+use crate::table::column_type::ColumnType;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -41,6 +41,7 @@ pub enum Token {
     StartTransaction, // "START_TRANSACTION"
     Rollback, // "ROLLBACK"
     Commit, // "COMMIT"
+    Database,
 
     Identifier(String), //Ohter identifier, like table or column names
     String(String), // "some text"

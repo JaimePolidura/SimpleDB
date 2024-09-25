@@ -66,6 +66,7 @@ pub enum SimpleDbError {
     CannotDecodeDatabaseDescriptor(String, DecodeError),
     CannotCreateDatabaseDescriptor(String, std::io::Error),
     CannotWriteDatabaseDescriptor(std::io::Error),
+    CannotCreateDatabaseFolder(String, std::io::Error),
 
     //Keyspaces
     KeyspaceNotFound(types::KeyspaceId),
@@ -258,7 +259,10 @@ impl Debug for SimpleDbError {
                 write!(f, "Invalid type for column: {}", column_name)
             }
             SimpleDbError::FullScanNotAllowed() => {
-                write!(f, "Full steps is not allowed")
+                write!(f, "Full scan is not allowed")
+            }
+            SimpleDbError::CannotCreateDatabaseFolder(database_name, io_error) => {
+                write!(f, "Cannot create database {} folder. IO Error: {}", database_name, io_error)
             }
         }
     }

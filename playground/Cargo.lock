@@ -274,7 +274,6 @@ dependencies = [
  "db",
  "rand",
  "shared",
- "storage",
 ]
 
 [[package]]

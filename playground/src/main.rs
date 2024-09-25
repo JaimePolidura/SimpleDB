@@ -1,8 +1,7 @@
-use bytes::Bytes;
-use rand::Rng;
+use db::simple_db::Context;
 
 fn main() {
-    let mut lsm = storage::create(shared::start_simpledb_options_builder()
+    let db = db::simple_db::create(shared::start_simpledb_options_builder()
         .base_path("C:\\programacion\\SimpleDB\\playground\\resources")
         .compaction_strategy(shared::CompactionStrategy::SimpleLeveled)
         .durability_level(shared::DurabilityLevel::Strong)
@@ -12,76 +11,25 @@ fn main() {
         .build())
         .unwrap();
 
-    let k = lsm.create_keyspace().unwrap();
+    db.execute(&Context::empty(), "CREATE DATABASE prueba;").expect("");
+    db.execute(&Context::with_database("prueba"), "CREATE TABLE personas (id I64 PRIMARY KEY, nombre VARCHAR, dinero F64);")
+        .expect("");
 
-    // transactions(&mut lsm);
-    write(&mut lsm, 1);
-    //read(&mut lsm);
-}
+    let transaction = db.execute_only_one(&Context::with_database("prueba"), "START_TRANSACTION;")
+        .unwrap()
+        .get_transaction();
 
-//"Resources" folder should be cleared before running this function
-fn transactions(lsm: &mut storage::Storage) {
-    let keyspace = lsm.create_keyspace().unwrap();
+    let context = Context::with("prueba", transaction);
 
-    let transaction1 = lsm.start_transaction();
-    let transaction2 = lsm.start_transaction();
+    db.execute_only_one(&context, "INSERT INTO personas (id, nombre, dinero) VALUES (1, \"Jaime\", 10);");
+    db.execute_only_one(&context, "INSERT INTO personas (id, nombre, dinero) VALUES (2, \"Molon\", 11);");
+    db.execute_only_one(&context, "INSERT INTO personas (id, nombre, dinero) VALUES (3, \"Walo\", 12);");
 
-    lsm.set_with_transaction(keyspace, &transaction1, string("aaa"), &vec![1]);
+    let mut data = db.execute_only_one(&context, "SELECT * FROM personas WHERE dinero > 10;")
+        .expect("")
+        .data();
 
-    let value1 = lsm.get_with_transaction(keyspace, &transaction1, &string("aaa"))
-        .unwrap();
-    assert!(value1.is_some());
-    assert_eq!(value1.unwrap(), vec![1]);
-
-    let value2 = lsm.get_with_transaction(keyspace, &transaction2, &string("aaa"))
-        .unwrap();
-    assert!(value2.is_none());
-
-    lsm.commit_transaction(transaction1);
-
-    let value2 = lsm.get_with_transaction(keyspace, &transaction2, &string("aaa"))
-        .unwrap();
-    assert!(value2.is_none());
-
-    lsm.delete_with_transaction(keyspace, &transaction2, string("aaa"));
-
-    lsm.rollback_transaction(transaction2);
-
-    let value1 = lsm.get(keyspace, &string("aaa"))
-        .unwrap();
-    assert!(value1.is_some());
-    assert_eq!(value1.unwrap(), vec![1]);
-}
-
-fn read(lsm: &mut storage::Storage, keyspace_id: shared::KeyspaceId) {
-    let value = lsm.get(keyspace_id, &string("AAB")).unwrap();
-    if value.is_some() {
+    while let Some(row) = data.next().unwrap() {
+        println!("{}", row);
     }
-}
-
-fn write(lsm: &mut storage::Storage, keyspace_id: shared::KeyspaceId)  {
-    loop {
-        let value = next_value();
-        let key = next_key();
-
-        lsm.set(keyspace_id, key, &value)
-            .expect("Failed to write key in LSM");
-
-        // std::thread::sleep(Duration::from_millis(1));
-    }
-}
-
-fn string(str :&str) -> Bytes {
-    Bytes::from(str.to_string())
-}
-
-fn next_key() -> Bytes {
-    let mut rng = rand::thread_rng();
-    Bytes::from((0..3)
-        .map(|_| rng.gen_range(65..90) as u8 as char) // Generate a random ASCII character
-        .collect::<String>())
-}
-
-fn next_value() -> Vec<u8> {
-    vec![1, 2, 3]
 }

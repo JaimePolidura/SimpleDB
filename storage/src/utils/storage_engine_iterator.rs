@@ -247,7 +247,7 @@ mod test {
     fn iterator_merger_fn() {
         let options = shared::start_simpledb_options_builder_from(&shared::SimpleDbOptions::default())
             .storage_value_merger(|a, b| merge_values(a, b))
-            .build();
+            .build_arc();
 
         let memtable = Arc::new(MemTable::create_mock(options.clone(), 0).unwrap());
         memtable.set(&transaction(10), Bytes::from("aa"), &vec![1]);

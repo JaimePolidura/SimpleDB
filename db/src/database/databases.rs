@@ -1,10 +1,10 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
 use shared::{SimpleDbError, SimpleDbOptions, StorageValueMergeResult};
-use crate::Database;
+use crate::database::database::Database;
 use crate::table::record::Record;
 
 pub struct Databases {
@@ -18,7 +18,7 @@ impl Databases {
     ) -> Result<Databases, SimpleDbError> {
         let options = shared::start_simpledb_options_builder_from(&options)
             .storage_value_merger(|prev, new| Self::merge_storage_tables(prev, new))
-            .build();
+            .build_arc();
 
         let mut databases = Self::load_databases(&options)?;
 
@@ -33,14 +33,30 @@ impl Databases {
             .map(|entry| entry.value().clone())
     }
 
-    pub fn create_database(&self, name: &str) -> Result<Arc<Database>, SimpleDbError> {
-        if self.databases.contains_key(name) {
-            return Err(SimpleDbError::DatabaseAlreadyExists(name.to_string()));
+    pub fn get_database_or_err(&self, name: &str) -> Result<Arc<Database>, SimpleDbError> {
+        self.databases.get(name)
+            .map(|entry| entry.value().clone())
+            .ok_or(SimpleDbError::DatabaseNotFound(name.clone().to_string()))
+    }
+
+    pub fn create_database(&self, database_name: &str) -> Result<Arc<Database>, SimpleDbError> {
+        if self.databases.contains_key(database_name) {
+            return Err(SimpleDbError::DatabaseAlreadyExists(database_name.to_string()));
         }
 
-        let database = Database::create(&self.options, name)?;
-        self.databases.insert(name.to_string(), database.clone());
+        let database_options = self.build_database_options(database_name);
+        let database = Database::create(&database_options, database_name)?;
+
+        self.databases.insert(database_name.to_string(), database.clone());
         Ok(database)
+    }
+
+    fn build_database_options(&self, databse_name: &str) -> Arc<SimpleDbOptions> {
+        let mut database_path = PathBuf::from(&self.options.base_path);
+        database_path.push(databse_name);
+        shared::start_simpledb_options_builder_from(&self.options)
+            .base_path(database_path.to_str().unwrap())
+            .build_arc()
     }
 
     fn index_databases_by_name(databases: &mut Vec<Arc<Database>>) -> SkipMap<String, Arc<Database>> {
@@ -66,7 +82,7 @@ impl Databases {
                 let database_name = database_name.to_str().unwrap();
                 let database_options = shared::start_simpledb_options_builder_from(options)
                     .base_path(file.path().to_str().unwrap())
-                    .build();
+                    .build_arc();
 
                 databases.push(Database::load_database(&database_options, database_name)?);
             }

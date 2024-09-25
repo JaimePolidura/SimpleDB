@@ -43,6 +43,16 @@ impl SimpleDbFile {
         }
     }
 
+    pub fn create (
+        path: &Path,
+        data: &Vec<u8>,
+        mode: SimpleDbFileMode
+    ) -> Result<SimpleDbFile, std::io::Error> {
+        let mut file = Self::open(path, mode)?;
+        file.write(data)?;
+        Ok(file)
+    }
+
     pub fn open(path: &Path, mode: SimpleDbFileMode) -> Result<SimpleDbFile, std::io::Error> {
         let is_append_only = matches!(mode, SimpleDbFileMode::AppendOnly);
         let is_read_only = matches!(mode, SimpleDbFileMode::ReadOnly);
@@ -51,6 +61,7 @@ impl SimpleDbFile {
             .create(true)
             .append(is_append_only)
             .write(!is_read_only)
+            .create(true) //Create file if it doest exist
             .read(true)
             .open(path)?;
         let metadata = file.metadata()?;
@@ -84,24 +95,6 @@ impl SimpleDbFile {
         }
 
         Ok(())
-    }
-
-    pub fn create (
-        path: &Path,
-        data: &Vec<u8>,
-        mode: SimpleDbFileMode
-    ) -> Result<SimpleDbFile, std::io::Error> {
-        std::fs::write(path, data)?;
-
-        match File::open(path) {
-            Ok(file) => Ok(SimpleDbFile {
-                path: Some(path.to_path_buf()),
-                size_bytes: data.len(),
-                file: Some(file),
-                mode
-            }),
-            Err(e) => Err(e)
-        }
     }
 
     pub fn read_all(&self) -> Result<Vec<u8>, std::io::Error> {

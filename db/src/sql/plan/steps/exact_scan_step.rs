@@ -1,10 +1,11 @@
 use crate::selection::Selection;
 use crate::sql::plan::plan_step::{Plan, PlanStep};
-use crate::{Row, Table};
+use crate::{Row};
 use bytes::Bytes;
 use shared::SimpleDbError;
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::table::table::Table;
 
 pub struct ExactScanStep {
     row: Option<Row>
