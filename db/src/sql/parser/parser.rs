@@ -3,7 +3,7 @@ use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Limit, SelectStatement, Statement, UpdateStatement};
 use bytes::Bytes;
 use shared::SimpleDbError;
-use shared::SimpleDbError::IllegalToken;
+use shared::SimpleDbError::{IllegalToken, MalformedQuery};
 use std::cmp::PartialEq;
 use crate::sql::parser::token::Token;
 use crate::sql::parser::tokenizer::Tokenizer;
@@ -243,8 +243,8 @@ impl Parser {
     fn create_insert_statement_values(
         &self,
         mut column_names: Vec<String>,
-        mut column_values_tokens: Vec<Bytes>
-    ) -> Result<Vec<(String, Bytes)>, SimpleDbError> {
+        mut column_values_tokens: Vec<(Bytes, ColumnType)>
+    ) -> Result<Vec<(String, Bytes, ColumnType)>, SimpleDbError> {
         if column_names.len() != column_values_tokens.len() {
             return Err(SimpleDbError::MalformedQuery(String::from(
                 "Insert statements should have the same number of columns and values"
@@ -254,10 +254,10 @@ impl Parser {
         let mut insert_values = Vec::new();
 
         while !column_names.is_empty() {
-            let column_value = column_values_tokens.pop().unwrap();
+            let (column_value, column_type) = column_values_tokens.pop().unwrap();
             let column_name = column_names.pop().unwrap();
 
-            insert_values.push((column_name, column_value));
+            insert_values.push((column_name, column_value, column_type));
         }
 
         Ok(insert_values)
@@ -279,17 +279,19 @@ impl Parser {
         Ok(column_names)
     }
 
-    fn column_values(&mut self, terminator_token: &Token) -> Result<Vec<Bytes>, SimpleDbError> {
+    fn column_values(&mut self, terminator_token: &Token) -> Result<Vec<(Bytes, ColumnType)>, SimpleDbError> {
         let mut column_values = Vec::new();
         while !self.check_last_token(terminator_token.clone()) {
             let token = self.advance()?;
-            let bytes = token.convert_to_bytes()
+            let value_type = token.to_column_type()
+                .map_err(|_| MalformedQuery(String::from("Value cannot be inserted into a row")))?;
+            let bytes = token.serialize()
                 .or(Err(IllegalToken(
                     self.tokenizer.current_location(),
                     String::from("Value cannot be inserted into a row")))
                 )?;
 
-            column_values.push(bytes);
+            column_values.push((bytes, value_type));
 
             if !self.check_last_token(terminator_token.clone()) {
                 self.expect_token(Token::Comma)?;
@@ -613,9 +615,9 @@ mod test {
             Statement::Insert(insert_statement) => {
                 assert_eq!(insert_statement.table_name, String::from("personas"));
                 assert_eq!(insert_statement.values.len(), 3);
-                assert_eq!(insert_statement.values[2], (String::from("id"), Token::NumberI64(1).convert_to_bytes().unwrap()));
-                assert_eq!(insert_statement.values[1], (String::from("nombre"), Token::String(String::from("Jaime")).convert_to_bytes().unwrap()));
-                assert_eq!(insert_statement.values[0], (String::from("dinero"), Token::NumberF64(10.2).convert_to_bytes().unwrap()));
+                assert_eq!(insert_statement.values[2], (String::from("id"), Token::NumberI64(1).serialize().unwrap(), ColumnType::I64));
+                assert_eq!(insert_statement.values[1], (String::from("nombre"), Token::String(String::from("Jaime")).serialize().unwrap(), ColumnType::Varchar));
+                assert_eq!(insert_statement.values[0], (String::from("dinero"), Token::NumberF64(10.2).serialize().unwrap(), ColumnType::F64));
             }
             _ => panic!()
         }

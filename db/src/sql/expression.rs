@@ -3,6 +3,7 @@ use shared::{utils, SimpleDbError};
 use std::cmp::PartialEq;
 use SimpleDbError::MalformedQuery;
 use crate::table::column_type::ColumnType;
+use crate::value::Value;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
@@ -11,10 +12,14 @@ pub enum Expression {
     Binary(BinaryOperator, Box<Expression>, Box<Expression>),
     Unary(UnaryOperator, Box<Expression>),
     Identifier(String),
+
+    Literal(Value),
+
     String(String),
     Boolean(bool),
     NumberF64(f64),
     NumberI64(i64),
+
     Null,
 }
 

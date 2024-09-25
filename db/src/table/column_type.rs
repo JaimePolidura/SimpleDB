@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use shared::utils;
 use std::cmp::max;
 
@@ -126,30 +125,6 @@ impl ColumnType {
 
     pub fn is_boolean(&self) -> bool {
         matches!(self, ColumnType::Boolean)
-    }
-
-    //Nulls
-    pub fn has_valid_format(&self, bytes: &Bytes) -> bool {
-        match *self {
-            ColumnType::I8 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 1),
-            ColumnType::U8 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 1),
-            ColumnType::I16 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 2),
-            ColumnType::U16 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 2),
-            ColumnType::U32 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 4),
-            ColumnType::I32 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 4),
-            ColumnType::U64 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 8),
-            ColumnType::I64 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 8),
-            ColumnType::F32 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 4),
-            ColumnType::F64 => bytes.len() <= 8 && !utils::overflows_bytes_64(&bytes, 8),
-            ColumnType::Boolean => {
-                let vec = bytes.to_vec();
-                vec.len() == 1 && (vec[0] == 0x00 || vec[1] == 0x01)
-            },
-            ColumnType::Varchar => String::from_utf8(bytes.to_vec()).is_ok(),
-            ColumnType::Date => todo!(),
-            ColumnType::Blob => true,
-            ColumnType::Null => bytes.eq(&Bytes::copy_from_slice(&vec![]))
-        }
     }
 
     pub fn serialize(&self) -> u8 {

@@ -2,7 +2,7 @@ use crate::selection::Selection;
 use crate::table::record::Record;
 use crate::table::row::Row;
 use crate::table::table_descriptor::{ColumnDescriptor, TableDescriptor};
-use crate::table::table_iteartor::TableIterator;
+use crate::table::table_iterator::TableIterator;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::{ColumnNameAlreadyDefined, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
@@ -217,18 +217,18 @@ impl Table {
 
     pub fn validate_column_values(
         &self,
-        to_insert_data: &Vec<(String, Bytes)>
+        to_insert_data: &Vec<(String, Bytes, ColumnType)>
     ) -> Result<(), SimpleDbError> {
         if !self.has_primary_value(to_insert_data) {
             return Err(PrimaryColumnNotIncluded())
         }
-        for (column_name, column_value) in to_insert_data {
+        for (column_name, column_value, inserted_value_type) in to_insert_data {
             match self.columns_by_name.get(column_name) {
                 Some(column) => {
                     let column = self.columns_by_id.get(column.value()).unwrap();
                     let column = column.value();
 
-                    if !column.column_type.has_valid_format(column_value) {
+                    if column.column_type.can_be_casted(inserted_value_type.clone()) {
                         return Err(InvalidType(column_name.clone()));
                     }
                 },
@@ -239,8 +239,8 @@ impl Table {
         Ok(())
     }
 
-    fn has_primary_value(&self, data: &Vec<(String, Bytes)>) -> bool {
-        for (column_name, _) in data.iter() {
+    fn has_primary_value(&self, data: &Vec<(String, Bytes, ColumnType)>) -> bool {
+        for (column_name, _, _) in data.iter() {
             if column_name.eq(&self.primary_column_name) {
                 return true
             }

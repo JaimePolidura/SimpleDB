@@ -138,8 +138,6 @@ impl TableDescriptor {
 
             let column_name = Self::decode_string(name_bytes, keyspace_id, path, columns_descriptor.len())?;
 
-            println!("Hola");
-
             columns_descriptor.push(ColumnDescriptor {
                 column_name,
                 column_type,

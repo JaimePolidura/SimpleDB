@@ -179,12 +179,12 @@ impl StatementExecutor {
     fn format_column_values(
         &self,
         table: &Arc<Table>,
-        values: &Vec<(String, Bytes)>
+        values: &Vec<(String, Bytes, ColumnType)>
     ) -> Vec<(String, Bytes)>{
         let mut formatted_values = Vec::new();
         let columns = table.get_columns();
 
-        for (column_name, unformatted_column_value) in values {
+        for (column_name, unformatted_column_value, unformatted_column_value_type) in values {
             let column_desc = columns.get(column_name).unwrap();
             let formatted_column_value = match column_desc.column_type {
                 ColumnType::I8 => Bytes::from(utils::bytes_to_i8(unformatted_column_value).to_le_bytes().to_vec()),

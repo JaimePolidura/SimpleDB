@@ -41,8 +41,8 @@ pub struct DeleteStatement {
 
 pub struct InsertStatement {
     pub(crate) table_name: String,
-    //Column name, Value
-    pub(crate) values: Vec<(String, Bytes)>,
+    //Column name, Value, Value type
+    pub(crate) values: Vec<(String, Bytes, ColumnType)>,
 }
 
 pub struct CreateTableStatement {

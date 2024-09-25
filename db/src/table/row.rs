@@ -54,10 +54,17 @@ impl fmt::Display for Row {
         let n_columns = self.table.get_columns().len();
         let mut count = 0;
 
-        for column in self.table.get_columns().values() {
+        let columns = self.table.get_columns();
+        let mut column_names: Vec<_> = columns.keys().collect();
+        column_names.sort_by(|a, b| {
+            (*a).cmp(b)
+        });
+
+        for column in column_names {
+            let column = self.table.get_column_desc(column).unwrap();
             if let Some(column_value) = self.storage_engine_record.get_value(column.column_id) {
                 string.push_str(&column.column_name);
-                string.push_str("= ");
+                string.push_str(" = ");
                 string.push_str((match column.column_type {
                     ColumnType::I8 => utils::bytes_to_i8(column_value).to_string(),
                     ColumnType::U8 => utils::bytes_to_u8(column_value).to_string(),
@@ -67,8 +74,8 @@ impl fmt::Display for Row {
                     ColumnType::I32 => utils::bytes_to_i32_le(column_value).to_string(),
                     ColumnType::U64 => utils::bytes_to_u64_le(column_value).to_string(),
                     ColumnType::I64 => utils::bytes_to_i64_le(column_value).to_string(),
-                    ColumnType::F32 => utils::bytes_to_f32_le(column_value).to_string(),
-                    ColumnType::F64 => utils::bytes_to_f64_le(column_value).to_string(),
+                    ColumnType::F32 => format!("{:.2}", utils::bytes_to_f32_le(column_value)).to_string(),
+                    ColumnType::F64 => format!("{:.2}", utils::bytes_to_f64_le(column_value)).to_string(),
                     ColumnType::Boolean => if column_value[0] == 0x00 { String::from("false") } else { String::from("true") },
                     ColumnType::Varchar => String::from_utf8(column_value.to_vec()).unwrap(),
                     ColumnType::Date => todo!(),
@@ -76,8 +83,8 @@ impl fmt::Display for Row {
                     ColumnType::Null => panic!("")
                 }).as_str());
 
+                count += 1;
                 if count < n_columns {
-                    count += 1;
                     string.push_str(", ");
                 }
             }

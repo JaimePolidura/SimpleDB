@@ -3,7 +3,7 @@ use shared::ColumnId;
 
 //Represents the row data stored in the storage engine,
 //This might represent an incomplete set of data
-//The binary format is: |Column ID (u16)| Column value length (u32) | Column values |...
+// Column ID (u16) | Column value length (u32) | Column value bytes |
 #[derive(Clone)]
 pub struct Record {
     pub(crate) data_records: Vec<(ColumnId, Bytes)>
@@ -69,6 +69,7 @@ impl Record {
             let column_id = current_ptr.get_u16_le() as ColumnId;
             let column_value_length = current_ptr.get_u32_le();
             let column_value_bytes = &current_ptr[..column_value_length as usize];
+            current_ptr.advance(column_value_length as usize);
 
             data_records.push((column_id, Bytes::from(column_value_bytes.to_vec())));
         }
@@ -105,12 +106,12 @@ impl RecordBuilder {
 
     pub fn has_columns_id(&self, columns_ids: &Vec<ColumnId>) -> bool {
         for column_id in columns_ids {
-            if self.has_column_id(*column_id) {
-                return true
+            if !self.has_column_id(*column_id) {
+                return false
             }
         }
 
-        false
+        true
     }
 
     pub fn has_column_id(&self, column_id_lookup: ColumnId) -> bool {

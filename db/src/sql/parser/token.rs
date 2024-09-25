@@ -1,3 +1,4 @@
+use std::f32::consts::E;
 use bytes::{BufMut, Bytes};
 use crate::table::column_type::ColumnType;
 
@@ -44,30 +45,35 @@ pub enum Token {
     Database,
 
     Identifier(String), //Ohter identifier, like table or column names
+    ColumnType(ColumnType),
+
     String(String), // "some text"
     NumberI64(i64), // any number
     NumberF64(f64), // any number
-    ColumnType(ColumnType),
 
     EOF
 }
 
 impl Token {
-    pub fn convert_to_bytes(&self) -> Result<bytes::Bytes, ()> {
+    pub fn to_column_type(&self) -> Result<ColumnType, ()> {
+        match self {
+            Token::True => Ok(ColumnType::Boolean),
+            Token::False => Ok(ColumnType::Boolean),
+            Token::Null => Ok(ColumnType::Null),
+            Token::String(_) => Ok(ColumnType::Varchar),
+            Token::NumberI64(_) => Ok(ColumnType::I64),
+            Token::NumberF64(_) => Ok(ColumnType::F64),
+            _ => Err(())
+        }
+    }
+
+    pub fn serialize(&self) -> Result<bytes::Bytes, ()> {
         match self {
             Token::String(string) => Ok(bytes::Bytes::from(string.as_bytes().to_vec())),
-            Token::NumberI64(number) => {
-                let mut bytes: Vec<u8> = Vec::new();
-                bytes.put_i64_le(*number);
-                Ok(bytes::Bytes::from(bytes))
-            },
+            Token::NumberI64(number) => Ok(Bytes::copy_from_slice(&number.to_le_bytes())),
             Token::True => Ok(bytes::Bytes::from(vec![0x01])),
             Token::False => Ok(bytes::Bytes::from(vec![0x00])),
-            Token::NumberF64(number) => {
-                let mut bytes: Vec<u8> = Vec::new();
-                bytes.put_f64_le(*number);
-                Ok(bytes::Bytes::from(bytes))
-            },
+            Token::NumberF64(number) => Ok(Bytes::copy_from_slice(&number.to_le_bytes())),
             Token::Null => Ok(Bytes::new()),
             _ => Err(()) //Cannot cast to bytes
         }

@@ -153,6 +153,8 @@ impl<I: StorageIterator> StorageIterator for StorageEngineItertor<I> {
                     self.seeked_key.take();
                     return true;
                 }
+            } else {
+                return true;
             }
         }
 

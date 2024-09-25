@@ -1,14 +1,11 @@
+use bytes::Bytes;
 use std::fs;
 use std::fs::DirEntry;
-use std::io::sink;
-use std::mem::size_of_val;
 use std::path::PathBuf;
-use crate::SimpleDbError;
-use bytes::{Buf, BufMut, Bytes};
-use crossbeam_skiplist::SkipMap;
 
 pub fn bytes_to_f64_le(bytes: &Bytes) -> f64 {
-    f64::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]])
+    let byte_array: [u8; 8] = bytes[..8].try_into().expect("Slice must be 8 bytes long");
+    f64::from_le_bytes(byte_array)
 }
 
 pub fn bytes_to_u64_le(bytes: &Bytes) -> u64 {
