@@ -1,18 +1,18 @@
 use crate::selection::Selection;
 use crate::sql::expression::Expression;
+use crate::sql::plan::plan_step::Plan;
 use crate::sql::plan::scan_type::ScanType;
 use crate::sql::plan::steps::exact_scan_step::ExactScanStep;
 use crate::sql::plan::steps::filter_step::FilterStep;
 use crate::sql::plan::steps::full_scan_step::FullScanStep;
 use crate::sql::plan::steps::limit_step::LimitStep;
 use crate::sql::plan::steps::range_scan_step::RangeScanStep;
-use crate::sql::statement::{DeleteStatement, Limit, SelectStatement, Statement, UpdateStatement};
+use crate::sql::statement::{DeleteStatement, Limit, SelectStatement, UpdateStatement};
+use crate::table::table::Table;
 use shared::SimpleDbError::MalformedQuery;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use crate::sql::plan::plan_step::Plan;
-use crate::table::table::Table;
 
 pub struct Planner {
     options: Arc<SimpleDbOptions>

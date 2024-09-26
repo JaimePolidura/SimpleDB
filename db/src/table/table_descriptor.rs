@@ -4,8 +4,7 @@ use shared::{ColumnId, KeyspaceId, SimpleDbError, SimpleDbFile};
 use std::cmp::max;
 use std::path::PathBuf;
 use std::sync::Arc;
-use crate::table::column_type::ColumnType;
-
+use crate::value::Type;
 //Maintains information about column ID with its column name, column type, is_primary etc.
 //This file is stored in binary format
 //There is one file of these for each tabl
@@ -21,7 +20,7 @@ pub struct TableDescriptor {
 #[derive(Clone)]
 pub struct ColumnDescriptor {
     pub(crate) column_id: ColumnId,
-    pub(crate) column_type: ColumnType,
+    pub(crate) column_type: Type,
     pub(crate) column_name: String,
     pub(crate) is_primary: bool,
 }
@@ -120,7 +119,7 @@ impl TableDescriptor {
 
         while current_ptr.has_remaining() {
             let column_id = current_ptr.get_u16_le() as shared::ColumnId;
-            let column_type = ColumnType::deserialize(current_ptr.get_u8())
+            let column_type = Type::deserialize(current_ptr.get_u8())
                 .map_err(|unknown_flag| SimpleDbError::CannotDecodeTableDescriptor(keyspace_id, shared::DecodeError {
                     error_type: shared::DecodeErrorType::UnknownFlag(unknown_flag as usize),
                     index: columns_descriptor.len(),

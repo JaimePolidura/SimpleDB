@@ -1,7 +1,6 @@
-use bytes::Bytes;
 use crate::selection::Selection;
 use crate::sql::expression::Expression;
-use crate::table::column_type::ColumnType;
+use crate::value::{Type, Value};
 
 pub enum Statement {
     Select(SelectStatement),
@@ -42,13 +41,13 @@ pub struct DeleteStatement {
 pub struct InsertStatement {
     pub(crate) table_name: String,
     //Column name, Value, Value type
-    pub(crate) values: Vec<(String, Bytes, ColumnType)>,
+    pub(crate) values: Vec<(String, Value)>,
 }
 
 pub struct CreateTableStatement {
     pub(crate) table_name: String,
     //Column name, Column type, is primary
-    pub(crate) columns: Vec<(String, ColumnType, bool)>
+    pub(crate) columns: Vec<(String, Type, bool)>
 }
 
 impl Statement {

@@ -3,6 +3,7 @@ use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
 use crate::Row;
 use shared::SimpleDbError;
 use SimpleDbError::MalformedQuery;
+use crate::value::Value;
 
 //expression is expected to have been passed to evaluate_constant_expressions() before calling this function
 //If the row returns null, we will return false
@@ -11,8 +12,13 @@ pub fn evaluate_where_expression(
     expression: &Expression
 ) -> Result<bool, SimpleDbError> {
     match evaluate_expression(row, expression)? {
-        Expression::Boolean(value) => Ok(value),
-        Expression::Null => Ok(false),
+        Expression::Literal(value_produced) => {
+            match value_produced {
+                Value::Boolean(boolean_produced) => Ok(boolean_produced),
+                Value::Null => Ok(false),
+                _ => Err(MalformedQuery(String::from("Expression should produce a boolean value"))),
+            }
+        },
         _ => Err(MalformedQuery(String::from("Expression should produce a boolean value")))
     }
 }
@@ -33,20 +39,10 @@ pub fn evaluate_expression(
             evaluate_constant_unary_op(unary_expr, operation.clone())
         },
         Expression::Identifier(column_name) => {
-            match row.get_column_value(column_name) {
-                Some(value) => {
-                    Ok(Expression::deserialize(row.get_column_desc(column_name)
-                        .ok_or(MalformedQuery(String::from("Unknown column")))?
-                        .column_type, value)?)
-                },
-                None => Ok(Expression::Null)
-            }
+            let value = row.get_column_value(column_name)?;
+            Ok(Expression::Literal(value))
         },
-        Expression::String(string) => Ok(Expression::String(string.clone())),
-        Expression::Boolean(boolean) => Ok(Expression::Boolean(*boolean)),
-        Expression::NumberI64(number) => Ok(Expression::NumberI64(*number)),
-        Expression::NumberF64(number) => Ok(Expression::NumberF64(*number)),
-        Expression::Null => Ok(Expression::Null),
+        Expression::Literal(value) => Ok(Expression::Literal(value.clone())),
         Expression::None => panic!("Invalid code path")
     }
 }
@@ -65,11 +61,7 @@ pub fn evaluate_constant_expressions(
             evaluate_constant_unary_op(expression, operator)
         },
         Expression::Identifier(_) => Ok(expression),
-        Expression::String(_) => Ok(expression),
-        Expression::Boolean(_) => Ok(expression),
-        Expression::NumberF64(_) => Ok(expression),
-        Expression::NumberI64(_) => Ok(expression),
-        Expression::Null => Ok(expression),
+        Expression::Literal(value) => Ok(Expression::Literal(value)),
         Expression::None => panic!(""),
     }
 }
@@ -81,18 +73,19 @@ fn evaluate_constant_unary_op(
     if !expression.is_constant() {
         return Ok(expression);
     }
-    if !expression.is_number() {
-        return Err(MalformedQuery(String::from("Unary expressions should produce a number")));
-    }
 
     match operator {
         UnaryOperator::Plus => Ok(expression),
         UnaryOperator::Minus => {
-            match expression {
-                Expression::NumberF64(f64) => Ok(Expression::NumberF64(- f64)),
-                Expression::NumberI64(i64) => Ok(Expression::NumberI64(- i64)),
-                Expression::Null => Ok(Expression::Null),
-                _ => panic!("")
+            let value = expression.get_value()?;
+            if value.is_fp_number() {
+                Ok(Expression::Literal(Value::F64(- value.get_f64()?)))
+            } else if value.is_integer_number() {
+                Ok(Expression::Literal(Value::I64(- value.get_i64()?)))
+            } else if value.is_null() {
+                Ok(Expression::Literal(Value::Null))
+            } else {
+                Err(MalformedQuery(String::from("Cannot apply unary operator")))
             }
         }
     }
@@ -109,7 +102,7 @@ fn evaluate_constant_binary_op(
 
     match operator {
         BinaryOperator::Add => left.add(&right),
-        BinaryOperator::Subtract => left.subtract(&right),
+        BinaryOperator::Subtract => left.substract(&right),
         BinaryOperator::Multiply => left.multiply(&right),
         BinaryOperator::Divide => left.divide(&right),
         BinaryOperator::And => left.and(&right),
@@ -137,8 +130,8 @@ mod test {
     use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
     use crate::Row;
-    use crate::table::column_type::ColumnType;
     use crate::table::table::Table;
+    use crate::value::{Type, Value};
 
     //Where id == 10 OR dinero > 100
     #[test]
@@ -185,14 +178,14 @@ mod test {
             Box::new(Binary(
                 BinaryOperator::Greater,
                 Box::new(Expression::Identifier(String::from("dinero"))),
-                Box::new(Expression::NumberI64(21)),
+                Box::new(Expression::Literal(Value::I64(21))),
             )),
             Box::new(Binary(
                 BinaryOperator::Greater,
                 Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::NumberI64(10)),
+                Box::new(Expression::Literal(Value::I64(10)))),
             )),
-        ))
+        );
     }
 
     #[test]
@@ -203,7 +196,7 @@ mod test {
 
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(matches!(result, Expression::NumberF64(_)));
+        assert!(matches!(result, Expression::Literal(Value::I64(_))));
         assert_eq!(result.get_f64().unwrap(), (1 + 2) as f64 + (3.1 + -(4 * 2) as f64));
     }
 
@@ -215,7 +208,7 @@ mod test {
 
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(matches!(result, Expression::Boolean(_)));
+        assert!(matches!(result, Expression::Literal(Value::Boolean(_))));
         assert_eq!(result.get_boolean().unwrap(), ((1 > 2) || (1 <= 2)) && (1 == 1));
     }
 
@@ -246,9 +239,9 @@ mod test {
         };
 
         table.add_columns(vec![
-            (String::from("id"), ColumnType::I64, true),
-            (String::from("dinero"), ColumnType::I64, false),
-            (String::from("nombre"), ColumnType::Varchar, false),
+            (String::from("id"), Type::I64, true),
+            (String::from("dinero"), Type::I64, false),
+            (String::from("nombre"), Type::String, false),
         ]);
 
         Row {

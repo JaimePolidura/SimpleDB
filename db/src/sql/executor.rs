@@ -6,10 +6,10 @@ use crate::sql::plan::planner::Planner;
 use crate::sql::query_iterator::QueryIterator;
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
 use crate::sql::validator::StatementValidator;
-use crate::table::column_type::ColumnType;
-use crate::table::table::Table;
+use crate::value::Value;
 use bytes::Bytes;
-use shared::{utils, SimpleDbError, SimpleDbOptions};
+use shared::SimpleDbError::MalformedQuery;
+use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 
@@ -82,8 +82,14 @@ impl StatementExecutor {
 
             for (updated_column_name, new_value_expr) in &update_statement.updated_values {
                 let new_value_bytes = match evaluate_expression(&row_to_update, new_value_expr)? {
-                    Expression::Null => continue,
-                    other => other.serialize(),
+                    Expression::Literal(updated_value) => {
+                        if !updated_value.is_null() {
+                            updated_value.serialize()
+                        } else {
+                            continue
+                        }
+                    },
+                    _ => return Err(MalformedQuery(String::from("Update values should produce a literal value")))
                 };
 
                 new_values.push((updated_column_name.clone(), new_value_bytes));
@@ -124,7 +130,7 @@ impl StatementExecutor {
     ) -> Result<StatementResult, SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table(insert_statement.table_name.as_str())?;
-        let mut inserted_values = self.format_column_values(&table, &insert_statement.values);
+        let mut inserted_values = self.serialize_column_values(&insert_statement.values);
         table.insert(transaction, &mut inserted_values)?;
         Ok(StatementResult::Ok(1))
     }
@@ -176,35 +182,13 @@ impl StatementExecutor {
         Ok(StatementResult::Ok(0))
     }
 
-    fn format_column_values(
+    fn serialize_column_values(
         &self,
-        table: &Arc<Table>,
-        values: &Vec<(String, Bytes, ColumnType)>
+        values: &Vec<(String, Value)>
     ) -> Vec<(String, Bytes)>{
         let mut formatted_values = Vec::new();
-        let columns = table.get_columns();
-
-        for (column_name, unformatted_column_value, unformatted_column_value_type) in values {
-            let column_desc = columns.get(column_name).unwrap();
-            let formatted_column_value = match column_desc.column_type {
-                ColumnType::I8 => Bytes::from(utils::bytes_to_i8(unformatted_column_value).to_le_bytes().to_vec()),
-                ColumnType::U8 => Bytes::from(utils::bytes_to_u8(unformatted_column_value).to_le_bytes().to_vec()),
-                ColumnType::I16 => Bytes::from(utils::bytes_to_i16_le(unformatted_column_value).to_le_bytes().to_vec()),
-                ColumnType::U16 => Bytes::from(utils::bytes_to_u16_le(unformatted_column_value).to_le_bytes().to_vec()),
-                ColumnType::U32 => Bytes::from(utils::bytes_to_u32_le(unformatted_column_value).to_le_bytes().to_vec()),
-                ColumnType::I32 => Bytes::from(utils::bytes_to_i32_le(unformatted_column_value).to_le_bytes().to_vec()),
-                ColumnType::U64 => Bytes::from(utils::bytes_to_u64_le(unformatted_column_value).to_le_bytes().to_vec()),
-                ColumnType::I64 => Bytes::from(utils::bytes_to_i64_le(unformatted_column_value).to_le_bytes().to_vec()),
-                ColumnType::F32 => Bytes::from(utils::bytes_to_f32_le(unformatted_column_value).to_le_bytes().to_vec()),
-                ColumnType::F64 => Bytes::from(utils::bytes_to_f64_le(unformatted_column_value).to_le_bytes().to_vec()),
-                ColumnType::Boolean => unformatted_column_value.clone(),
-                ColumnType::Varchar => unformatted_column_value.clone(),
-                ColumnType::Date => unformatted_column_value.clone(),
-                ColumnType::Blob => unformatted_column_value.clone(),
-                ColumnType::Null => unformatted_column_value.clone()
-            };
-
-            formatted_values.push((column_name.clone(), formatted_column_value));
+        for (column_name, column_value) in values {
+            formatted_values.push((column_name.clone(), column_value.serialize()));
         }
 
         formatted_values

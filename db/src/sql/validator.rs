@@ -1,12 +1,12 @@
 use crate::database::databases::Databases;
+use crate::simple_db::Context;
 use crate::sql::expression::Expression;
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
-use crate::table::column_type::ColumnType;
 use crate::table::table::Table;
+use crate::value::Type;
 use shared::SimpleDbError::UnknownColumn;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
-use crate::simple_db::Context;
 
 pub struct StatementValidator {
     databases: Arc<Databases>,
@@ -81,7 +81,7 @@ impl StatementValidator {
                 .ok_or(SimpleDbError::ColumnNotFound(table.storage_keyspace_id, updated_column_name.clone()))?;
             let expression_type_result = self.validate_expression(updated_column_value_expr, &table)?;
 
-            if !expression_type_result.can_be_casted(column_data.column_type) {
+            if !expression_type_result.can_be_casted(&column_data.column_type) {
                 return Err(SimpleDbError::MalformedQuery(String::from("SET expression should produce a column value")))
             }
         }
@@ -125,7 +125,7 @@ impl StatementValidator {
         table: &Arc<Table>
     ) -> Result<(), SimpleDbError> {
         let type_produced = self.validate_expression(expression, &table)?;
-        if !matches!(type_produced, ColumnType::Boolean) {
+        if !matches!(type_produced, Type::Boolean) {
             Err(SimpleDbError::MalformedQuery(String::from("Expression should produce a boolean")))
         } else {
             Ok(())
@@ -136,7 +136,7 @@ impl StatementValidator {
         &self,
         expression: &Expression,
         table: &Arc<Table>
-    ) -> Result<ColumnType, SimpleDbError> {
+    ) -> Result<Type, SimpleDbError> {
         match expression {
             Expression::None => panic!(""),
             Expression::Binary(operator, left, right) => {
@@ -144,22 +144,29 @@ impl StatementValidator {
                 let type_right = self.validate_expression(right, table)?;
 
                 if operator.is_logical() &&
-                    matches!(type_left, ColumnType::Boolean) &&
-                    matches!(type_right, ColumnType::Boolean) {
-                    Ok(ColumnType::Boolean)
+                    matches!(type_left, Type::Boolean) &&
+                    matches!(type_right, Type::Boolean) {
+                    Ok(Type::Boolean)
                 } else if operator.is_arithmetic() &&
-                    type_left.is_numeric() &&
-                    type_right.is_numeric() {
-                    Ok(type_left.get_arithmetic_produced_type(type_right))
-                } else if operator.is_comparation() && type_left.is_comparable(type_right) {
-                    Ok(ColumnType::Boolean)
+                    type_left.is_number() &&
+                    type_right.is_number() {
+
+                    if type_left.is_fp_number() || type_right.is_fp_number() {
+                        Ok(Type::F64)
+                    } else if type_left.is_signed_integer_number() || type_right.is_signed_integer_number() {
+                        Ok(Type::I64)
+                    } else {
+                        Ok(Type::U64)
+                    }
+                } else if operator.is_comparation() && type_left.is_comparable(&type_right) {
+                    Ok(Type::Boolean)
                 } else {
                     Err(SimpleDbError::MalformedQuery(String::from("Expression produces wrong type")))
                 }
             },
             Expression::Unary(_, expr) => {
                 let produced_type = self.validate_expression(expr, table)?;
-                if !produced_type.is_numeric() {
+                if !produced_type.is_number() {
                     Err(SimpleDbError::MalformedQuery(String::from("Expression should produce a number")))
                 } else {
                     Ok(produced_type)
@@ -170,11 +177,7 @@ impl StatementValidator {
                     .ok_or(UnknownColumn(table_name.clone()))
                     .map(|it| it.column_type)
             },
-            Expression::String(_) => Ok(ColumnType::Varchar),
-            Expression::Boolean(_) => Ok(ColumnType::Boolean),
-            Expression::NumberF64(_) => Ok(ColumnType::F64),
-            Expression::NumberI64(_) => Ok(ColumnType::I64),
-            Expression::Null => Ok(ColumnType::Null),
+            Expression::Literal(value) => Ok(value.to_type()),
         }
     }
 }

@@ -89,8 +89,7 @@ impl CompactionThread {
                 }
 
                 if let Ok(operation_id) = operation_id {
-                    self.manifest.mark_as_completed(operation_id)
-                        .inspect_err(|e| println!("{:?}", e));
+                    self.manifest.mark_as_completed(operation_id);
                 }
             }
         }

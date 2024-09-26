@@ -47,6 +47,7 @@ pub enum SimpleDbError {
     ColumnNameAlreadyDefined(String),
     UnknownColumn(String),
     InvalidType(String),
+    CannotDecodeColumn(String, Bytes),
 
     //Databases
     DatabaseAlreadyExists(String),
@@ -263,6 +264,9 @@ impl Debug for SimpleDbError {
             }
             SimpleDbError::CannotCreateDatabaseFolder(database_name, io_error) => {
                 write!(f, "Cannot create database {} folder. IO Error: {}", database_name, io_error)
+            }
+            SimpleDbError::CannotDecodeColumn(column_name, _) => {
+                write!(f, "Cannot decode column: {}", column_name)
             }
         }
     }

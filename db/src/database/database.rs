@@ -1,6 +1,4 @@
-use std::io::empty;
 use crate::database::database_descriptor::DatabaseDescriptor;
-use crate::table::column_type::ColumnType;
 use crate::table::table::Table;
 use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::{CannotCreateDatabaseFolder, PrimaryColumnNotIncluded, TableAlreadyExists};
@@ -8,6 +6,7 @@ use shared::{utils, SimpleDbError, SimpleDbOptions};
 use std::sync::{Arc, Mutex};
 use storage::transactions::transaction::Transaction;
 use crate::sql::statement::CreateTableStatement;
+use crate::value::Type;
 
 pub struct Database {
     name: String,
@@ -71,7 +70,7 @@ impl Database {
     pub fn create_table(
         &self,
         table_name: &str,
-        columns: Vec<(String, ColumnType, bool)>
+        columns: Vec<(String, Type, bool)>
     ) -> Result<Arc<Table>, SimpleDbError> {
         let primary_column_name = columns.iter()
             .filter(|(_, _, is_primary)| *is_primary)
@@ -100,7 +99,7 @@ impl Database {
     pub fn add_column(
         &self,
         table_name: &str,
-        columns_to_add: Vec<(String, ColumnType, bool)>
+        columns_to_add: Vec<(String, Type, bool)>
     ) -> Result<(), SimpleDbError> {
         let table = self.get_table(table_name)?;
         table.add_columns(columns_to_add)

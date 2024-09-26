@@ -14,7 +14,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use crate::table::column_type::ColumnType;
+use crate::value::{Type, Value};
 
 pub struct Table {
     pub(crate) storage_keyspace_id: shared::KeyspaceId,
@@ -33,7 +33,7 @@ pub struct Table {
 impl Table {
     pub fn add_columns(
         &self,
-        columns_to_add: Vec<(String, ColumnType, bool)>,
+        columns_to_add: Vec<(String, Type, bool)>,
     ) -> Result<(), SimpleDbError> {
         for (column_name, column_type, is_primary) in columns_to_add {
             self.add_column(&column_name, column_type, is_primary)?
@@ -168,7 +168,7 @@ impl Table {
     }
 
     pub fn validate_new_columns(
-        columns: &Vec<(String, ColumnType, bool)>,
+        columns: &Vec<(String, Type, bool)>,
     ) -> Result<(), SimpleDbError> {
         let mut primary_already_added = false;
         let mut column_names_added = HashSet::new();
@@ -217,18 +217,18 @@ impl Table {
 
     pub fn validate_column_values(
         &self,
-        to_insert_data: &Vec<(String, Bytes, ColumnType)>
+        to_insert_data: &Vec<(String, Value)>
     ) -> Result<(), SimpleDbError> {
         if !self.has_primary_value(to_insert_data) {
             return Err(PrimaryColumnNotIncluded())
         }
-        for (column_name, column_value, inserted_value_type) in to_insert_data {
+        for (column_name, column_value) in to_insert_data {
             match self.columns_by_name.get(column_name) {
                 Some(column) => {
                     let column = self.columns_by_id.get(column.value()).unwrap();
                     let column = column.value();
 
-                    if column.column_type.can_be_casted(inserted_value_type.clone()) {
+                    if column.column_type.can_be_casted(&column_value.to_type()) {
                         return Err(InvalidType(column_name.clone()));
                     }
                 },
@@ -239,8 +239,8 @@ impl Table {
         Ok(())
     }
 
-    fn has_primary_value(&self, data: &Vec<(String, Bytes, ColumnType)>) -> bool {
-        for (column_name, _, _) in data.iter() {
+    fn has_primary_value(&self, data: &Vec<(String, Value)>) -> bool {
+        for (column_name, _) in data.iter() {
             if column_name.eq(&self.primary_column_name) {
                 return true
             }
@@ -276,7 +276,7 @@ impl Table {
     fn add_column(
         &self,
         column_name: &str,
-        column_type: ColumnType,
+        column_type: Type,
         is_primary: bool,
     ) -> Result<(), SimpleDbError> {
         let column_descriptor = ColumnDescriptor {

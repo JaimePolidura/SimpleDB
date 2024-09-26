@@ -1,6 +1,4 @@
-use std::f32::consts::E;
-use bytes::{BufMut, Bytes};
-use crate::table::column_type::ColumnType;
+use crate::value::{Type, Value};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -45,8 +43,7 @@ pub enum Token {
     Database,
 
     Identifier(String), //Ohter identifier, like table or column names
-    ColumnType(ColumnType),
-
+    ColumnType(Type),
     String(String), // "some text"
     NumberI64(i64), // any number
     NumberF64(f64), // any number
@@ -55,34 +52,27 @@ pub enum Token {
 }
 
 impl Token {
-    pub fn to_column_type(&self) -> Result<ColumnType, ()> {
+    pub fn to_column_type(&self) -> Result<Type, ()> {
         match self {
-            Token::True => Ok(ColumnType::Boolean),
-            Token::False => Ok(ColumnType::Boolean),
-            Token::Null => Ok(ColumnType::Null),
-            Token::String(_) => Ok(ColumnType::Varchar),
-            Token::NumberI64(_) => Ok(ColumnType::I64),
-            Token::NumberF64(_) => Ok(ColumnType::F64),
+            Token::True => Ok(Type::Boolean),
+            Token::False => Ok(Type::Boolean),
+            Token::Null => Ok(Type::Null),
+            Token::String(_) => Ok(Type::String),
+            Token::NumberI64(_) => Ok(Type::I64),
+            Token::NumberF64(_) => Ok(Type::F64),
             _ => Err(())
         }
     }
 
-    pub fn serialize(&self) -> Result<bytes::Bytes, ()> {
+    pub fn serialize(&self) -> Result<Value, ()> {
         match self {
-            Token::String(string) => Ok(bytes::Bytes::from(string.as_bytes().to_vec())),
-            Token::NumberI64(number) => Ok(Bytes::copy_from_slice(&number.to_le_bytes())),
-            Token::True => Ok(bytes::Bytes::from(vec![0x01])),
-            Token::False => Ok(bytes::Bytes::from(vec![0x00])),
-            Token::NumberF64(number) => Ok(Bytes::copy_from_slice(&number.to_le_bytes())),
-            Token::Null => Ok(Bytes::new()),
+            Token::String(string) => Ok(Value::String(string.clone())),
+            Token::NumberI64(number) => Ok(Value::I64(*number)),
+            Token::True => Ok(Value::Boolean(true)),
+            Token::False => Ok(Value::Boolean(false)),
+            Token::NumberF64(number) => Ok(Value::F64(*number)),
+            Token::Null => Ok(Value::Null),
             _ => Err(()) //Cannot cast to bytes
-        }
-    }
-
-    pub fn can_be_converted_to_bytes(&self) -> bool {
-        match self {
-            Token::String(_) | Token::NumberI64(_) | Token::True | Token::False | Token::NumberF64(_) => true,
-            _ => false
         }
     }
 }

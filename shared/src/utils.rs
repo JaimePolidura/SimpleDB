@@ -16,8 +16,8 @@ pub fn bytes_to_i64_le(bytes: &Bytes) -> i64 {
     i64::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]])
 }
 
-pub fn bytes_to_f32_le(bytes: &Bytes) -> u32 {
-    u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+pub fn bytes_to_f32_le(bytes: &Bytes) -> f32 {
+    f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
 }
 
 pub fn bytes_to_u32_le(bytes: &Bytes) -> u32 {

@@ -1,13 +1,12 @@
 use crate::selection::Selection;
 use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
-use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Limit, SelectStatement, Statement, UpdateStatement};
-use bytes::Bytes;
-use shared::SimpleDbError;
-use shared::SimpleDbError::{IllegalToken, MalformedQuery};
-use std::cmp::PartialEq;
 use crate::sql::parser::token::Token;
 use crate::sql::parser::tokenizer::Tokenizer;
-use crate::table::column_type::ColumnType;
+use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Limit, SelectStatement, Statement, UpdateStatement};
+use crate::value::{Type, Value};
+use shared::SimpleDbError;
+use shared::SimpleDbError::IllegalToken;
+use std::cmp::PartialEq;
 
 const MAX_PRECEDENCE: u8 = u8::MAX;
 
@@ -110,11 +109,11 @@ impl Parser {
 
     fn parse_prefix(&mut self) -> Result<Expression, SimpleDbError> {
         match self.advance()? {
-            Token::False => Ok(Expression::Boolean(false)),
-            Token::True => Ok(Expression::Boolean(true)),
-            Token::NumberF64(num) => Ok(Expression::NumberF64(num)),
-            Token::NumberI64(num) => Ok(Expression::NumberI64(num)),
-            Token::String(string) => Ok(Expression::String(string)),
+            Token::False => Ok(Expression::Literal(Value::Boolean(false))),
+            Token::True => Ok(Expression::Literal(Value::Boolean(true))),
+            Token::NumberF64(num) => Ok(Expression::Literal(Value::F64(num))),
+            Token::NumberI64(num) => Ok(Expression::Literal(Value::I64(num))),
+            Token::String(string) => Ok(Expression::Literal(Value::String(string))),
             Token::Identifier(identifier) => Ok(Expression::Identifier(identifier)),
             Token::Minus => Ok(Expression::Unary(UnaryOperator::Minus, Box::new(self.expression(MAX_PRECEDENCE)?))),
             Token::Plus => Ok(Expression::Unary(UnaryOperator::Plus, Box::new(self.expression(MAX_PRECEDENCE)?))),
@@ -243,8 +242,8 @@ impl Parser {
     fn create_insert_statement_values(
         &self,
         mut column_names: Vec<String>,
-        mut column_values_tokens: Vec<(Bytes, ColumnType)>
-    ) -> Result<Vec<(String, Bytes, ColumnType)>, SimpleDbError> {
+        mut column_values_tokens: Vec<Value>
+    ) -> Result<Vec<(String, Value)>, SimpleDbError> {
         if column_names.len() != column_values_tokens.len() {
             return Err(SimpleDbError::MalformedQuery(String::from(
                 "Insert statements should have the same number of columns and values"
@@ -253,11 +252,12 @@ impl Parser {
 
         let mut insert_values = Vec::new();
 
+        //TODO Check if value can be casted to column type
         while !column_names.is_empty() {
-            let (column_value, column_type) = column_values_tokens.pop().unwrap();
+            let column_value = column_values_tokens.pop().unwrap();
             let column_name = column_names.pop().unwrap();
 
-            insert_values.push((column_name, column_value, column_type));
+            insert_values.push((column_name, column_value));
         }
 
         Ok(insert_values)
@@ -279,19 +279,17 @@ impl Parser {
         Ok(column_names)
     }
 
-    fn column_values(&mut self, terminator_token: &Token) -> Result<Vec<(Bytes, ColumnType)>, SimpleDbError> {
+    fn column_values(&mut self, terminator_token: &Token) -> Result<Vec<Value>, SimpleDbError> {
         let mut column_values = Vec::new();
         while !self.check_last_token(terminator_token.clone()) {
             let token = self.advance()?;
-            let value_type = token.to_column_type()
-                .map_err(|_| MalformedQuery(String::from("Value cannot be inserted into a row")))?;
-            let bytes = token.serialize()
-                .or(Err(IllegalToken(
+            let value = token.serialize()
+                .map_err(|_| IllegalToken(
                     self.tokenizer.current_location(),
-                    String::from("Value cannot be inserted into a row")))
+                    String::from("Value cannot be inserted into a row"))
                 )?;
 
-            column_values.push((bytes, value_type));
+            column_values.push(value);
 
             if !self.check_last_token(terminator_token.clone()) {
                 self.expect_token(Token::Comma)?;
@@ -332,7 +330,7 @@ impl Parser {
         }
     }
 
-    fn create_table_columns(&mut self) -> Result<Vec<(String, ColumnType, bool)>, SimpleDbError> {
+    fn create_table_columns(&mut self) -> Result<Vec<(String, Type, bool)>, SimpleDbError> {
         let mut columns = Vec::new();
 
         while !self.maybe_expect_token(Token::CloseParen)? {
@@ -361,7 +359,7 @@ impl Parser {
         Ok(is_primary)
     }
 
-    fn column_type(&mut self) -> Result<ColumnType, SimpleDbError> {
+    fn column_type(&mut self) -> Result<Type, SimpleDbError> {
         match self.advance()? {
             Token::ColumnType(column_type) => Ok(column_type),
             _ => Err(SimpleDbError::IllegalToken(self.tokenizer.current_location(), String::from("Expected column type")))
@@ -432,10 +430,9 @@ impl Parser {
 mod test {
     use crate::selection::Selection;
     use crate::sql::expression::{BinaryOperator, Expression};
-    use crate::sql::statement::{Limit, Statement};
     use crate::sql::parser::parser::Parser;
-    use crate::sql::parser::token::Token;
-    use crate::table::column_type::ColumnType;
+    use crate::sql::statement::{Limit, Statement};
+    use crate::value::{Type, Value};
 
     #[test]
     fn update_all() {
@@ -446,10 +443,11 @@ mod test {
         let update_statement = match statement {
             Statement::Update(u) => u, _ => panic!(),
         };
+
         assert_eq!(update_statement.table_name, String::from("personas"));
         assert_eq!(update_statement.updated_values.len(), 1);
         assert_eq!(update_statement.updated_values[0].0, "dinero");
-        assert_eq!(update_statement.updated_values[0].1, Expression::NumberI64(0));
+        assert_eq!(update_statement.updated_values[0].1, Expression::Literal(Value::I64(0)));
         assert_eq!(update_statement.where_expr, Expression::None);
     }
 
@@ -472,15 +470,15 @@ mod test {
         assert_eq!(update_statement.updated_values[0].1, Expression::Binary(
             BinaryOperator::Add,
             Box::new(Expression::Identifier(String::from("dinero"))),
-            Box::new(Expression::NumberI64(10)))
+            Box::new(Expression::Literal(Value::I64(10))))
         );
         assert_eq!(update_statement.updated_values[1].0, "id");
-        assert_eq!(update_statement.updated_values[1].1, Expression::NumberF64(10.2));
+        assert_eq!(update_statement.updated_values[1].1, Expression::Literal(Value::F64(10.2)));
 
         assert_eq!(update_statement.where_expr, Expression::Binary(
             BinaryOperator::Greater,
             Box::new(Expression::Identifier(String::from("dinero"))),
-            Box::new(Expression::NumberI64(10)),
+            Box::new(Expression::Literal(Value::I64(10))),
         ));
     }
 
@@ -500,7 +498,7 @@ mod test {
         assert_eq!(select_statement.where_expr, Expression::Binary(
             BinaryOperator::Greater,
             Box::new(Expression::Identifier(String::from("dinero"))),
-            Box::new(Expression::NumberI64(10)),
+            Box::new(Expression::Literal(Value::I64(10))),
         ));
     }
 
@@ -536,7 +534,7 @@ mod test {
         assert_eq!(select_statement.where_expr, Expression::Binary(
             BinaryOperator::Equal,
             Box::new(Expression::Identifier(String::from("id"))),
-            Box::new(Expression::NumberI64(1)),
+            Box::new(Expression::Literal(Value::I64(1))),
         ));
     }
 
@@ -564,14 +562,14 @@ mod test {
                 Box::new(Expression::Identifier(String::from("dinero"))),
                 Box::new(Expression::Binary(
                     BinaryOperator::Add,
-                    Box::new(Expression::NumberI64(1)),
-                    Box::new(Expression::NumberI64(2)),
+                    Box::new(Expression::Literal(Value::I64(1))),
+                    Box::new(Expression::Literal(Value::I64(2))),
                 )))
             ),
             Box::new(Expression::Binary(
                 BinaryOperator::Equal,
                 Box::new(Expression::Identifier(String::from("nombre"))),
-                Box::new(Expression::String(String::from("Jaime"))),
+                Box::new(Expression:: Literal(Value::String(String::from("Jaime")))),
             ))
         ));
     }
@@ -615,9 +613,9 @@ mod test {
             Statement::Insert(insert_statement) => {
                 assert_eq!(insert_statement.table_name, String::from("personas"));
                 assert_eq!(insert_statement.values.len(), 3);
-                assert_eq!(insert_statement.values[2], (String::from("id"), Token::NumberI64(1).serialize().unwrap(), ColumnType::I64));
-                assert_eq!(insert_statement.values[1], (String::from("nombre"), Token::String(String::from("Jaime")).serialize().unwrap(), ColumnType::Varchar));
-                assert_eq!(insert_statement.values[0], (String::from("dinero"), Token::NumberF64(10.2).serialize().unwrap(), ColumnType::F64));
+                assert_eq!(insert_statement.values[2], (String::from("id"), Value::I64(1)));
+                assert_eq!(insert_statement.values[1], (String::from("nombre"), Value::String(String::from("Jaime"))));
+                assert_eq!(insert_statement.values[0], (String::from("dinero"), Value::F64(10.2)));
             }
             _ => panic!()
         }
@@ -639,9 +637,9 @@ mod test {
             Statement::CreateTable(createStatement) => {
                 assert_eq!(createStatement.table_name, String::from("personas"));
                 assert_eq!(createStatement.columns.len(), 3);
-                assert_eq!(createStatement.columns[0], (String::from("id"), ColumnType::I64, true));
-                assert_eq!(createStatement.columns[1], (String::from("nombre"), ColumnType::Varchar, false));
-                assert_eq!(createStatement.columns[2], (String::from("dinero"), ColumnType::F64, false));
+                assert_eq!(createStatement.columns[0], (String::from("id"), Type::I64, true));
+                assert_eq!(createStatement.columns[1], (String::from("nombre"), Type::String, false));
+                assert_eq!(createStatement.columns[2], (String::from("dinero"), Type::F64, false));
             },
             _ => panic!()
         }

@@ -2,7 +2,7 @@ use std::str::FromStr;
 use shared::SimpleDbError::{IllegalToken};
 use shared::TokenLocation;
 use crate::sql::parser::token::Token;
-use crate::table::column_type::ColumnType;
+use crate::value::Type;
 
 pub struct Tokenizer {
     string: String,
@@ -85,9 +85,9 @@ impl Tokenizer {
             'A' => self.match_string_or_other_identifier("ND", Token::And, 1),
             'B' => {
                 if self.advance_if_next_string_eq("OOLEAN") {
-                    Ok(Token::ColumnType(ColumnType::Boolean))
+                    Ok(Token::ColumnType(Type::Boolean))
                 } else if self.advance_if_next_string_eq("LOB") {
-                    Ok(Token::ColumnType(ColumnType::Blob))
+                    Ok(Token::ColumnType(Type::Blob))
                 } else {
                     //Adjust, so that next points to the first char of the indentifier
                     self.next -= 1;
@@ -125,9 +125,9 @@ impl Tokenizer {
                 } else if self.advance_if_next_string_eq("ALSE") {
                     Ok(Token::False)
                 } else if self.advance_if_next_string_eq("32") {
-                    Ok(Token::ColumnType(ColumnType::F32))
+                    Ok(Token::ColumnType(Type::F32))
                 } else if self.advance_if_next_string_eq("64") {
-                    Ok(Token::ColumnType(ColumnType::F64))
+                    Ok(Token::ColumnType(Type::F64))
                 } else {
                     self.next -= 1;
                     Ok(self.other_identifier())
@@ -158,13 +158,13 @@ impl Tokenizer {
                 if self.advance_if_next_string_eq("PDATE") {
                     Ok(Token::Update)
                 } else if self.advance_if_next_string_eq("8") {
-                    Ok(Token::ColumnType(ColumnType::U8))
+                    Ok(Token::ColumnType(Type::U8))
                 } else if self.advance_if_next_string_eq("16") {
-                    Ok(Token::ColumnType(ColumnType::U16))
+                    Ok(Token::ColumnType(Type::U16))
                 } else if self.advance_if_next_string_eq("32") {
-                    Ok(Token::ColumnType(ColumnType::U32))
+                    Ok(Token::ColumnType(Type::U32))
                 } else if self.advance_if_next_string_eq("64") {
-                    Ok(Token::ColumnType(ColumnType::U64))
+                    Ok(Token::ColumnType(Type::U64))
                 } else {
                     self.next -= 1;
                     Ok(self.other_identifier())
@@ -172,7 +172,7 @@ impl Tokenizer {
             },
             'D' => {
                 if self.advance_if_next_string_eq("ATE") {
-                    Ok(Token::ColumnType(ColumnType::Date))
+                    Ok(Token::ColumnType(Type::Date))
                 } else if self.advance_if_next_string_eq("ELETE"){
                     Ok(Token::Delete)
                 } else if self.advance_if_next_string_eq("ATABASE"){
@@ -188,13 +188,13 @@ impl Tokenizer {
                 }else if self.advance_if_next_string_eq("NTO") {
                     Ok(Token::Into)
                 } else if self.advance_if_next_string_eq("8") {
-                    Ok(Token::ColumnType(ColumnType::I8))
+                    Ok(Token::ColumnType(Type::I8))
                 } else if self.advance_if_next_string_eq("16") {
-                    Ok(Token::ColumnType(ColumnType::I16))
+                    Ok(Token::ColumnType(Type::I16))
                 } else if self.advance_if_next_string_eq("32") {
-                    Ok(Token::ColumnType(ColumnType::I32))
+                    Ok(Token::ColumnType(Type::I32))
                 } else if self.advance_if_next_string_eq("64") {
-                    Ok(Token::ColumnType(ColumnType::I64))
+                    Ok(Token::ColumnType(Type::I64))
                 } else {
                     self.next -= 1;
                     Ok(self.other_identifier())
@@ -202,7 +202,7 @@ impl Tokenizer {
             },
             'V' => {
                 if self.advance_if_next_string_eq("ARCHAR") {
-                    Ok(Token::ColumnType(ColumnType::Varchar))
+                    Ok(Token::ColumnType(Type::String))
                 } else if self.advance_if_next_string_eq("ALUES") {
                     Ok(Token::Values)
                 } else {
@@ -252,7 +252,7 @@ impl Tokenizer {
         if has_decimals {
             match f64::from_str(number_string) {
                 Ok(f64_value) => Ok(Token::NumberF64(f64_value)),
-                Err(e) => Err(IllegalToken(self.current_location(), String::from("Illegal number format"))),
+                Err(_) => Err(IllegalToken(self.current_location(), String::from("Illegal number format"))),
             }
         } else {
             match number_string.parse::<i64>() {
@@ -407,7 +407,7 @@ impl Tokenizer {
 mod test {
     use crate::sql::parser::token::Token;
     use crate::sql::parser::tokenizer::Tokenizer;
-    use crate::table::column_type::ColumnType;
+    use crate::value::Type;
 
     #[test]
     fn select() {
@@ -531,17 +531,17 @@ mod test {
         assert!(matches!(tokenizer.get_token().unwrap(), Token::OpenParen));
 
         assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(id)));
-        assert!(matches!(tokenizer.get_token().unwrap(), Token::ColumnType(ColumnType::U64)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::ColumnType(Type::U64)));
         assert!(matches!(tokenizer.get_token().unwrap(), Token::Primary));
         assert!(matches!(tokenizer.get_token().unwrap(), Token::Key));
         assert!(matches!(tokenizer.get_token().unwrap(), Token::Comma));
 
         assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(nombre)));
-        assert!(matches!(tokenizer.get_token().unwrap(), Token::ColumnType(ColumnType::Varchar)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::ColumnType(Type::String)));
         assert!(matches!(tokenizer.get_token().unwrap(), Token::Comma));
 
         assert!(matches!(tokenizer.get_token().unwrap(), Token::Identifier(dinero)));
-        assert!(matches!(tokenizer.get_token().unwrap(), Token::ColumnType(ColumnType::F32)));
+        assert!(matches!(tokenizer.get_token().unwrap(), Token::ColumnType(Type::F32)));
 
         assert!(matches!(tokenizer.get_token().unwrap(), Token::CloseParen));
         assert!(matches!(tokenizer.get_token().unwrap(), Token::Semicolon));

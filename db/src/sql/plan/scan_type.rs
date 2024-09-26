@@ -333,6 +333,7 @@ mod test {
     use crate::sql::expression::{BinaryOperator, Expression};
     use crate::sql::plan::scan_type::ScanType;
     use crate::sql::statement::Limit;
+    use crate::value::Value;
 
     //WHERE id >= 1 OR dinero < 100
     #[test]
@@ -342,12 +343,12 @@ mod test {
             Box::new(Expression::Binary(
                 BinaryOperator::GreaterEqual,
                 Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::NumberI64(1)),
+                Box::new(Expression::Literal(Value::I64(1))),
             )),
             Box::new(Expression::Binary(
                 BinaryOperator::Less,
                 Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::NumberI64(100)),
+                Box::new(Expression::Literal(Value::I64(100))),
             ))
         )).unwrap();
         assert_eq!(result, ScanType::Full);
@@ -361,23 +362,23 @@ mod test {
             Box::new(Expression::Binary(
                 BinaryOperator::GreaterEqual,
                 Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::NumberI64(1)),
+                Box::new(Expression::Literal(Value::I64(1))),
             )),
             Box::new(Expression::Binary(
                 BinaryOperator::Less,
                 Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::NumberI64(100)),
+                Box::new(Expression::Literal(Value::I64(100))),
             ))
         )).unwrap();
 
         let range_scan = match result { ScanType::Range(value) => value, _ => panic!("") };
         assert!(range_scan.start.is_some());
         assert!(range_scan.start_inclusive);
-        assert_eq!(range_scan.start.as_ref().unwrap().clone(), Expression::NumberI64(1));
+        assert_eq!(range_scan.start.as_ref().unwrap().clone(), Expression::Literal(Value::I64(1)));
 
         assert!(range_scan.end.is_some());
         assert!(!range_scan.end_inclusive);
-        assert_eq!(range_scan.end.as_ref().unwrap().clone(), Expression::NumberI64(100));
+        assert_eq!(range_scan.end.as_ref().unwrap().clone(), Expression::Literal(Value::I64(100)));
     }
 
     //WHERE id >= 1 OR dinero == 100
@@ -388,12 +389,12 @@ mod test {
             Box::new(Expression::Binary(
                 BinaryOperator::GreaterEqual,
                 Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::NumberI64(1)),
+                Box::new(Expression::Literal(Value::I64(1))),
             )),
             Box::new(Expression::Binary(
                 BinaryOperator::Equal,
                 Box::new(Expression::Identifier(String::from("dinero"))),
-                Box::new(Expression::NumberI64(100)),
+                Box::new(Expression::Literal(Value::I64(100))),
             ))
         )).unwrap();
         assert_eq!(result, ScanType::Full);
@@ -407,19 +408,19 @@ mod test {
             Box::new(Expression::Binary(
                 BinaryOperator::GreaterEqual,
                 Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::NumberI64(1)),
+                Box::new(Expression::Literal(Value::I64(1))),
             )),
             Box::new(Expression::Binary(
                 BinaryOperator::Equal,
                 Box::new(Expression::Identifier(String::from("dinero"))),
-                Box::new(Expression::NumberI64(100)),
+                Box::new(Expression::Literal(Value::I64(100))),
             ))
         )).unwrap();
 
         let range_scan = match result { ScanType::Range(value) => value, _ => panic!("") };
         assert!(range_scan.start.is_some());
         assert!(range_scan.start_inclusive);
-        assert_eq!(range_scan.start.as_ref().unwrap().clone(), Expression::NumberI64(1));
+        assert_eq!(range_scan.start.as_ref().unwrap().clone(), Expression::Literal(Value::I64(1)));
     }
 
     //WHERE id == 1 AND dinero == 100
@@ -430,12 +431,12 @@ mod test {
             Box::new(Expression::Binary(
                 BinaryOperator::Equal,
                 Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::NumberI64(1)),
+                Box::new(Expression::Literal(Value::I64(1))),
             )),
             Box::new(Expression::Binary(
                 BinaryOperator::Equal,
                 Box::new(Expression::Identifier(String::from("dinero"))),
-                Box::new(Expression::NumberI64(100)),
+                Box::new(Expression::Literal(Value::I64(100))),
             ))
         )).unwrap();
 
@@ -444,7 +445,7 @@ mod test {
         assert_eq!(result, Expression::Binary(
             BinaryOperator::Equal,
             Box::new(Expression::Identifier(String::from("id"))),
-            Box::new(Expression::NumberI64(1)),
+            Box::new(Expression::Literal(Value::I64(1))),
         ));
     }
 
@@ -456,12 +457,12 @@ mod test {
             Box::new(Expression::Binary(
                 BinaryOperator::Equal,
                 Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::NumberI64(1)),
+                Box::new(Expression::Literal(Value::I64(1))),
             )),
             Box::new(Expression::Binary(
                 BinaryOperator::Equal,
                 Box::new(Expression::Identifier(String::from("dinero"))),
-                Box::new(Expression::NumberI64(100)),
+                Box::new(Expression::Literal(Value::I64(100))),
             ))
         )).unwrap();
         assert_eq!(result, ScanType::Full);
