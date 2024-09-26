@@ -6,7 +6,7 @@ use crate::sql::plan::planner::Planner;
 use crate::sql::query_iterator::QueryIterator;
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
 use crate::sql::validator::StatementValidator;
-use crate::value::Value;
+use crate::value::{Type, Value};
 use bytes::Bytes;
 use shared::SimpleDbError::MalformedQuery;
 use shared::{SimpleDbError, SimpleDbOptions};

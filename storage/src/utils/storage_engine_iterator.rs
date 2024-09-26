@@ -25,13 +25,15 @@ pub struct StorageEngineItertor<I: StorageIterator> {
 
     seeked_key: Option<Bytes>,
     is_seeked_key_inclusive: bool,
+
+    last_entry_returned: bool,
 }
 
 impl<I: StorageIterator> StorageEngineItertor<I> {
     //For efficiency, you should call seek_key() in the inner iterator
     pub fn create_seeked_key(
         options: &Arc<shared::SimpleDbOptions>,
-        mut iterator: I,
+        iterator: I,
         seeked_key: Bytes,
         inclusive: bool,
     ) -> StorageEngineItertor<I> {
@@ -47,10 +49,11 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
         }
 
         StorageEngineItertor {
-            options: options.clone(),
             entries_to_return: VecDeque::new(),
-            inner_iterator: iterator,
             transaction_manager: None,
+            last_entry_returned: false,
+            inner_iterator: iterator,
+            options: options.clone(),
             current_value: None,
             current_key: None,
             transaction: None,
@@ -76,9 +79,10 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
 
         let current_key_bytes = Bytes::copy_from_slice(self.inner_iterator.key().as_bytes());
 
-        while self.inner_iterator.has_next() {
-            self.inner_iterator.next();
+        let has_next = self.inner_iterator.has_next();
 
+        while has_next {
+            self.inner_iterator.next();
             let next_key = self.inner_iterator.key();
 
             if next_key.bytes_eq_bytes(&current_key_bytes) {
@@ -89,6 +93,10 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
             } else {
                 break
             }
+        }
+
+        if !has_next {
+            self.last_entry_returned = true;
         }
 
         self.merge_entry_values();
@@ -124,8 +132,8 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
     }
 
     fn do_do_next(&mut self) -> bool {
-        if !self.inner_iterator.has_next() && self.entries_to_return.len() > 0 {
-            return false
+        if self.last_entry_returned {
+            return false;
         }
         if self.entries_to_return.is_empty() && !self.find_entries() {
             return false;
@@ -232,6 +240,8 @@ mod test {
 
         assert!(iterator.next());
         assert!(iterator.key().eq(&key::create_from_str("wili", 1)));
+
+        // assert!(!iterator.next());
     }
 
     fn merge_values(a: &Bytes, b: &Bytes) -> StorageValueMergeResult {
@@ -287,6 +297,8 @@ mod test {
         assert!(iterator.next());
         assert!(iterator.key().eq(&key::create_from_str("wili", 1)));
         assert!(iterator.value().eq(&vec![2]));
+
+        assert!(!iterator.next());
     }
 
     fn transaction(txn_id: shared::TxnId) -> Transaction {

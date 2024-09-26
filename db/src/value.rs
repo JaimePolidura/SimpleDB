@@ -63,7 +63,9 @@ impl Type {
     }
 
     pub fn can_be_casted(&self, other: &Type) -> bool {
-        if self.is_number() && other.is_number() {
+        if self.is_fp_number() && other.is_fp_number() {
+            true
+        } else if self.is_integer_number() && other.is_integer_number() {
             true
         } else if self.is_null() || other.is_null() {
             true
@@ -85,6 +87,10 @@ impl Type {
             Type::I8 | Type::I16 | Type::I32 | Type::I64 => true,
             _ => false
         }
+    }
+
+    pub fn is_integer_number(&self) -> bool {
+        self.is_signed_integer_number() || self.is_unsigned_integer_number()
     }
 
     pub fn is_unsigned_integer_number(&self) -> bool {
@@ -165,7 +171,7 @@ impl Value {
             Value::U64(value) => Bytes::copy_from_slice(value.to_le_bytes().as_slice()),
             Value::I64(value) => Bytes::copy_from_slice(value.to_le_bytes().as_slice()),
             Value::F32(value) => Bytes::copy_from_slice(value.to_le_bytes().as_slice()),
-            Value::F64(value) => Bytes::copy_from_slice(value.to_le_bytes().as_slice()),
+            Value::F64(value) => Bytes::from((*value).to_le_bytes().to_vec()),
             Value::Boolean(value) => {
                 if *value {
                     Bytes::from(vec![0x01])
@@ -402,7 +408,7 @@ impl Value {
         IntOp: Fn(i64, i64) -> bool,
         FpOp: Fn(f64, f64) -> bool,
     {
-        if self.is_comparable(other) {
+        if !self.is_comparable(other) {
             return Err(SimpleDbError::MalformedQuery(String::from("Cannot compare values")));
         }
 

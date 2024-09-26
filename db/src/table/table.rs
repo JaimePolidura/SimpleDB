@@ -228,7 +228,7 @@ impl Table {
                     let column = self.columns_by_id.get(column.value()).unwrap();
                     let column = column.value();
 
-                    if column.column_type.can_be_casted(&column_value.to_type()) {
+                    if !column.column_type.can_be_casted(&column_value.to_type()) {
                         return Err(InvalidType(column_name.clone()));
                     }
                 },

@@ -21,15 +21,15 @@ fn main() {
 
     let context = Context::with("prueba", transaction);
 
-    db.execute_only_one(&context, "INSERT INTO personas (id, nombre, dinero) VALUES (1, \"Jaime\", 10);");
-    db.execute_only_one(&context, "INSERT INTO personas (id, nombre, dinero) VALUES (2, \"Molon\", 11);");
-    db.execute_only_one(&context, "INSERT INTO personas (id, nombre, dinero) VALUES (3, \"Walo\", 12);");
+    db.execute_only_one(&context, "INSERT INTO personas (id, nombre, dinero) VALUES (1, \"Jaime\", 10.0);").unwrap();
+    db.execute_only_one(&context, "INSERT INTO personas (id, nombre, dinero) VALUES (2, \"Molon\", 11.0);").unwrap();
+    db.execute_only_one(&context, "INSERT INTO personas (id, nombre, dinero) VALUES (3, \"Walo\", 12.0);").unwrap();
 
-    let mut data = db.execute_only_one(&context, "SELECT * FROM personas WHERE dinero > 10;")
+    let mut data = db.execute_only_one(&context, "SELECT * FROM personas WHERE dinero > 10.0;")
         .expect("")
         .data();
 
     while let Some(row) = data.next().unwrap() {
-        println!("{}", row);
+        println!("mai row {}", row);
     }
 }

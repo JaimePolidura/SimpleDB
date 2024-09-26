@@ -208,7 +208,7 @@ impl Expression {
 
         match &self {
             Expression::Literal(value) => Ok(
-                Expression::Literal(op(value, &self.get_value()?)?)
+                Expression::Literal(op(value, &other.get_value()?)?)
             ),
             _ => Err(MalformedQuery(String::from("Cannot add values")))
         }
@@ -224,7 +224,7 @@ impl Expression {
 
         match &self {
             Expression::Literal(value) => Ok(
-                Expression::Literal(op(value, &self.get_value()?)?)
+                Expression::Literal(op(value, &other.get_value()?)?)
             ),
             _ => Err(MalformedQuery(String::from("Cannot add values")))
         }
