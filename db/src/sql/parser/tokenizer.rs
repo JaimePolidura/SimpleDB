@@ -109,6 +109,8 @@ impl Tokenizer {
             'S' => {
                 if self.advance_if_next_string_eq("ELECT") {
                     Ok(Token::Select)
+                } else if self.advance_if_next_string_eq("HOW") {
+                    Ok(Token::Show)
                 } else if self.advance_if_next_string_eq("TART_TRANSACTION") {
                     Ok(Token::StartTransaction)
                 } else if self.advance_if_next_string_eq("ET") {
@@ -144,7 +146,9 @@ impl Tokenizer {
                 }
             },
             'T' => {
-                if self.advance_if_next_string_eq("ABLE") {
+                if self.advance_if_next_string_eq("ABLES") {
+                    Ok(Token::Tables)
+                } else if self.advance_if_next_string_eq("ABLE") {
                     Ok(Token::Table)
                 } else if self.advance_if_next_string_eq("RUE") {
                     Ok(Token::True)
@@ -173,6 +177,10 @@ impl Tokenizer {
             'D' => {
                 if self.advance_if_next_string_eq("ATE") {
                     Ok(Token::ColumnType(Type::Date))
+                } else if self.advance_if_next_string_eq("ESCRIBE"){
+                    Ok(Token::Databases)
+                } else if self.advance_if_next_string_eq("ATABASES"){
+                    Ok(Token::Databases)
                 } else if self.advance_if_next_string_eq("ELETE"){
                     Ok(Token::Delete)
                 } else if self.advance_if_next_string_eq("ATABASE"){

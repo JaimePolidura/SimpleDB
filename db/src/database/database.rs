@@ -101,11 +101,11 @@ impl Database {
         table_name: &str,
         columns_to_add: Vec<(String, Type, bool)>
     ) -> Result<(), SimpleDbError> {
-        let table = self.get_table(table_name)?;
+        let table = self.get_table_or_err(table_name)?;
         table.add_columns(columns_to_add)
     }
 
-    pub fn get_table(&self, table_name: &str) -> Result<Arc<Table>, SimpleDbError> {
+    pub fn get_table_or_err(&self, table_name: &str) -> Result<Arc<Table>, SimpleDbError> {
         self.tables.get(table_name)
             .map(|entry| entry.value().clone())
             .ok_or(SimpleDbError::TableNotFound(table_name.to_string()))
@@ -127,11 +127,20 @@ impl Database {
         &self.name
     }
 
+    pub fn get_tables(&self) -> Vec<Arc<Table>> {
+        let mut tables = Vec::new();
+        for entry in self.tables.iter() {
+            tables.push(entry.value().clone());
+        }
+
+        tables
+    }
+
     fn index_by_table_name(tables: &mut Vec<Arc<Table>>) -> SkipMap<String, Arc<Table>> {
         let mut indexed = SkipMap::new();
 
         while let Some(table) = tables.pop() {
-            indexed.insert(table.name(), table);
+            indexed.insert(table.name().clone(), table);
         }
 
         indexed

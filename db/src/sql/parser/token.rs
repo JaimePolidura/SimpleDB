@@ -41,6 +41,10 @@ pub enum Token {
     Rollback, // "ROLLBACK"
     Commit, // "COMMIT"
     Database,
+    Show,
+    Tables,
+    Databases,
+    Describe,
 
     Identifier(String), //Ohter identifier, like table or column names
     ColumnType(Type),

@@ -9,9 +9,12 @@ pub enum Statement {
     Insert(InsertStatement),
     CreateTable(CreateTableStatement),
     CreateDatabase(String),
+    Describe(String),
     StartTransaction,
     Rollback,
-    Commit
+    Commit,
+    ShowDatabases,
+    ShowTables,
 }
 
 pub enum Limit {
@@ -50,11 +53,55 @@ pub struct CreateTableStatement {
     pub(crate) columns: Vec<(String, Type, bool)>
 }
 
+enum Requiremnt {
+    ObligatoryToNotHave,
+    ObligatoryToHave,
+    Optional,
+}
+
+struct StatementRequirement {
+    transaction: Requiremnt,
+    database: Requiremnt,
+}
+
 impl Statement {
     pub fn terminates_transaction(&self) -> bool {
         match *self {
             Statement::Rollback | Statement::Commit => true,
             _ => false
+        }
+    }
+
+    pub fn requires_transaction(&self) -> bool {
+        match self.get_requirements().transaction {
+            Requiremnt::ObligatoryToHave => true,
+            Requiremnt::ObligatoryToNotHave => false,
+            Requiremnt::Optional => false,
+        }
+    }
+
+    pub fn requires_database(&self) -> bool {
+        match self.get_requirements().database {
+            Requiremnt::ObligatoryToHave => true,
+            Requiremnt::ObligatoryToNotHave => false,
+            Requiremnt::Optional => false,
+        }
+    }
+
+    fn get_requirements(&self) -> StatementRequirement {
+        match self {
+            Statement::Select(_) => StatementRequirement { transaction: Requiremnt::ObligatoryToHave, database: Requiremnt::ObligatoryToHave },
+            Statement::Update(_) => StatementRequirement { transaction: Requiremnt::ObligatoryToHave, database: Requiremnt::ObligatoryToHave },
+            Statement::Delete(_) => StatementRequirement { transaction: Requiremnt::ObligatoryToHave, database: Requiremnt::ObligatoryToHave },
+            Statement::Insert(_) => StatementRequirement { transaction: Requiremnt::ObligatoryToHave, database: Requiremnt::ObligatoryToHave },
+            Statement::CreateTable(_) => StatementRequirement { transaction: Requiremnt::Optional, database: Requiremnt::ObligatoryToHave },
+            Statement::CreateDatabase(_) => StatementRequirement { transaction: Requiremnt::Optional, database: Requiremnt::ObligatoryToNotHave },
+            Statement::Describe(_) => StatementRequirement { transaction: Requiremnt::Optional, database: Requiremnt::ObligatoryToHave },
+            Statement::StartTransaction => StatementRequirement { transaction: Requiremnt::ObligatoryToNotHave, database: Requiremnt::ObligatoryToHave },
+            Statement::Rollback => StatementRequirement { transaction: Requiremnt::ObligatoryToHave, database: Requiremnt::ObligatoryToHave },
+            Statement::Commit => StatementRequirement { transaction: Requiremnt::ObligatoryToHave, database: Requiremnt::ObligatoryToHave },
+            Statement::ShowDatabases => StatementRequirement { transaction: Requiremnt::Optional, database: Requiremnt::ObligatoryToNotHave },
+            Statement::ShowTables => StatementRequirement { transaction: Requiremnt::Optional, database: Requiremnt::ObligatoryToHave },
         }
     }
 }

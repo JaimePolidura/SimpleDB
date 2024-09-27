@@ -9,7 +9,7 @@ use crate::sql::validator::StatementValidator;
 use crate::value::{Type, Value};
 use bytes::Bytes;
 use shared::SimpleDbError::MalformedQuery;
-use shared::{SimpleDbError, SimpleDbOptions};
+use shared::{CompactionStrategy, SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 
@@ -48,7 +48,10 @@ impl StatementExecutor {
             Statement::StartTransaction => self.start_transaction(context.database()),
             Statement::Rollback => self.rollback_transaction(context.database(), context.transaction()),
             Statement::Commit => self.commit_transaction(context.database(), context.transaction()),
-            Statement::CreateDatabase(database_name) => self.create_databse(database_name)
+            Statement::CreateDatabase(database_name) => self.create_database(database_name),
+            Statement::Describe(table_name) => self.describe_table(&table_name, context),
+            Statement::ShowTables => self.show_tables(&context),
+            Statement::ShowDatabases => self.show_databases(),
         }
     }
 
@@ -59,7 +62,7 @@ impl StatementExecutor {
         select_statement: SelectStatement,
     ) -> Result<StatementResult, SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
-        let table = database.get_table(&select_statement.table_name)?;
+        let table = database.get_table_or_err(&select_statement.table_name)?;
         let select_plan = self.planner.plan_select(&table, select_statement, transaction)?;
 
         Ok(StatementResult::Data(QueryIterator::create(select_plan)))
@@ -72,7 +75,7 @@ impl StatementExecutor {
         update_statement: UpdateStatement,
     ) -> Result<StatementResult, SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
-        let table = database.get_table(&update_statement.table_name)?;
+        let table = database.get_table_or_err(&update_statement.table_name)?;
         let mut update_plan = self.planner.plan_update(&table, &update_statement, transaction)?;
         let mut updated_rows = 0;
 
@@ -109,7 +112,7 @@ impl StatementExecutor {
         delete_statement: DeleteStatement
     ) -> Result<StatementResult, SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
-        let table = database.get_table(delete_statement.table_name.as_str())?;
+        let table = database.get_table_or_err(delete_statement.table_name.as_str())?;
         let mut delete_plan = self.planner.plan_delete(&table, delete_statement, transaction)?;
         let mut deleted_rows = 0;
 
@@ -129,7 +132,7 @@ impl StatementExecutor {
         mut insert_statement: InsertStatement,
     ) -> Result<StatementResult, SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
-        let table = database.get_table(insert_statement.table_name.as_str())?;
+        let table = database.get_table_or_err(insert_statement.table_name.as_str())?;
         let mut inserted_values = self.serialize_column_values(&insert_statement.values);
         table.insert(transaction, &mut inserted_values)?;
         Ok(StatementResult::Ok(1))
@@ -174,12 +177,38 @@ impl StatementExecutor {
         Ok(StatementResult::Ok(0))
     }
 
-    fn create_databse(
+    fn create_database(
         &self,
         database_name: String
     ) -> Result<StatementResult, SimpleDbError> {
         self.databases.create_database(database_name.as_str())?;
         Ok(StatementResult::Ok(0))
+    }
+
+    fn show_databases(&self) -> Result<StatementResult, SimpleDbError> {
+        let databases_name = self.databases.get_databases()
+            .iter()
+            .map(|database| database.name().clone())
+            .collect();
+
+        Ok(StatementResult::Databases(databases_name))
+    }
+
+    fn show_tables(&self, context: &Context) -> Result<StatementResult, SimpleDbError> {
+        let databsae = self.databases.get_database_or_err(context.database())?;
+        let table_names = databsae.get_tables().iter()
+            .map(|table| table.name().clone())
+            .collect();
+        Ok(StatementResult::Tables(table_names))
+    }
+
+    fn describe_table(&self, table_name: &str, context: &Context) -> Result<StatementResult, SimpleDbError> {
+        let databases = self.databases.get_database_or_err(context.database())?;
+        let table = databases.get_table_or_err(table_name)?;
+        let column_descriptors = table.get_columns().values()
+            .map(|entry| entry.clone())
+            .collect();
+        Ok(StatementResult::Describe(column_descriptors))
     }
 
     fn serialize_column_values(

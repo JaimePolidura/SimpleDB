@@ -28,6 +28,15 @@ impl Databases {
         })
     }
 
+    pub fn get_databases(&self) -> Vec<Arc<Database>> {
+        let mut databases = Vec::new();
+        for entry in self.databases.iter() {
+            databases.push(entry.value().clone());
+        }
+
+        databases
+    }
+
     pub fn get_database(&self, name: &str) -> Option<Arc<Database>> {
         self.databases.get(name)
             .map(|entry| entry.value().clone())
@@ -51,9 +60,9 @@ impl Databases {
         Ok(database)
     }
 
-    fn build_database_options(&self, databse_name: &str) -> Arc<SimpleDbOptions> {
+    fn build_database_options(&self, database_name: &str) -> Arc<SimpleDbOptions> {
         let mut database_path = PathBuf::from(&self.options.base_path);
-        database_path.push(databse_name);
+        database_path.push(database_name);
         shared::start_simpledb_options_builder_from(&self.options)
             .base_path(database_path.to_str().unwrap())
             .build_arc()

@@ -180,7 +180,7 @@ impl TableDescriptor {
 }
 
 impl ColumnDescriptor {
-    pub fn serialize(&self) -> Vec<u8> {
+    pub(crate) fn serialize(&self) -> Vec<u8> {
         let mut serialized = Vec::new();
         serialized.put_u16_le(self.column_id);
         serialized.put_u8(self.column_type.serialize());

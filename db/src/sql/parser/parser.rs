@@ -29,10 +29,12 @@ impl Parser {
             Token::Update => self.update(),
             Token::Delete => self.delete(),
             Token::Insert => self.insert(),
-            Token::Create => self.create_some(),
             Token::StartTransaction => self.start_transaction(),
-            Token::Commit => self.commit(),
+            Token::Create => self.create_some(),
             Token::Rollback => self.rollback(),
+            Token::Describe => self.describe(),
+            Token::Commit => self.commit(),
+            Token::Show => self.show(),
             Token::EOF => return Ok(None),
             _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Unknown keyword")))
         }?;
@@ -346,6 +348,21 @@ impl Parser {
         }
 
         Ok(columns)
+    }
+
+    fn show(&mut self) -> Result<Statement, SimpleDbError> {
+        match self.advance()? {
+            Token::Databases => Ok(Statement::ShowDatabases),
+            Token::Tables => Ok(Statement::ShowTables),
+            _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Expact Databases or tables after show")))
+        }
+    }
+
+    fn describe(&mut self) -> Result<Statement, SimpleDbError> {
+        match self.advance()? {
+           Token::Identifier(table) => Ok(Statement::Describe(table)),
+            _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Expact table name after describe")))
+        }
     }
 
     fn is_primary_key(&mut self) -> Result<bool, SimpleDbError> {

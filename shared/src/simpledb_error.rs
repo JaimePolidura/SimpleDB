@@ -37,6 +37,7 @@ pub enum SimpleDbError {
     IllegalToken(TokenLocation, String),
     MalformedQuery(String),
     FullScanNotAllowed(),
+    InvalidContext(&'static str),
 
     //General db layer errors
     ColumnNotFound(types::KeyspaceId, String),
@@ -267,6 +268,9 @@ impl Debug for SimpleDbError {
             }
             SimpleDbError::CannotDecodeColumn(column_name, _) => {
                 write!(f, "Cannot decode column: {}", column_name)
+            }
+            SimpleDbError::InvalidContext(message) => {
+                write!(f, "Invalid context: {}", message)
             }
         }
     }

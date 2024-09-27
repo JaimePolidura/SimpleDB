@@ -400,7 +400,7 @@ impl Table {
         }
     }
 
-    pub fn name(&self) -> String {
-        self.table_name.clone()
+    pub fn name(&self) -> &String {
+        &self.table_name
     }
 }

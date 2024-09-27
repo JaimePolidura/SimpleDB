@@ -5,6 +5,7 @@ use crate::sql::query_iterator::QueryIterator;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::table::table_descriptor::ColumnDescriptor;
 
 pub struct SimpleDb {
     statement_executor: StatementExecutor,
@@ -18,6 +19,9 @@ pub enum StatementResult {
     TransactionStarted(Transaction),
     Data(QueryIterator),
     Ok(usize), //usize number of rows affected
+    Databases(Vec<String>),
+    Tables(Vec<String>),
+    Describe(Vec<ColumnDescriptor>)
 }
 
 pub fn create(
@@ -90,6 +94,14 @@ impl Context {
             database: Some(name.to_string()),
             transaction: None,
         }
+    }
+
+    pub fn has_transaction(&self) -> bool {
+        self.transaction.is_some()
+    }
+
+    pub fn has_database(&self) -> bool {
+        self.database.is_some()
     }
 
     pub fn with(name: &str, transaction: Transaction) -> Context {

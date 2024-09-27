@@ -30,18 +30,21 @@ impl StatementValidator {
         context: &Context,
         statement: &Statement,
     ) -> Result<(), SimpleDbError> {
+        self.validate_context(context, statement)?;
+
         match statement {
+            Statement::CreateTable(statement) => self.validate_create_table(context.database(), statement),
             Statement::Select(statement) => self.validate_select(context.database(), statement),
             Statement::Update(statement) => self.validate_update(context.database(), statement),
             Statement::Delete(statement) => self.validate_delete(context.database(), statement),
             Statement::Insert(statement) => self.validate_insert(context.database(), statement),
-            Statement::CreateTable(statement) => self.validate_create_table(context.database(), statement),
             Statement::CreateDatabase(database_name) => self.validate_create_database(database_name),
+            Statement::Describe(table) => self.validate_describe(context, table),
+            Statement::StartTransaction |
+            Statement::ShowDatabases |
+            Statement::ShowTables |
             Statement::Rollback |
-            Statement::Commit |
-            Statement::StartTransaction => {
-                Ok(())
-            }
+            Statement::Commit => Ok(()),
         }
     }
 
@@ -61,7 +64,7 @@ impl StatementValidator {
         statement: &SelectStatement
     ) -> Result<(), SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
-        let table = database.get_table(&statement.table_name)?;
+        let table = database.get_table_or_err(&statement.table_name)?;
         self.validate_where_expression(&statement.where_expr, &table)?;
         table.validate_selection(&statement.selection)?;
         Ok(())
@@ -73,7 +76,7 @@ impl StatementValidator {
         statement: &UpdateStatement
     ) -> Result<(), SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
-        let table = database.get_table(&statement.table_name)?;
+        let table = database.get_table_or_err(&statement.table_name)?;
         self.validate_where_expression(&statement.where_expr, &table)?;
 
         for (updated_column_name, updated_column_value_expr) in &statement.updated_values {
@@ -95,7 +98,7 @@ impl StatementValidator {
         statement: &InsertStatement
     ) -> Result<(), SimpleDbError> {
         let database = self.databases.get_database_or_err(database_namae)?;
-        let table = database.get_table(statement.table_name.as_str())?;
+        let table = database.get_table_or_err(statement.table_name.as_str())?;
         table.validate_column_values(&statement.values)
     }
 
@@ -114,7 +117,7 @@ impl StatementValidator {
         statement: &DeleteStatement,
     ) -> Result<(), SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
-        let table = database.get_table(&statement.table_name)?;
+        let table = database.get_table_or_err(&statement.table_name)?;
         self.validate_where_expression(&statement.where_expr, &table)?;
         Ok(())
     }
@@ -135,6 +138,12 @@ impl StatementValidator {
             },
             None => Ok(())
         }
+    }
+
+    fn validate_describe(&self, context: &Context, table_name: &str) -> Result<(), SimpleDbError> {
+        let database = self.databases.get_database_or_err(context.database())?;
+        database.get_table_or_err(table_name)?;
+        Ok(())
     }
 
     fn validate_expression(
@@ -183,5 +192,16 @@ impl StatementValidator {
             },
             Expression::Literal(value) => Ok(value.to_type()),
         }
+    }
+
+    fn validate_context(&self, context: &Context, statement: &Statement) -> Result<(), SimpleDbError> {
+        if statement.requires_transaction() && !context.has_transaction() {
+            return Err(SimpleDbError::InvalidContext("A Transaction should be supplied"));
+        }
+        if statement.requires_database() && !context.has_database() {
+            return Err(SimpleDbError::InvalidContext("A Database should be supplied"));
+        }
+
+        Ok(())
     }
 }
