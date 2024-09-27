@@ -1,21 +1,22 @@
 use crate::key;
 use crate::key::Key;
 use crate::memtables::memtable::MemtableState::{Active, Flushed, Flusing, Inactive, RecoveringFromWal};
+use crate::memtables::memtable_iterator::MemtableIterator;
 use crate::memtables::wal::Wal;
 use crate::sst::sstable_builder::SSTableBuilder;
-use crate::transactions::transaction::{Transaction};
+use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_iterator::StorageIterator;
+use crate::utils::tombstone::TOMBSTONE;
 use bytes::{Buf, Bytes};
 use crossbeam_skiplist::{SkipMap, SkipSet};
+use shared::StorageValueMergeResult;
 use std::cell::UnsafeCell;
 use std::ops::Bound::Excluded;
 use std::ops::Shl;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
-use crate::memtables::memtable_iterator::MemtableIterator;
-use crate::utils::tombstone::TOMBSTONE;
 
 pub struct MemTable {
     pub(crate) data: Arc<SkipMap<Key, Bytes>>,
@@ -148,7 +149,7 @@ impl MemTable {
     }
 
     pub fn set(&self, transaction: &Transaction, key: Bytes, value: &[u8]) -> Result<(), shared::SimpleDbError> {
-        self.write_into_skip_list(
+        self.write(
             &key::create(key, transaction.txn_id),
             Bytes::copy_from_slice(value),
             transaction.txn_id
@@ -156,14 +157,14 @@ impl MemTable {
     }
 
     pub fn delete(&self, transaction: &Transaction, key: Bytes) -> Result<(), shared::SimpleDbError> {
-        self.write_into_skip_list(
+        self.write(
             &key::create(key, transaction.txn_id),
             TOMBSTONE,
             transaction.txn_id
         )
     }
 
-    fn write_into_skip_list(&self, key: &Key, value: Bytes, txn_id: shared::TxnId) -> Result<(), shared::SimpleDbError> {
+    fn write(&self, key: &Key, value: Bytes, txn_id: shared::TxnId) -> Result<(), shared::SimpleDbError> {
         if !self.can_memtable_be_written() {
             return Ok(());
         }
@@ -177,9 +178,32 @@ impl MemTable {
 
         self.current_size_bytes.fetch_add(key.len() + value.len(), Relaxed);
 
-        self.data.insert(key.clone(), value);
+        self.write_into_skiplist(key, value);
 
         Ok(())
+    }
+
+    //This function will merge the values in the skiplist if they have the same key (key bytes and txn_id)
+    //There won't be race conditions if the writes made by one transaction are done sequentially (AKA one after each other).
+    //We will only merge keys with the same key bytes & transaction ID, so we will always merge writes made by one transaction
+    //to one key
+    fn write_into_skiplist(&self, key: &Key, value: Bytes) {
+        if self.options.storage_value_merger.is_none() {
+            self.data.insert(key.clone(), value);
+            return;
+        }
+
+        match self.data.get(key) {
+            Some(present_entry) => {
+                let merger_fn = self.options.storage_value_merger.unwrap();
+
+                match merger_fn(present_entry.value(), &value) {
+                    StorageValueMergeResult::Ok(merged_value) => { self.data.insert(key.clone(), merged_value); }
+                    StorageValueMergeResult::DiscardPrevious => { self.data.insert(key.clone(), value); },
+                };
+            }
+            None => { self.data.insert(key.clone(), value); },
+        };
     }
 
     fn write_wal(&self, key: &Key, value: &Bytes) -> Result<(), shared::SimpleDbError> {
@@ -222,7 +246,7 @@ impl MemTable {
         println!("Applying {} operations from WAL to memtable with ID: {}", entries.len(), wal.get_memtable_id());
 
         while let Some(entry) = entries.pop() {
-            self.write_into_skip_list(&entry.key, entry.value, entry.key.txn_id());
+            self.write(&entry.key, entry.value, entry.key.txn_id());
         }
 
         self.set_active();
@@ -250,13 +274,12 @@ impl MemTable {
 
 #[cfg(test)]
 mod test {
-    use crate::key;
-    use crate::memtables::memtable::{MemTable, MemtableIterator};
-    use crate::transactions::transaction::{Transaction};
+    use crate::memtables::memtable::MemTable;
+    use crate::transactions::transaction::Transaction;
     use crate::transactions::transaction_manager::IsolationLevel;
     use crate::utils::storage_iterator::StorageIterator;
-    use std::sync::Arc;
     use bytes::Bytes;
+    use std::sync::Arc;
 
     #[test]
     fn get_set_delete_no_transactions() {

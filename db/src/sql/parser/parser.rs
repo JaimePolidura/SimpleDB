@@ -52,13 +52,13 @@ impl Parser {
         self.expect_token(Token::From)?;
         let table_name = self.identifier()?;
         let mut limit = Limit::None;
-        let mut expression = Expression::None;
+        let mut expression = None;
 
         if self.maybe_expect_token(Token::Limit)? {
             limit = self.limit()?;
         }
         if self.maybe_expect_token(Token::Where)? {
-            expression = self.expression(0)?;
+            expression = Some(self.expression(0)?);
         }
         if self.maybe_expect_token(Token::Limit)? {
             limit = self.limit()?;
@@ -145,9 +145,9 @@ impl Parser {
         let table_name = self.identifier()?;
         let updated_values = self.updated_values()?;
 
-        let mut expression = Expression::None;
+        let mut expression = None;
         if self.maybe_expect_token(Token::Where)? {
-            expression = self.expression(0)?;
+            expression = Some(self.expression(0)?);
         }
 
         Ok(Statement::Update(UpdateStatement {
@@ -180,14 +180,14 @@ impl Parser {
 
         self.expect_token(Token::From)?;
         let table_name = self.identifier()?;
-        let mut expression = Expression::None;
+        let mut expression = None;
         let mut limit = Limit::None;
 
         if self.maybe_expect_token(Token::Limit)? {
             limit = self.limit()?;
         }
         if self.maybe_expect_token(Token::Where)? {
-            expression = self.expression(0)?;
+            expression = Some(self.expression(0)?);
         }
         if self.maybe_expect_token(Token::Limit)? {
             limit = self.limit()?;
@@ -448,7 +448,7 @@ mod test {
         assert_eq!(update_statement.updated_values.len(), 1);
         assert_eq!(update_statement.updated_values[0].0, "dinero");
         assert_eq!(update_statement.updated_values[0].1, Expression::Literal(Value::I64(0)));
-        assert_eq!(update_statement.where_expr, Expression::None);
+        assert_eq!(update_statement.where_expr, None);
     }
 
     #[test]
@@ -475,7 +475,7 @@ mod test {
         assert_eq!(update_statement.updated_values[1].0, "id");
         assert_eq!(update_statement.updated_values[1].1, Expression::Literal(Value::F64(10.2)));
 
-        assert_eq!(update_statement.where_expr, Expression::Binary(
+        assert_eq!(update_statement.where_expr.unwrap(), Expression::Binary(
             BinaryOperator::Greater,
             Box::new(Expression::Identifier(String::from("dinero"))),
             Box::new(Expression::Literal(Value::I64(10))),
@@ -495,7 +495,7 @@ mod test {
         assert!(matches!(select_statement.selection, Selection::Some(expected_column_names)));
         assert!(matches!(select_statement.limit, Limit::Some(10)));
         assert_eq!(select_statement.table_name, "personas");
-        assert_eq!(select_statement.where_expr, Expression::Binary(
+        assert_eq!(select_statement.where_expr.unwrap(), Expression::Binary(
             BinaryOperator::Greater,
             Box::new(Expression::Identifier(String::from("dinero"))),
             Box::new(Expression::Literal(Value::I64(10))),
@@ -513,7 +513,7 @@ mod test {
         };
         let expected_column_names = vec!["nombre", "dinero"];
         assert!(matches!(select_statement.selection, Selection::Some(expected_column_names)));
-        assert!(matches!(select_statement.where_expr, Expression::None));
+        assert!(matches!(select_statement.where_expr, None));
         assert!(matches!(select_statement.limit, Limit::Some(10)));
         assert_eq!(select_statement.table_name, "personas");
     }
@@ -531,7 +531,7 @@ mod test {
         };
         assert!(matches!(select_statement.limit, Limit::None));
         assert_eq!(select_statement.table_name, "personas");
-        assert_eq!(select_statement.where_expr, Expression::Binary(
+        assert_eq!(select_statement.where_expr.unwrap(), Expression::Binary(
             BinaryOperator::Equal,
             Box::new(Expression::Identifier(String::from("id"))),
             Box::new(Expression::Literal(Value::I64(1))),
@@ -555,7 +555,7 @@ mod test {
 
         let expression = select_statement.where_expr;
 
-        assert_eq!(expression, Expression::Binary(
+        assert_eq!(expression.unwrap(), Expression::Binary(
             BinaryOperator::And,
             Box::new(Expression::Binary(
                 BinaryOperator::GreaterEqual,

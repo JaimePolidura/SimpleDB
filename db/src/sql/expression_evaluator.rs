@@ -43,7 +43,6 @@ pub fn evaluate_expression(
             Ok(Expression::Literal(value))
         },
         Expression::Literal(value) => Ok(Expression::Literal(value.clone())),
-        Expression::None => panic!("Invalid code path")
     }
 }
 
@@ -62,7 +61,6 @@ pub fn evaluate_constant_expressions(
         },
         Expression::Identifier(_) => Ok(expression),
         Expression::Literal(value) => Ok(Expression::Literal(value)),
-        Expression::None => panic!(""),
     }
 }
 

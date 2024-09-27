@@ -125,8 +125,8 @@ impl ScanType {
         right: &Box<Expression>,
         limit: &Limit
     ) -> Result<ScanType, SimpleDbError> {
-        let scan_type_left = Self::get_scan_type(primary_column_name, &limit, left)?;
         let scan_type_right = Self::get_scan_type(primary_column_name, &limit, right)?;
+        let scan_type_left = Self::get_scan_type(primary_column_name, &limit, left)?;
 
         //Check same value
         if utils::enum_eq(&scan_type_left, &scan_type_right) {

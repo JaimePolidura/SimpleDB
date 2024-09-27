@@ -49,8 +49,6 @@ impl SSTableIterator {
         if self.sstable.is_key_lower(&key) {
             return;
         }
-
-
     }
 
     fn set_iterator_as_empty(&mut self) {

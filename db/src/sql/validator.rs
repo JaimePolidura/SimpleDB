@@ -121,14 +121,19 @@ impl StatementValidator {
 
     fn validate_where_expression(
         &self,
-        expression: &Expression,
+        expression: &Option<Expression>,
         table: &Arc<Table>
     ) -> Result<(), SimpleDbError> {
-        let type_produced = self.validate_expression(expression, &table)?;
-        if !matches!(type_produced, Type::Boolean) {
-            Err(SimpleDbError::MalformedQuery(String::from("Expression should produce a boolean")))
-        } else {
-            Ok(())
+        match expression {
+            Some(expression) => {
+                let type_produced = self.validate_expression(expression, &table)?;
+                if !matches!(type_produced, Type::Boolean) {
+                    Err(SimpleDbError::MalformedQuery(String::from("Expression should produce a boolean")))
+                } else {
+                    Ok(())
+                }
+            },
+            None => Ok(())
         }
     }
 
@@ -138,7 +143,6 @@ impl StatementValidator {
         table: &Arc<Table>
     ) -> Result<Type, SimpleDbError> {
         match expression {
-            Expression::None => panic!(""),
             Expression::Binary(operator, left, right) => {
                 let type_left = self.validate_expression(left, table)?;
                 let type_right = self.validate_expression(right, table)?;

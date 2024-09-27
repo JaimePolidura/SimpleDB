@@ -38,8 +38,8 @@ impl Planner {
         )?;
         let mut last_step = self.build_scan_step(scan_type, transaction, select_statement.selection, table)?;
 
-        if !matches!(select_statement.where_expr, Expression::None) {
-            last_step = FilterStep::create(select_statement.where_expr, last_step);
+        if let Some(where_expr) = select_statement.where_expr {
+            last_step = FilterStep::create(where_expr, last_step);
         }
         if !matches!(select_statement.limit, Limit::None) {
             last_step = LimitStep::create(select_statement.limit, last_step);
@@ -62,8 +62,8 @@ impl Planner {
         let updated_values = update_statement.get_updated_values();
         let mut last_step = self.build_scan_step(scan_type, transaction, updated_values, table)?;
 
-        if !matches!(update_statement.where_expr, Expression::None) {
-            last_step = FilterStep::create(update_statement.where_expr.clone(), last_step);
+        if let Some(where_expr) = &update_statement.where_expr {
+            last_step = FilterStep::create(where_expr.clone(), last_step);
         }
 
         Ok(last_step)
@@ -82,8 +82,8 @@ impl Planner {
         )?;
         let mut last_step = self.build_scan_step(scan_type, transaction, Selection::All, table)?;
 
-        if !matches!(select_statement.where_expr, Expression::None) {
-            last_step = FilterStep::create(select_statement.where_expr, last_step);
+        if let Some(where_expr) = select_statement.where_expr {
+            last_step = FilterStep::create(where_expr, last_step);
         }
         if !matches!(select_statement.limit, Limit::None) {
             last_step = LimitStep::create(select_statement.limit, last_step);
@@ -94,12 +94,11 @@ impl Planner {
 
     fn get_and_validate_scan_type(
         &self,
-        expression: &Expression,
+        expression: &Option<Expression>,
         table: &Arc<Table>,
         limit: &Limit,
     ) -> Result<ScanType, SimpleDbError> {
-        let primary_column_name = table.get_primary_column_data().unwrap().column_name;
-        let scan_type = ScanType::get_scan_type(&primary_column_name, limit, expression)?;
+        let scan_type = self.get_scan_type(expression, &table, limit)?;
         match scan_type {
             ScanType::Full => {
                 if !self.options.db_full_scan_allowed {
@@ -128,6 +127,20 @@ impl Planner {
             ScanType::Exact(exact_id_expr) => ExactScanStep::create(table.clone(), exact_id_expr.serialize(), selection, transaction),
             ScanType::Range(range) => RangeScanStep::create(table.clone(), selection, transaction, range),
             ScanType::Full => FullScanStep::create(table.clone(), selection, transaction),
+        }
+    }
+
+    fn get_scan_type(
+        &self,
+        expression: &Option<Expression>,
+        table: &Arc<Table>,
+        limit: &Limit,
+    ) -> Result<ScanType, SimpleDbError> {
+        let primary_column_name = table.get_primary_column_data().unwrap().column_name;
+
+        match expression {
+            Some(expression) => ScanType::get_scan_type(&primary_column_name, limit, expression),
+            None => Ok(ScanType::Full),
         }
     }
 }

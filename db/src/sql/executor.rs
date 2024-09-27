@@ -197,15 +197,24 @@ impl StatementExecutor {
     fn evaluate_constant_expressions(&self, mut statement: Statement) -> Result<Statement, SimpleDbError> {
         match statement {
             Statement::Select(mut select) => {
-                select.where_expr = evaluate_constant_expressions(select.where_expr)?;
+                if let Some(where_expr) = select.where_expr {
+                    select.where_expr = Some(evaluate_constant_expressions(where_expr)?);
+                }
+
                 Ok(Statement::Select(select))
             }
             Statement::Update(mut update) => {
-                update.where_expr = evaluate_constant_expressions(update.where_expr)?;
+                if let Some(where_expr) = update.where_expr {
+                    update.where_expr = Some(evaluate_constant_expressions(where_expr)?);
+                }
+
                 Ok(Statement::Update(update))
             }
             Statement::Delete(mut delete) => {
-                delete.where_expr = evaluate_constant_expressions(delete.where_expr)?;
+                if let Some(where_expr) = delete.where_expr {
+                    delete.where_expr = Some(evaluate_constant_expressions(where_expr)?);
+                }
+
                 Ok(Statement::Delete(delete))
             },
             _ => Ok(statement)

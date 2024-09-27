@@ -13,7 +13,7 @@ pub enum DurabilityLevel {
     Weak, //Writes to memtable without waiting for WAL write to complete
 }
 
-//a is before b, b has greater timestamp (txn_id)
+//a is before b, (example b has greater timestamp (txn_id))
 pub type StorageValueMergerFn = fn(a: &Bytes, b: &Bytes) -> StorageValueMergeResult;
 
 #[derive(Clone)]

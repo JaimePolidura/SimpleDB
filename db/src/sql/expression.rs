@@ -6,7 +6,6 @@ use crate::value::{Type, Value};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
-    None,
     Binary(BinaryOperator, Box<Expression>, Box<Expression>),
     Unary(UnaryOperator, Box<Expression>),
     Identifier(String),
@@ -82,7 +81,6 @@ impl Expression {
 
     pub fn is_constant_expression(&self) -> bool {
         match self {
-            Expression::None => panic!(""),
             Expression::Binary(_, left, right) => {
                 left.is_constant_expression() && right.is_constant_expression()
             },

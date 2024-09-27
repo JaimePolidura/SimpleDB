@@ -6,6 +6,8 @@ use crate::key::Key;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_iterator::StorageIterator;
+use crate::utils::tombstone::TOMBSTONE;
+//TODO Refactor this code
 
 //This is the iterator that will be exposed to users of the storage engine:
 //This iterator merges the values by the merger function defined in SimpleDbOptions
@@ -26,7 +28,7 @@ pub struct StorageEngineItertor<I: StorageIterator> {
     seeked_key: Option<Bytes>,
     is_seeked_key_inclusive: bool,
 
-    last_entry_returned: bool,
+    is_finished: bool,
 }
 
 impl<I: StorageIterator> StorageEngineItertor<I> {
@@ -44,21 +46,25 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
     }
 
     pub fn create(options: &Arc<shared::SimpleDbOptions>, mut iterator: I) -> StorageEngineItertor<I> {
+        let mut is_finished = false;
+
         if iterator.has_next() {
             iterator.next();
+        } else {
+            is_finished = true
         }
 
         StorageEngineItertor {
             entries_to_return: VecDeque::new(),
+            is_seeked_key_inclusive: false,
             transaction_manager: None,
-            last_entry_returned: false,
             inner_iterator: iterator,
             options: options.clone(),
             current_value: None,
             current_key: None,
             transaction: None,
             seeked_key: None,
-            is_seeked_key_inclusive: false
+            is_finished,
         }
     }
 
@@ -72,42 +78,48 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
     }
 
     fn find_entries(&mut self) -> bool {
-        self.entries_to_return.push_back((
-            self.inner_iterator.key().clone(),
-            Bytes::copy_from_slice(self.inner_iterator.value()))
-        );
+        loop {
+            if self.is_finished {
+                return false;
+            }
 
-        let current_key_bytes = Bytes::copy_from_slice(self.inner_iterator.key().as_bytes());
+            self.entries_to_return.push_back((
+                self.inner_iterator.key().clone(),
+                Bytes::copy_from_slice(self.inner_iterator.value()))
+            );
 
-        let has_next = self.inner_iterator.has_next();
+            let current_key_bytes = Bytes::copy_from_slice(self.inner_iterator.key().as_bytes());
 
-        while has_next {
-            self.inner_iterator.next();
-            let next_key = self.inner_iterator.key();
+            let has_next = self.inner_iterator.has_next();
 
-            if next_key.bytes_eq_bytes(&current_key_bytes) {
-                self.entries_to_return.push_back((
-                    self.inner_iterator.key().clone(),
-                    Bytes::copy_from_slice(self.inner_iterator.value()))
-                );
-            } else {
-                break
+            while has_next {
+                self.inner_iterator.next();
+                let next_key = self.inner_iterator.key();
+
+                if next_key.bytes_eq_bytes(&current_key_bytes) {
+                    self.entries_to_return.push_back((
+                        self.inner_iterator.key().clone(),
+                        Bytes::copy_from_slice(self.inner_iterator.value()))
+                    );
+                } else {
+                    break
+                }
+            }
+
+            if !has_next {
+                self.is_finished = true;
+            }
+
+            if self.merge_entry_values() {
+                return true;
             }
         }
-
-        if !has_next {
-            self.last_entry_returned = true;
-        }
-
-        self.merge_entry_values();
-
-        true
     }
 
-    fn merge_entry_values(&mut self) {
+    //Returns true if it merged a value that can be returned to the user of the iterator
+    fn merge_entry_values(&mut self) -> bool {
         if self.options.storage_value_merger.is_none() || self.entries_to_return.len() <= 1 {
-            //No merger function specified, no neecesity to merge values
-            return;
+            return self.check_some_keys_in_entries_to_return_readble();
         }
 
         let mut prev_merged_value: Option<(Key, Bytes)> = None;
@@ -129,10 +141,21 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
 
         let (final_key, final_value) = prev_merged_value.take().unwrap();
         self.entries_to_return.push_front((final_key, final_value));
+        self.check_some_keys_in_entries_to_return_readble()
+    }
+
+    fn check_some_keys_in_entries_to_return_readble(&self) -> bool {
+        for ((key, value)) in &self.entries_to_return {
+            if !value.eq(&TOMBSTONE) {
+                return true;
+            }
+        }
+
+        false
     }
 
     fn do_do_next(&mut self) -> bool {
-        if self.last_entry_returned {
+        if self.is_finished {
             return false;
         }
         if self.entries_to_return.is_empty() && !self.find_entries() {
@@ -241,17 +264,19 @@ mod test {
         assert!(iterator.next());
         assert!(iterator.key().eq(&key::create_from_str("wili", 1)));
 
-        // assert!(!iterator.next());
+        assert!(!iterator.next());
     }
 
     fn merge_values(a: &Bytes, b: &Bytes) -> StorageValueMergeResult {
         let a_vec = a.to_vec();
         let b_vec = b.to_vec();
 
-        if b_vec[0] != 10 {
-            StorageValueMergeResult::Ok(Bytes::from(vec![a_vec[0] + b_vec[0]]))
-        } else {
+        if b_vec[0] == 10 {
             StorageValueMergeResult::DiscardPrevious
+        } else if a_vec[0] == 10 {
+            StorageValueMergeResult::Ok(b.clone())
+        } else {
+            StorageValueMergeResult::Ok(Bytes::from(vec![a_vec[0] + b_vec[0]]))
         }
     }
 

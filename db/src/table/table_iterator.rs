@@ -15,7 +15,7 @@ struct RowReassemble {
     is_fully_reassembled: bool,
     record_builder: RecordBuilder,
     key: Bytes,
-    
+
     selection: Arc<Vec<ColumnId>>
 }
 
