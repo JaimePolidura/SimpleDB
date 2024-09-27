@@ -1,4 +1,5 @@
 use db::simple_db::Context;
+use db::SimpleDb;
 
 fn main() {
     let db = db::simple_db::create(shared::start_simpledb_options_builder()
@@ -25,11 +26,34 @@ fn main() {
     db.execute_only_one(&context, "INSERT INTO personas (id, nombre, dinero) VALUES (2, \"Molon\", 11.0);").unwrap();
     db.execute_only_one(&context, "INSERT INTO personas (id, nombre, dinero) VALUES (3, \"Walo\", 12.0);").unwrap();
 
+    selects(db, context);
+}
+
+fn selects(mut db: SimpleDb, context: Context) {
+    //FullScan
+    println!("SELECT * FROM personas WHERE dinero > 10.0;");
     let mut data = db.execute_only_one(&context, "SELECT * FROM personas WHERE dinero > 10.0;")
         .expect("")
         .data();
-
     while let Some(row) = data.next().unwrap() {
-        println!("mai row {}", row);
+        println!("{}", row);
+    }
+
+    //ExactScan
+    println!("SELECT * FROM personas WHERE id == 1;");
+    let mut data = db.execute_only_one(&context, "SELECT * FROM personas WHERE id == 1;")
+        .expect("")
+        .data();
+    while let Some(row) = data.next().unwrap() {
+        println!("{}", row);
+    }
+
+    //Range Scan
+    println!("SELECT * FROM personas WHERE id > 1 AND dinero == 12.0;");
+    let mut data = db.execute_only_one(&context, "SELECT * FROM personas WHERE id > 1 AND dinero == 12.0;")
+        .expect("")
+        .data();
+    while let Some(row) = data.next().unwrap() {
+        println!("{}", row);
     }
 }

@@ -81,7 +81,7 @@ impl ScanType {
             },
             BinaryOperator::Equal => {
                 if right.is_constant() && left.identifier_eq(primary_column_name) {
-                    Ok(ScanType::Exact(Expression::Binary(operator, left.clone(), right.clone())))
+                    Ok(ScanType::Exact(*right.clone()))
                 } else {
                     Ok(ScanType::Full)
                 }
@@ -442,16 +442,12 @@ mod test {
 
         let result = match result { ScanType::Exact(value) => value, _ => panic!("") };
 
-        assert_eq!(result, Expression::Binary(
-            BinaryOperator::Equal,
-            Box::new(Expression::Identifier(String::from("id"))),
-            Box::new(Expression::Literal(Value::I64(1))),
-        ));
+        assert_eq!(result, Expression::Literal(Value::I64(1)));
     }
 
-    //WHERE id == 1 AND dinero == 100
+    //WHERE id == 1 OR dinero == 100
     #[test]
-    fn simple_exact_or() {
+    fn simple_full_or() {
         let result = ScanType::get_scan_type("id", &Limit::None, &Expression::Binary(
             BinaryOperator::Or,
             Box::new(Expression::Binary(
