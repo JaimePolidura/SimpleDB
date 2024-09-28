@@ -53,6 +53,10 @@ impl Row {
     pub(crate) fn get_column_desc(&self, column_name: &str) -> Option<ColumnDescriptor> {
         self.table.get_column_desc(column_name)
     }
+
+    pub fn serialize(self) -> Vec<u8> {
+        self.storage_engine_record.serialize()
+    }
 }
 
 impl fmt::Display for Row {

@@ -32,17 +32,19 @@ pub struct TokenLocation {
     pub column_index: usize, //Starts from 0
 }
 
-pub enum SimpleDbError {
-    //Network
-    CannotDecodeNetworkMessage(String),
+pub type ErrorTypeId = u8;
 
-    //SQL Parsing
+pub enum SimpleDbError {
+    //Network layer errors
+    CannotDecodeNetworkMessage(String),
+    IllegalMessageProtocolState,
+    InvalidRequest,
+
+    //DB Layer errors
     IllegalToken(TokenLocation, String),
     MalformedQuery(String),
     FullScanNotAllowed(),
     InvalidContext(&'static str),
-
-    //General db layer errors
     ColumnNotFound(types::KeyspaceId, String),
     TableNotFound(String),
     TableAlreadyExists(String),
@@ -52,19 +54,13 @@ pub enum SimpleDbError {
     UnknownColumn(String),
     InvalidType(String),
     CannotDecodeColumn(String, Bytes),
-
-    //Databases
     DatabaseAlreadyExists(String),
     DatabaseNotFound(String),
-
-    //Table Descriptor
     CannotCreateTableDescriptor(types::KeyspaceId, std::io::Error),
     CannotOpenTableDescriptor(types::KeyspaceId, std::io::Error),
     CannotReadTableDescriptor(types::KeyspaceId, std::io::Error),
     CannotDecodeTableDescriptor(types::KeyspaceId, DecodeError),
     CannotWriteTableDescriptor(types::KeyspaceId, std::io::Error),
-
-    //Database descriptor
     CannotReadDatabases(std::io::Error),
     CannotOpenDatabaseDescriptor(String, std::io::Error),
     CannotReaDatabaseDescriptor(String, std::io::Error),
@@ -73,35 +69,27 @@ pub enum SimpleDbError {
     CannotWriteDatabaseDescriptor(std::io::Error),
     CannotCreateDatabaseFolder(String, std::io::Error),
 
-    //Keyspaces
+    //Storage layer errors
     KeyspaceNotFound(types::KeyspaceId),
     CannotReadKeyspacesDirectories(std::io::Error),
     CannotReadKeyspaceFile(types::KeyspaceId, std::io::Error),
     CannotCreateKeyspaceDirectory(types::KeyspaceId, std::io::Error),
-
-    //Wal errors
     CannotCreateWal(types::KeyspaceId, types::MemtableId, std::io::Error),
     CannotWriteWalEntry(types::KeyspaceId, types::MemtableId, std::io::Error),
     CannotReadWalEntries(types::KeyspaceId, types::MemtableId, std::io::Error),
     CannotReadWalFiles(types::KeyspaceId, std::io::Error),
     CannotDecodeWal(types::KeyspaceId, types::MemtableId, DecodeError),
-
-    //Manifest errors
     CannotCreateManifest(types::KeyspaceId, std::io::Error),
     CannotWriteManifestOperation(types::KeyspaceId, std::io::Error),
     CannotReadManifestOperations(types::KeyspaceId, std::io::Error),
     CannotDecodeManifest(types::KeyspaceId, DecodeError),
     CannotResetManifest(types::KeyspaceId, std::io::Error),
-
-    //SSTable errors
     CannotOpenSSTableFile(types::KeyspaceId, types::SSTableId, std::io::Error),
     CannotReadSSTableFile(types::KeyspaceId, types::SSTableId, std::io::Error),
     CannotReadSSTablesFiles(types::KeyspaceId, std::io::Error),
     CannotDecodeSSTable(types::KeyspaceId, types::SSTableId, SSTableCorruptedPart, DecodeError),
     CannotDeleteSSTable(types::KeyspaceId, types::SSTableId, std::io::Error),
     CannotCreateSSTableFile(types::KeyspaceId, types::SSTableId, std::io::Error),
-
-    //Transaction log errors
     CannotCreateTransactionLog(std::io::Error),
     CannotWriteTransactionLogEntry(std::io::Error),
     CannotReadTransactionLogEntries(std::io::Error),
@@ -278,6 +266,75 @@ impl Debug for SimpleDbError {
             SimpleDbError::CannotDecodeNetworkMessage(message) => {
                 write!(f, "Invalid context: {}", message)
             }
+            SimpleDbError::IllegalMessageProtocolState => {
+                write!(f, "Illegal protocol message in current state.")
+            }
+            SimpleDbError::InvalidRequest => {
+                write!(f, "Invalid request.")
+            }
+        }
+    }
+}
+
+impl SimpleDbError {
+    pub fn serialize(&self) -> ErrorTypeId {
+        match self {
+            SimpleDbError::CannotDecodeNetworkMessage(_) => 1,
+            SimpleDbError::IllegalMessageProtocolState => 2,
+            SimpleDbError::IllegalToken(_, _) => 3,
+            SimpleDbError::MalformedQuery(_) => 4,
+            SimpleDbError::FullScanNotAllowed() => 5,
+            SimpleDbError::InvalidContext(_) => 6,
+            SimpleDbError::ColumnNotFound(_, _) => 7,
+            SimpleDbError::TableNotFound(_) => 8,
+            SimpleDbError::TableAlreadyExists(_) => 9,
+            SimpleDbError::PrimaryColumnNotIncluded() => 10,
+            SimpleDbError::OnlyOnePrimaryColumnAllowed() => 11,
+            SimpleDbError::ColumnNameAlreadyDefined(_) => 12,
+            SimpleDbError::UnknownColumn(_) => 13,
+            SimpleDbError::InvalidType(_) => 14,
+            SimpleDbError::CannotDecodeColumn(_, _) => 15,
+            SimpleDbError::DatabaseAlreadyExists(_) => 16,
+            SimpleDbError::DatabaseNotFound(_) => 17,
+            SimpleDbError::CannotCreateTableDescriptor(_, _) => 18,
+            SimpleDbError::CannotOpenTableDescriptor(_, _) => 19,
+            SimpleDbError::CannotReadTableDescriptor(_, _) => 20,
+            SimpleDbError::CannotDecodeTableDescriptor(_, _) => 21,
+            SimpleDbError::CannotWriteTableDescriptor(_, _) => 22,
+            SimpleDbError::CannotReadDatabases(_) => 23,
+            SimpleDbError::CannotOpenDatabaseDescriptor(_, _) => 24,
+            SimpleDbError::CannotReaDatabaseDescriptor(_, _) => 25,
+            SimpleDbError::CannotDecodeDatabaseDescriptor(_, _) => 26,
+            SimpleDbError::CannotCreateDatabaseDescriptor(_, _) => 27,
+            SimpleDbError::CannotWriteDatabaseDescriptor(_) => 28,
+            SimpleDbError::CannotCreateDatabaseFolder(_, _) => 29,
+            SimpleDbError::KeyspaceNotFound(_) => 30,
+            SimpleDbError::CannotReadKeyspacesDirectories(_) => 31,
+            SimpleDbError::CannotReadKeyspaceFile(_, _) => 32,
+            SimpleDbError::CannotCreateKeyspaceDirectory(_, _) => 33,
+            SimpleDbError::CannotCreateWal(_, _, _) => 34,
+            SimpleDbError::CannotWriteWalEntry(_, _, _) => 35,
+            SimpleDbError::CannotReadWalEntries(_, _, _) => 36,
+            SimpleDbError::CannotReadWalFiles(_, _) => 37,
+            SimpleDbError::CannotDecodeWal(_, _, _) => 38,
+            SimpleDbError::CannotCreateManifest(_, _) => 39,
+            SimpleDbError::CannotWriteManifestOperation(_, _) => 40,
+            SimpleDbError::CannotReadManifestOperations(_, _) => 41,
+            SimpleDbError::CannotDecodeManifest(_, _) => 42,
+            SimpleDbError::CannotResetManifest(_, _) => 43,
+            SimpleDbError::CannotOpenSSTableFile(_, _, _) => 44,
+            SimpleDbError::CannotReadSSTableFile(_, _, _) => 45,
+            SimpleDbError::CannotReadSSTablesFiles(_, _) => 46,
+            SimpleDbError::CannotDecodeSSTable(_, _, _, _) => 47,
+            SimpleDbError::CannotDeleteSSTable(_, _, _) => 48,
+            SimpleDbError::CannotCreateSSTableFile(_, _, _) => 49,
+            SimpleDbError::CannotCreateTransactionLog(_) => 50,
+            SimpleDbError::CannotWriteTransactionLogEntry(_) => 51,
+            SimpleDbError::CannotReadTransactionLogEntries(_) => 52,
+            SimpleDbError::CannotDecodeTransactionLogEntry(_) => 53,
+            SimpleDbError::CannotResetTransactionLog(_) => 54,
+            SimpleDbError::Internal => 55,
+            SimpleDbError::InvalidRequest => 56,
         }
     }
 }

@@ -1,12 +1,11 @@
-use std::ptr::addr_of;
 use crate::database::databases::Databases;
 use crate::sql::executor::StatementExecutor;
 use crate::sql::parser::parser::Parser;
 use crate::sql::query_iterator::QueryIterator;
+use crate::table::table_descriptor::ColumnDescriptor;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use crate::table::table_descriptor::ColumnDescriptor;
 
 pub struct SimpleDb {
     statement_executor: StatementExecutor,
@@ -37,6 +36,8 @@ pub fn create(
     })
 }
 
+
+#[derive(Clone)]
 pub struct Context {
     transaction: Option<Transaction>,
     database: Option<String>,

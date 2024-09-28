@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::io::{Read, Write};
 use shared::SimpleDbError;
 use shared::SimpleDbError::CannotDecodeNetworkMessage;
 use std::net::TcpStream;
@@ -45,5 +45,10 @@ impl Connection {
         self.tcp_stream.read_exact(&mut buff)
             .map_err(|e| CannotDecodeNetworkMessage(String::from("Cannot read message u64")))?;
         Ok(buff)
+    }
+
+    pub fn write(&mut self, bytes: Vec<u8>) -> Result<usize, SimpleDbError> {
+        self.tcp_stream.write(bytes.as_slice())
+            .map_err(|_| CannotDecodeNetworkMessage(String::from("Cannot write to socket")))
     }
 }

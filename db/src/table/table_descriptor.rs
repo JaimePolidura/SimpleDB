@@ -67,7 +67,7 @@ impl TableDescriptor {
 
         let table_descriptor_bytes = table_descriptor_file.read_all()
             .map_err(|e| SimpleDbError::CannotReadTableDescriptor(keyspace_id, e))?;
-        let (table_name, mut column_descriptors, primary_column_id, flags) = Self::decode_table_descriptor_bytes(
+        let (table_name, mut column_descriptors, primary_column_id, flags) = Self::deserialize_table_descriptor_bytes(
             keyspace_id,
             &table_descriptor_bytes,
             &path
@@ -109,7 +109,7 @@ impl TableDescriptor {
         max_column_id
     }
 
-    fn decode_table_descriptor_bytes(
+    fn deserialize_table_descriptor_bytes(
         keyspace_id: KeyspaceId,
         bytes: &Vec<u8>,
         path: &PathBuf,
@@ -188,7 +188,7 @@ impl TableDescriptor {
 }
 
 impl ColumnDescriptor {
-    pub(crate) fn serialize(&self) -> Vec<u8> {
+    pub fn serialize(&self) -> Vec<u8> {
         let mut serialized = Vec::new();
         serialized.put_u16_le(self.column_id);
         serialized.put_u8(self.column_type.serialize());

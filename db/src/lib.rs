@@ -6,6 +6,7 @@ mod table;
 mod sql;
 mod value;
 
+pub use table::table_descriptor::ColumnDescriptor;
 pub use simple_db::SimpleDb;
 pub use simple_db::Context;
 pub use table::row::Row;

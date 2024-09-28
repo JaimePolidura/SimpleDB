@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::options_file::OptionsFile;
 use crate::server::Server;
 
@@ -10,6 +11,6 @@ mod connection;
 fn main() {
     let options_file = OptionsFile::create();
     let options = options_file.load_options().unwrap();
-    let server = Server::create(options).unwrap();
+    let server = Arc::new(Server::create(options).unwrap());
     server.start()
 }

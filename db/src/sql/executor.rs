@@ -1,18 +1,21 @@
 use crate::database::databases::Databases;
+use crate::selection::Selection;
 use crate::simple_db::{Context, StatementResult};
 use crate::sql::expression::Expression;
 use crate::sql::expression_evaluator::{evaluate_constant_expressions, evaluate_expression};
 use crate::sql::plan::planner::Planner;
 use crate::sql::query_iterator::QueryIterator;
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
+use crate::sql::table_flags::USER_TABLE;
 use crate::sql::validator::StatementValidator;
-use crate::value::{Type, Value};
+use crate::table::table::Table;
+use crate::value::Value;
+use crate::ColumnDescriptor;
 use bytes::Bytes;
 use shared::SimpleDbError::MalformedQuery;
-use shared::{CompactionStrategy, SimpleDbError, SimpleDbOptions};
+use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use crate::sql::table_flags::USER_TABLE;
 
 pub struct StatementExecutor {
     options: Arc<SimpleDbOptions>,
@@ -64,9 +67,10 @@ impl StatementExecutor {
     ) -> Result<StatementResult, SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table_or_err(&select_statement.table_name)?;
+        let columns_desc = self.get_column_desc_by_selection(&select_statement.selection, &table);
         let select_plan = self.planner.plan_select(&table, select_statement, transaction)?;
 
-        Ok(StatementResult::Data(QueryIterator::create(select_plan)))
+        Ok(StatementResult::Data(QueryIterator::create(select_plan, columns_desc)))
     }
 
     fn update(
@@ -248,6 +252,27 @@ impl StatementExecutor {
                 Ok(Statement::Delete(delete))
             },
             _ => Ok(statement)
+        }
+    }
+
+    fn get_column_desc_by_selection(
+        &self,
+        selection: &Selection,
+        table: &Arc<Table>,
+    ) -> Vec<ColumnDescriptor> {
+        match selection {
+            Selection::Some(columns) => {
+                let mut columns_desc = Vec::new();
+                for column_name in columns {
+                    columns_desc.push(table.get_column_desc(column_name).unwrap().clone());
+                }
+                columns_desc
+            },
+            Selection::All => {
+                table.get_columns().values()
+                    .map(|it| it.clone())
+                    .collect()
+            }
         }
     }
 }
