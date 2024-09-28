@@ -6,6 +6,7 @@ use shared::{utils, SimpleDbError, SimpleDbOptions};
 use std::sync::{Arc, Mutex};
 use storage::transactions::transaction::Transaction;
 use crate::sql::statement::CreateTableStatement;
+use crate::table::table_descriptor::TableFlags;
 use crate::value::Type;
 
 pub struct Database {
@@ -70,7 +71,8 @@ impl Database {
     pub fn create_table(
         &self,
         table_name: &str,
-        columns: Vec<(String, Type, bool)>
+        columns: Vec<(String, Type, bool)>,
+        flags: TableFlags,
     ) -> Result<Arc<Table>, SimpleDbError> {
         let primary_column_name = columns.iter()
             .filter(|(_, _, is_primary)| *is_primary)
@@ -82,7 +84,8 @@ impl Database {
             table_name,
             &self.options,
             &self.storage,
-            primary_column_name
+            primary_column_name,
+            flags
         )?;
 
         let mut lock_result = self.database_descriptor.lock();

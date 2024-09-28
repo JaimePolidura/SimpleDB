@@ -33,6 +33,9 @@ pub struct TokenLocation {
 }
 
 pub enum SimpleDbError {
+    //Network
+    CannotDecodeNetworkMessage(String),
+
     //SQL Parsing
     IllegalToken(TokenLocation, String),
     MalformedQuery(String),
@@ -270,6 +273,9 @@ impl Debug for SimpleDbError {
                 write!(f, "Cannot decode column: {}", column_name)
             }
             SimpleDbError::InvalidContext(message) => {
+                write!(f, "Invalid context: {}", message)
+            }
+            SimpleDbError::CannotDecodeNetworkMessage(message) => {
                 write!(f, "Invalid context: {}", message)
             }
         }

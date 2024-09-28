@@ -5,16 +5,20 @@ use std::cmp::max;
 use std::path::PathBuf;
 use std::sync::Arc;
 use crate::value::Type;
+
+pub type TableFlags = u64;
+
 //Maintains information about column ID with its column name, column type, is_primary etc.
 //This file is stored in binary format
 //There is one file of these for each tabl
 
-// Table name length (u16) | Table name bytes...
+// Flags (u64) | Table name length (u16) | Table name bytes...
 // [ Column ID (u16) | Column type (u8) | Is primary (u8) | name length (u32) | name bytes... ]
 pub struct TableDescriptor {
     pub(crate) columns: SkipMap<ColumnId, ColumnDescriptor>,
     pub(crate) table_name: String,
     pub(crate) primary_column_id: ColumnId,
+    pub(crate) flags: TableFlags,
 }
 
 #[derive(Clone)]
@@ -29,7 +33,8 @@ impl TableDescriptor {
     pub fn create(
         keyspace_id: KeyspaceId,
         options: &Arc<shared::SimpleDbOptions>,
-        table_name: &str
+        table_name: &str,
+        flags: u64,
     ) -> Result<(TableDescriptor, SimpleDbFile), SimpleDbError> {
         let mut table_descriptor_file_bytes: Vec<u8> = Vec::new();
         let table_name_butes = table_name.bytes();
@@ -46,6 +51,7 @@ impl TableDescriptor {
             table_name: table_name.to_string(),
             primary_column_id: 0,
             columns: SkipMap::new(),
+            flags
         }, table_descriptor_file))
     }
 
@@ -61,7 +67,7 @@ impl TableDescriptor {
 
         let table_descriptor_bytes = table_descriptor_file.read_all()
             .map_err(|e| SimpleDbError::CannotReadTableDescriptor(keyspace_id, e))?;
-        let (table_name, mut column_descriptors, primary_column_id) = Self::decode_table_descriptor_bytes(
+        let (table_name, mut column_descriptors, primary_column_id, flags) = Self::decode_table_descriptor_bytes(
             keyspace_id,
             &table_descriptor_bytes,
             &path
@@ -71,6 +77,7 @@ impl TableDescriptor {
             columns: Self::index_by_column_name(&mut column_descriptors),
             primary_column_id,
             table_name,
+            flags,
         }, table_descriptor_file))
     }
 
@@ -106,10 +113,11 @@ impl TableDescriptor {
         keyspace_id: KeyspaceId,
         bytes: &Vec<u8>,
         path: &PathBuf,
-    ) -> Result<(String, Vec<ColumnDescriptor>, ColumnId), SimpleDbError> {
+    ) -> Result<(String, Vec<ColumnDescriptor>, ColumnId, TableFlags), SimpleDbError> {
         let mut current_ptr = bytes.as_slice();
         let mut columns_descriptor = Vec::new();
 
+        let table_flags = current_ptr.get_u64_le() as TableFlags;
         //Table name
         let table_name_length = current_ptr.get_u16_le() as usize;
         let name_bytes = &current_ptr[..table_name_length];
@@ -145,7 +153,7 @@ impl TableDescriptor {
             });
         }
 
-        Ok((table_name, columns_descriptor, primary_column_id))
+        Ok((table_name, columns_descriptor, primary_column_id, table_flags))
     }
 
     fn decode_string(bytes: &[u8], keyspace_id: KeyspaceId, path: &PathBuf, index: usize) -> Result<String, SimpleDbError> {

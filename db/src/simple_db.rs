@@ -1,3 +1,4 @@
+use std::ptr::addr_of;
 use crate::database::databases::Databases;
 use crate::sql::executor::StatementExecutor;
 use crate::sql::parser::parser::Parser;
@@ -25,11 +26,10 @@ pub enum StatementResult {
 }
 
 pub fn create(
-    options: SimpleDbOptions,
+    options: Arc<SimpleDbOptions>,
 ) -> Result<SimpleDb, SimpleDbError> {
-    let options = Arc::new(options);
     let databases = Arc::new(Databases::create(options.clone())?);
-
+    
     Ok(SimpleDb {
         statement_executor: StatementExecutor::create(&options, &databases),
         databases,
@@ -89,11 +89,26 @@ impl Context {
         }
     }
 
-    pub fn with_database(name: &str) -> Context {
+    pub fn create_with_database(name: &str) -> Context {
         Context {
             database: Some(name.to_string()),
             transaction: None,
         }
+    }
+
+    pub fn create(name: &str, transaction: Transaction) -> Context {
+        Context {
+            database: Some(name.to_string()),
+            transaction: Some(transaction),
+        }
+    }
+
+    pub fn with_transaction(&mut self, transaction: Transaction) {
+        self.transaction = Some(transaction);
+    }
+
+    pub fn with_database(&mut self, database: &str) {
+        self.database = Some(database.to_string());
     }
 
     pub fn has_transaction(&self) -> bool {
@@ -102,13 +117,6 @@ impl Context {
 
     pub fn has_database(&self) -> bool {
         self.database.is_some()
-    }
-
-    pub fn with(name: &str, transaction: Transaction) -> Context {
-        Context {
-            database: Some(name.to_string()),
-            transaction: Some(transaction),
-        }
     }
 
     pub fn database(&self) -> &String {

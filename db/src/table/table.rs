@@ -1,7 +1,7 @@
 use crate::selection::Selection;
 use crate::table::record::Record;
 use crate::table::row::Row;
-use crate::table::table_descriptor::{ColumnDescriptor, TableDescriptor};
+use crate::table::table_descriptor::{ColumnDescriptor, TableDescriptor, TableFlags};
 use crate::table::table_iterator::TableIterator;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
@@ -28,9 +28,65 @@ pub struct Table {
     pub(crate) primary_column_name: String,
 
     pub(crate) storage: Arc<storage::Storage>,
+
+    pub(crate) flags: TableFlags,
 }
 
 impl Table {
+    pub(crate) fn create(
+        table_name: &str,
+        options: &Arc<shared::SimpleDbOptions>,
+        storage: &Arc<storage::Storage>,
+        primary_column_name: String,
+        flags: TableFlags,
+    ) -> Result<Arc<Table>, SimpleDbError> {
+        let table_keyspace_id = storage.create_keyspace()?;
+        let (table_descriptor, table_descriptor_file) = TableDescriptor::create(
+            table_keyspace_id,
+            options,
+            table_name,
+            flags
+        )?;
+
+        let max_column_id = table_descriptor.get_max_column_id();
+
+        Ok(Arc::new(Table {
+            table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(table_descriptor_file)},
+            next_column_id: AtomicUsize::new(max_column_id as usize + 1),
+            columns_by_id: table_descriptor.columns,
+            table_name: table_descriptor.table_name,
+            storage_keyspace_id: table_keyspace_id,
+            columns_by_name: SkipMap::new(),
+            storage: storage.clone(),
+            primary_column_name,
+            flags
+        }))
+    }
+
+    pub(crate) fn load_tables(
+        options: &Arc<shared::SimpleDbOptions>,
+        storage: &Arc<storage::Storage>,
+    ) -> Result<Vec<Arc<Table>>, SimpleDbError> {
+        let mut tables = Vec::new();
+
+        for keysapce_id in storage.get_keyspaces_id() {
+            let (descriptor, descriptor_file) = TableDescriptor::load_table_descriptor(options, keysapce_id)?;
+            tables.push(Arc::new(Table {
+                table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(descriptor_file)},
+                next_column_id: AtomicUsize::new(descriptor.get_max_column_id() as usize + 1),
+                columns_by_name: Self::index_column_id_by_name(&descriptor.columns),
+                primary_column_name: descriptor.get_primary_column_name(),
+                table_name: descriptor.table_name,
+                storage_keyspace_id: keysapce_id,
+                columns_by_id: descriptor.columns,
+                flags: descriptor.flags,
+                storage: storage.clone(),
+            }));
+        }
+
+        Ok(tables)
+    }
+
     pub fn add_columns(
         &self,
         columns_to_add: Vec<(String, Type, bool)>,
@@ -294,57 +350,6 @@ impl Table {
         self.columns_by_id.insert(column_descriptor.column_id, column_descriptor);
 
         Ok(())
-    }
-
-    pub(crate) fn create(
-        table_name: &str,
-        options: &Arc<shared::SimpleDbOptions>,
-        storage: &Arc<storage::Storage>,
-        primary_column_name: String
-
-    ) -> Result<Arc<Table>, SimpleDbError> {
-        let table_keyspace_id = storage.create_keyspace()?;
-        let (table_descriptor, table_descriptor_file) = TableDescriptor::create(
-            table_keyspace_id,
-            options,
-            table_name
-        )?;
-
-        let max_column_id = table_descriptor.get_max_column_id();
-
-        Ok(Arc::new(Table {
-            table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(table_descriptor_file)},
-            next_column_id: AtomicUsize::new(max_column_id as usize + 1),
-            columns_by_id: table_descriptor.columns,
-            table_name: table_descriptor.table_name,
-            storage_keyspace_id: table_keyspace_id,
-            columns_by_name: SkipMap::new(),
-            storage: storage.clone(),
-            primary_column_name,
-        }))
-    }
-
-    pub(crate) fn load_tables(
-        options: &Arc<shared::SimpleDbOptions>,
-        storage: &Arc<storage::Storage>,
-    ) -> Result<Vec<Arc<Table>>, SimpleDbError> {
-        let mut tables = Vec::new();
-
-        for keysapce_id in storage.get_keyspaces_id() {
-            let (descriptor, descriptor_file) = TableDescriptor::load_table_descriptor(options, keysapce_id)?;
-            tables.push(Arc::new(Table {
-                table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(descriptor_file)},
-                next_column_id: AtomicUsize::new(descriptor.get_max_column_id() as usize + 1),
-                columns_by_name: Self::index_column_id_by_name(&descriptor.columns),
-                primary_column_name: descriptor.get_primary_column_name(),
-                table_name: descriptor.table_name,
-                storage_keyspace_id: keysapce_id,
-                columns_by_id: descriptor.columns,
-                storage: storage.clone(),
-            }));
-        }
-
-        Ok(tables)
     }
 
     pub fn get_primary_column_data(&self) -> Option<ColumnDescriptor> {

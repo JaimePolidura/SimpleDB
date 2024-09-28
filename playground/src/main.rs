@@ -11,18 +11,18 @@ fn main() {
         .memtable_max_size_bytes(8192)
         .compaction_task_frequency_ms(10)
         .sst_size_bytes(65536)
-        .build())
+        .build_arc())
         .unwrap();
 
     db.execute(&Context::empty(), "CREATE DATABASE prueba;").expect("");
-    db.execute(&Context::with_database("prueba"), "CREATE TABLE personas (id I64 PRIMARY KEY, nombre VARCHAR, dinero F64);")
+    db.execute(&Context::create_with_database("prueba"), "CREATE TABLE personas (id I64 PRIMARY KEY, nombre VARCHAR, dinero F64);")
         .expect("");
 
-    let transaction = db.execute_only_one(&Context::with_database("prueba"), "START_TRANSACTION;")
+    let transaction = db.execute_only_one(&Context::create_with_database("prueba"), "START_TRANSACTION;")
         .unwrap()
         .get_transaction();
 
-    let context = Context::with("prueba", transaction);
+    let context = Context::create("prueba", transaction);
 
     db.execute_only_one(&context, "INSERT INTO personas (id, nombre, dinero) VALUES (1, \"Jaime\", 10.0);").unwrap();
     db.execute_only_one(&context, "INSERT INTO personas (id, nombre, dinero) VALUES (2, \"Molon\", 11.0);").unwrap();

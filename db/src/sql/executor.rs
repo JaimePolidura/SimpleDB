@@ -12,6 +12,7 @@ use shared::SimpleDbError::MalformedQuery;
 use shared::{CompactionStrategy, SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::sql::table_flags::USER_TABLE;
 
 pub struct StatementExecutor {
     options: Arc<SimpleDbOptions>,
@@ -144,7 +145,7 @@ impl StatementExecutor {
         create_table_statement: CreateTableStatement,
     ) -> Result<StatementResult, SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
-        database.create_table(create_table_statement.table_name.as_str(), create_table_statement.columns)?;
+        database.create_table(create_table_statement.table_name.as_str(), create_table_statement.columns, USER_TABLE)?;
         Ok(StatementResult::Ok(0))
     }
 

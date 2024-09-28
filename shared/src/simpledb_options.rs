@@ -18,8 +18,20 @@ pub type StorageValueMergerFn = fn(a: &Bytes, b: &Bytes) -> StorageValueMergeRes
 
 #[derive(Clone)]
 pub struct SimpleDbOptions {
-    pub storage_value_merger: Option<StorageValueMergerFn>,
+    //Common/Shared option
+    pub base_path: String,
+
+    //Server layer options
+    pub server_n_worker_threads: u32,
+    pub server_port: u16,
+
+    //DB Layer options
+    pub db_range_scan_allowed: bool,
+    pub db_full_scan_allowed: bool,
+
+    //Storage engine layer options
     pub simple_leveled_compaction_options: SimpleLeveledCompactionOptions,
+    pub storage_value_merger: Option<StorageValueMergerFn>,
     pub tiered_compaction_options: TieredCompactionOptions,
     pub compaction_strategy: CompactionStrategy,
     pub compaction_task_frequency_ms: usize,
@@ -28,11 +40,8 @@ pub struct SimpleDbOptions {
     pub memtable_max_size_bytes: usize,
     pub max_memtables_inactive: usize,
     pub bloom_filter_n_entries: usize,
-    pub db_range_scan_allowed: bool,
-    pub db_full_scan_allowed: bool,
     pub block_size_bytes: usize,
     pub sst_size_bytes: usize,
-    pub base_path: String,
 }
 
 #[derive(Clone, Copy)]
@@ -71,7 +80,9 @@ impl Default for SimpleDbOptions {
             sst_size_bytes: 268435456, //256 MB ~ 64 blocks
             max_memtables_inactive: 8,
             db_full_scan_allowed: true,
+            server_n_worker_threads: 64,
             block_size_bytes: 4096, //4kb
+            server_port: 8888,
         }
     }
 }
