@@ -144,6 +144,10 @@ impl SimpleDbFile {
     }
 
     pub fn write(&mut self, bytes: &[u8]) -> Result<(), std::io::Error> {
+        if bytes.is_empty() {
+            return Ok(());
+        }
+
         match self.mode {
             SimpleDbFileMode::AppendOnly => self.size_bytes = self.size_bytes + bytes.len(),
             SimpleDbFileMode::Mock => return Ok(()),

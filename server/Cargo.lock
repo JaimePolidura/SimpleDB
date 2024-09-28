@@ -399,6 +399,8 @@ dependencies = [
  "crossbeam-skiplist",
  "db",
  "rand",
+ "serde",
+ "serde_json",
  "shared",
  "threadpool",
 ]
@@ -410,6 +412,7 @@ dependencies = [
  "bytes",
  "crossbeam-skiplist",
  "farmhash",
+ "serde",
  "serde_json",
 ]
 

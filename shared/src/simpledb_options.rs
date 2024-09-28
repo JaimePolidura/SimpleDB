@@ -1,13 +1,14 @@
 use std::sync::Arc;
 use bytes::Bytes;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum CompactionStrategy {
     SimpleLeveled,
     Tiered,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum DurabilityLevel {
     Strong, //Writes to memtable after WAL entry has been written to disk (using fsync)
     Weak, //Writes to memtable without waiting for WAL write to complete
@@ -16,9 +17,10 @@ pub enum DurabilityLevel {
 //a is before b, (example b has greater timestamp (txn_id))
 pub type StorageValueMergerFn = fn(a: &Bytes, b: &Bytes) -> StorageValueMergeResult;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SimpleDbOptions {
     //Common/Shared option
+    #[serde(skip)]
     pub base_path: String,
 
     //Server layer options
@@ -31,6 +33,7 @@ pub struct SimpleDbOptions {
 
     //Storage engine layer options
     pub simple_leveled_compaction_options: SimpleLeveledCompactionOptions,
+    #[serde(skip)]
     pub storage_value_merger: Option<StorageValueMergerFn>,
     pub tiered_compaction_options: TieredCompactionOptions,
     pub compaction_strategy: CompactionStrategy,
@@ -44,14 +47,14 @@ pub struct SimpleDbOptions {
     pub sst_size_bytes: usize,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct TieredCompactionOptions {
     pub min_levels_trigger_size_ratio: usize,
     pub max_size_amplification: usize,
     pub size_ratio: usize,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct SimpleLeveledCompactionOptions {
     pub level0_file_num_compaction_trigger: usize,
     pub size_ratio_percent: usize,
