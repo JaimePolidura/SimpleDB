@@ -1,4 +1,5 @@
-use shared::{Connection, SimpleDbError};
+use shared::{SimpleDbError};
+use shared::connection::Connection;
 use shared::SimpleDbError::{CannotDecodeNetworkMessage, InvalidRequest};
 use crate::server::ConnectionId;
 

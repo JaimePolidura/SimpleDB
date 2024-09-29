@@ -1,31 +1,18 @@
 mod simpledb_server;
 mod request;
 mod response;
+mod simple_db_cli;
+mod table_print;
 
-use std::process::exit;
-use std::{env, io};
+use crate::simple_db_cli::SimpleDbCli;
+use std::env;
 
 fn main() {
     let (address, password) = get_database_args();
-
-    loop {
-        let input = read_input_from_user();
-
-        if input.to_lowercase() == "exit" {
-            exit(1);
-        }
-    }
+    let mut app = SimpleDbCli::create(address, password);
+    app.start()
 }
 
-fn read_input_from_user() -> String {
-    let mut line = String::from("");
-
-    io::stdin()
-        .read_line(&mut line)
-        .expect("Failed to read line");
-
-    line
-}
 
 //Address, Password
 fn get_database_args() -> (String, String) {

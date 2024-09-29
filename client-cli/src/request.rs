@@ -6,7 +6,7 @@ pub enum Request {
     //Password, connectionId
     Close(String, usize), //Request Type ID: 2
     //Password, database
-    Init(String, String), //Request Type ID: 3
+    InitConnection(String, String), //Request Type ID: 3
 }
 
 impl Request {
@@ -25,7 +25,7 @@ impl Request {
                 serialized.put_u8(1);
                 serialized.put_u64_le(*connectionId as u64);
             },
-            Request::Init(_, database_name) => {
+            Request::InitConnection(_, database_name) => {
                 serialized.put_u8(3);
                 serialized.put_u32_le(database_name.len() as u32);
                 serialized.extend(database_name.bytes());
@@ -47,7 +47,7 @@ impl Request {
         match self {
             Request::Statement(password, _, _) => password,
             Request::Close(password, _) => password,
-            Request::Init(password, _) => password,
+            Request::InitConnection(password, _) => password,
         }
     }
 }

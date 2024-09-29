@@ -3,12 +3,13 @@ use crate::response::{QueryDataResponse, Response, StatementResponse};
 use crossbeam_skiplist::SkipMap;
 use db::simple_db::StatementResult;
 use db::{Context, SimpleDb};
-use shared::{Connection, SimpleDbError, SimpleDbOptions};
+use shared::{SimpleDbError, SimpleDbOptions};
 use std::io::Write;
 use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use threadpool::ThreadPool;
+use shared::connection::Connection;
 use shared::SimpleDbError::InvalidPassword;
 
 pub type ConnectionId = usize;

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use std::fmt;
 use bytes::Bytes;
-use shared::{ColumnId, ErrorTypeId};
+use shared::{utils, ColumnId, ErrorTypeId};
 use shared::connection::Connection;
 
 pub enum Response {
@@ -19,19 +20,19 @@ pub enum StatementResponse {
 }
 
 pub struct QueryDataResponse {
-    columns_desc: Vec<ColumnDescriptor>,
-    rows: Vec<Row>,
+    pub columns_desc: Vec<ColumnDescriptor>,
+    pub rows: Vec<Row>,
 }
 
 pub struct Row {
-    columns: HashMap<ColumnId, Bytes>,
+    pub columns: HashMap<ColumnId, Bytes>,
 }
 
 pub struct ColumnDescriptor {
-    column_id: ColumnId,
-    column_type: ColumnType,
-    column_name: String,
-    is_primary: bool,
+    pub column_id: ColumnId,
+    pub column_type: ColumnType,
+    pub column_name: String,
+    pub is_primary: bool,
 }
 
 pub enum ColumnType {
@@ -156,6 +157,46 @@ impl ColumnType {
             13 => ColumnType::Date,
             14 => ColumnType::Blob,
             _ => panic!("Cannot deserialize column type ID")
+        }
+    }
+
+    pub fn bytes_to_string(&self, value: &Bytes) -> String {
+        match self {
+            ColumnType::I8 => utils::bytes_to_i8(value).to_string(),
+            ColumnType::U8 => utils::bytes_to_u8(value).to_string(),
+            ColumnType::I16 => utils::bytes_to_i16_le(value).to_string(),
+            ColumnType::U16 => utils::bytes_to_u16_le(value).to_string(),
+            ColumnType::U32 => utils::bytes_to_u32_le(value).to_string(),
+            ColumnType::I32 => utils::bytes_to_i32_le(value).to_string(),
+            ColumnType::U64 => utils::bytes_to_u64_le(value).to_string(),
+            ColumnType::I64 => utils::bytes_to_i64_le(value).to_string(),
+            ColumnType::F32 => format!("{:.2}", utils::bytes_to_f32_le(value)).to_string(),
+            ColumnType::F64 => format!("{:.2}", utils::bytes_to_f64_le(value)).to_string(),
+            ColumnType::Boolean => if value[0] == 0x00 { String::from("false") } else { String::from("true") }
+            ColumnType::String => String::from_utf8(value.to_vec()).unwrap(),
+            ColumnType::Date => todo!(),
+            ColumnType::Blob => format!("{:02X?}", value.to_vec()),
+            ColumnType::Null => panic!("")
+        }
+    }
+
+    pub fn to_string(&self) -> &str {
+        match self {
+            ColumnType::I8 => "I8",
+            ColumnType::U8 => "U8",
+            ColumnType::I16 => "I16",
+            ColumnType::U16 => "U16",
+            ColumnType::U32 => "U32",
+            ColumnType::I32 => "I32",
+            ColumnType::U64 => "U64",
+            ColumnType::I64 => "I64",
+            ColumnType::F32 => "F32",
+            ColumnType::F64 => "F64",
+            ColumnType::Boolean => "Boolean",
+            ColumnType::String => "String",
+            ColumnType::Date => "Date",
+            ColumnType::Blob => "Blob",
+            ColumnType::Null => "Null",
         }
     }
 }
