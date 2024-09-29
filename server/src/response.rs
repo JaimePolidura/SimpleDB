@@ -1,7 +1,7 @@
 use bytes::BufMut;
-use crate::server::ConnectionId;
 use db::{ColumnDescriptor, Row};
 use shared::{ErrorTypeId, SimpleDbError};
+use crate::server::ConnectionId;
 
 pub enum Response {
     Statement(StatementResponse),

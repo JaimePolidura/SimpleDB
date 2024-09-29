@@ -26,6 +26,7 @@ pub struct SimpleDbOptions {
     //Server layer options
     pub server_n_worker_threads: u32,
     pub server_port: u16,
+    pub server_password: String,
 
     //DB Layer options
     pub db_range_scan_allowed: bool,
@@ -86,6 +87,7 @@ impl Default for SimpleDbOptions {
             server_n_worker_threads: 64,
             block_size_bytes: 4096, //4kb
             server_port: 8888,
+            server_password: String::from("123456"),
         }
     }
 }

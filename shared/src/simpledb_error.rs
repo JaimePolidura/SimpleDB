@@ -38,6 +38,7 @@ pub enum SimpleDbError {
     //Network layer errors
     CannotDecodeNetworkMessage(String),
     IllegalMessageProtocolState,
+    InvalidPassword,
     InvalidRequest,
 
     //DB Layer errors
@@ -272,6 +273,9 @@ impl Debug for SimpleDbError {
             SimpleDbError::InvalidRequest => {
                 write!(f, "Invalid request.")
             }
+            SimpleDbError::InvalidPassword => {
+                write!(f, "Invalid password.")
+            }
         }
     }
 }
@@ -335,6 +339,7 @@ impl SimpleDbError {
             SimpleDbError::CannotResetTransactionLog(_) => 54,
             SimpleDbError::Internal => 55,
             SimpleDbError::InvalidRequest => 56,
+            SimpleDbError::InvalidPassword => 57
         }
     }
 }

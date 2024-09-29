@@ -2,7 +2,7 @@ use std::fmt;
 use std::fmt::Formatter;
 use crate::table::record::Record;
 use crate::table::table::Table;
-use bytes::Bytes;
+use bytes::{BufMut, Bytes};
 use shared::{utils, ColumnId, SimpleDbError};
 use std::sync::Arc;
 use shared::SimpleDbError::CannotDecodeColumn;
@@ -55,7 +55,10 @@ impl Row {
     }
 
     pub fn serialize(self) -> Vec<u8> {
-        self.storage_engine_record.serialize()
+        let mut serialized: Vec<u8> = Vec::new();
+        serialized.put_u32_le(self.storage_engine_record.get_n_columns() as u32);
+        serialized.extend(self.storage_engine_record.serialize());
+        serialized
     }
 }
 

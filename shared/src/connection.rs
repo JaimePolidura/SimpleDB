@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
-use shared::SimpleDbError;
-use shared::SimpleDbError::CannotDecodeNetworkMessage;
 use std::net::TcpStream;
+use crate::SimpleDbError;
+use crate::SimpleDbError::CannotDecodeNetworkMessage;
 
 pub struct Connection {
     tcp_stream: TcpStream

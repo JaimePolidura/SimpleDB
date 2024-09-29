@@ -25,6 +25,10 @@ impl Record {
         }
     }
 
+    pub fn get_n_columns(&self) -> usize {
+        self.data_records.len()
+    }
+
     pub fn get_value(&self, column_id_lookup: ColumnId) -> Option<&Bytes> {
         for (current_column_id, current_column_value) in &self.data_records {
             if *current_column_id == column_id_lookup {

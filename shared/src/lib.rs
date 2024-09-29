@@ -5,6 +5,7 @@ mod simpledb_options;
 mod simpledb_error;
 mod types;
 
+pub mod connection;
 pub mod utils;
 
 pub use simpledb_file::*;

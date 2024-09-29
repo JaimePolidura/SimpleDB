@@ -7,7 +7,6 @@ mod server;
 mod options_file;
 mod request;
 mod response;
-mod connection;
 
 fn main() {
     let options_path = get_simpledb_options_path()

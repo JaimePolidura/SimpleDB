@@ -1,15 +1,15 @@
-use crate::connection::Connection;
 use crate::request::Request;
 use crate::response::{QueryDataResponse, Response, StatementResponse};
 use crossbeam_skiplist::SkipMap;
 use db::simple_db::StatementResult;
 use db::{Context, SimpleDb};
-use shared::{SimpleDbError, SimpleDbOptions};
+use shared::{Connection, SimpleDbError, SimpleDbOptions};
 use std::io::Write;
 use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use threadpool::ThreadPool;
+use shared::SimpleDbError::InvalidPassword;
 
 pub type ConnectionId = usize;
 
@@ -68,19 +68,33 @@ impl Server {
     )  -> Result<Response, SimpleDbError> {
         let request = Request::deserialize_from_connection(connection)?;
 
+        Self::authenticate(&server, &request)?;
+
         match request {
-            Request::Init(database) => {
+            Request::Init(_, database) => {
                 let connection_id = Self::handle_init_connection_request(server, database)?;
                 Ok(Response::Init(connection_id))
             },
-            Request::Statement(connection_id, statement) => {
+            Request::Statement(_, connection_id, statement) => {
                 let statement_result = Self::handle_statement_request(connection_id, server, statement)?;
                 Ok(Response::Statement(statement_result))
             },
-            Request::Close(connection_id) => {
+            Request::Close(_, connection_id) => {
                 Self::handle_close_request(server, connection_id);
                 Ok(Response::Ok)
             }
+        }
+    }
+
+    fn authenticate(
+        server: &Arc<Server>,
+        request: &Request
+    ) -> Result<(), SimpleDbError> {
+        let authentication = request.get_authentication();
+        if authentication.password != server.options.server_password {
+            Err(InvalidPassword)
+        } else {
+            Ok(())
         }
     }
 
