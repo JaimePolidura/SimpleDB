@@ -15,16 +15,16 @@ impl Request {
         serialized.extend(self.serialize_auth());
 
         match self {
-            Request::Statement(_, connectionId, statement) => {
+            Request::Statement(_, connection_id, statement) => {
                 serialized.put_u8(1);
-                serialized.put_u64_le(*connectionId as u64);
+                serialized.put_u64_le(*connection_id as u64);
                 serialized.put_u32_le(statement.len() as u32);
                 serialized.extend(statement.bytes());
-            },
-            Request::Close(_, connectionId) => {
+            }
+            Request::Close(_, connection_id) => {
                 serialized.put_u8(1);
-                serialized.put_u64_le(*connectionId as u64);
-            },
+                serialized.put_u64_le(*connection_id as u64);
+            }
             Request::InitConnection(_, database_name) => {
                 serialized.put_u8(3);
                 serialized.put_u32_le(database_name.len() as u32);

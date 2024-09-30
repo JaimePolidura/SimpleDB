@@ -4,10 +4,11 @@ use crate::simpledb_server::SimpleDbServer;
 use crate::table_print::TablePrint;
 use std::cmp::Ordering;
 use std::io;
+use std::io::{stdout, Write};
 use std::process::exit;
 
 pub enum SimpleDbClientState {
-    ConnectedToDatabase(String, usize),
+    ConnectedToDatabase(usize),
     NotConnectedToDatabase,
 }
 
@@ -23,7 +24,7 @@ impl SimpleDbCli {
         password: String,
     ) -> SimpleDbCli {
         SimpleDbCli {
-            server: SimpleDbServer::create(address, password.clone()),
+            server: SimpleDbServer::create(address),
             state: SimpleDbClientState::NotConnectedToDatabase,
             password
         }
@@ -32,19 +33,32 @@ impl SimpleDbCli {
     pub fn start(&mut self) -> ! {
         loop {
             print!("simpledb> ");
-            let input = self.read_input_from_user();
+            let _ = stdout().flush();
+            let input = self.read_input_from_user().to_lowercase();
+            let input = input.trim_end();
 
-            match input.to_lowercase().as_str() {
-                "use" => self.use_command(input.as_str()),
-                "exit" => self.exit_command(),
-                _ => self.statement_command(input.as_str()),
-            };
+            if input.eq("show databases;") {
+                self.show_databases_command();
+            } else if input.eq("use")  {
+                self.use_command(input);
+            } else if input.eq("exit") {
+                self.exit_command();
+            } else {
+                self.statement_command(input);
+            }
         }
+    }
+
+    fn show_databases_command(&mut self) {
+        let response = self.server.send_request(Request::Statement(
+            self.password.clone(), 0, String::from("SHOW DATABASES;")
+        ));
+        self.print_response(response);
     }
 
     fn statement_command(&mut self, statement: &str) {
         match self.state {
-            SimpleDbClientState::ConnectedToDatabase(_, connection_id) => {
+            SimpleDbClientState::ConnectedToDatabase(connection_id) => {
                 let response = self.server.send_request(Request::Statement(
                     self.password.clone(), connection_id, statement.to_string()
                 ));
@@ -137,15 +151,18 @@ impl SimpleDbCli {
     }
 
     fn exit_command(&mut self) {
-        match self.state {
-            SimpleDbClientState::ConnectedToDatabase(_, _) => self.disconnect_from_current_database(),
-            SimpleDbClientState::NotConnectedToDatabase => exit(1),
+        if matches!(self.state, SimpleDbClientState::ConnectedToDatabase(_)) {
+            self.disconnect_from_current_database();
         }
+        
+        println!("Bye");
+        exit(0)
     }
 
     fn use_command(&mut self, input: &str) {
         if let Some(database_name) = input.split_whitespace().next() {
             self.connect_to_database(database_name.to_string());
+            println!("Changed current database!");
         } else {
             println!("Invalid syntax. Usage: USE <Database name>");
         }
@@ -153,7 +170,7 @@ impl SimpleDbCli {
 
     fn connect_to_database(&mut self, database_name: String) {
         match self.state {
-            SimpleDbClientState::ConnectedToDatabase(_, _) => self.disconnect_from_current_database(),
+            SimpleDbClientState::ConnectedToDatabase(_) => self.disconnect_from_current_database(),
             _ => {}
         };
 
@@ -162,7 +179,7 @@ impl SimpleDbCli {
         ));
         match response {
             Response::Init(connection_id) => {
-                self.state = SimpleDbClientState::ConnectedToDatabase(database_name, connection_id);
+                self.state = SimpleDbClientState::ConnectedToDatabase(connection_id);
             },
             _ => {
                 println!("Cannot connect to database")
@@ -174,6 +191,7 @@ impl SimpleDbCli {
         self.server.send_request(Request::Close(
             self.password.clone(), self.state.get_connection_id()
         ));
+        println!("mysql> Exited ")
     }
 
     fn read_input_from_user(&self) -> String {
@@ -190,7 +208,7 @@ impl SimpleDbCli {
 impl SimpleDbClientState {
     pub fn get_connection_id(&self) -> usize {
         match self {
-            SimpleDbClientState::ConnectedToDatabase(_, connection_id) => *connection_id,
+            SimpleDbClientState::ConnectedToDatabase(connection_id) => *connection_id,
             SimpleDbClientState::NotConnectedToDatabase => panic!("Illegal code path")
         }
     }

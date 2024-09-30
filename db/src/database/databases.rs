@@ -84,9 +84,10 @@ impl Databases {
         for file in fs::read_dir(Path::new(&options.base_path))
             .map_err(|e| SimpleDbError::CannotReadDatabases(e))? {
 
-            if file.is_ok() {
-                let file = file.unwrap();
+            let file = file.unwrap();
+            let file_meta = file.metadata();
 
+            if file_meta.is_ok() && file_meta.unwrap().is_dir() {
                 let database_name = file.file_name();
                 let database_name = database_name.to_str().unwrap();
                 let database_options = shared::start_simpledb_options_builder_from(options)

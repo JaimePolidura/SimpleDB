@@ -351,6 +351,8 @@ impl Parser {
     }
 
     fn show(&mut self) -> Result<Statement, SimpleDbError> {
+        self.advance()?;
+
         match self.advance()? {
             Token::Databases => Ok(Statement::ShowDatabases),
             Token::Tables => Ok(Statement::ShowTables),
@@ -359,9 +361,11 @@ impl Parser {
     }
 
     fn describe(&mut self) -> Result<Statement, SimpleDbError> {
+        self.advance()?;
+
         match self.advance()? {
-           Token::Identifier(table) => Ok(Statement::Describe(table)),
-            _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Expact table name after describe")))
+           Token::Identifier(table) => Ok(Statement::Describe(table.clone())),
+            _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Expact table name after describe"))),
         }
     }
 
@@ -636,6 +640,31 @@ mod test {
             }
             _ => panic!()
         }
+    }
+
+    #[test]
+    fn describe_table() {
+        let mut parser = Parser::create(String::from(
+            "DESCRIBE personas;"
+        ));
+        let statement = parser.next_statement().unwrap().unwrap();
+
+        match statement {
+            Statement::Describe(table) => {
+                assert_eq!(table, String::from("personas"))
+            }
+            _ => panic!("")
+        }
+    }
+
+    #[test]
+    fn show_databases() {
+        let mut parser = Parser::create(String::from(
+            "SHOW DATABASES;"
+        ));
+        let statement = parser.next_statement().unwrap().unwrap();
+
+        assert!(matches!(statement, Statement::ShowDatabases));
     }
 
     #[test]

@@ -14,6 +14,7 @@ pub struct SharedRef<T> {
     pub shared_ref: T,
 }
 
+#[allow(dead_code)]
 impl<T> AtomicSharedRef<T> {
     pub fn create(ptr: T) -> AtomicSharedRef<T> {
         AtomicSharedRef {

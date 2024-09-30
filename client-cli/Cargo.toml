@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 shared = {path = "../shared" }
 bytes = "1.6.1"
+log = "0.4.22"

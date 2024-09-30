@@ -17,9 +17,9 @@ fn main() {
 //Address, Password
 fn get_database_args() -> (String, String) {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 2 {
+    if args.len() < 3 {
         panic!("Invalid args. Expect <address> <password>")
     }
 
-    (args[0].clone(), args[1].clone())
+    (args[1].clone(), args[2].clone())
 }

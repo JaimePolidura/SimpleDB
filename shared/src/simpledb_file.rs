@@ -1,7 +1,6 @@
 use std::cell::UnsafeCell;
 use std::fs;
 use std::fs::{File, OpenOptions};
-use std::hash::Hash;
 use std::io::{Read, Write};
 use std::os::windows::fs::FileExt;
 use std::path::{Path, PathBuf};

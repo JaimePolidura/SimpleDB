@@ -131,7 +131,7 @@ pub fn extract_number_from_file_name(
     if split.is_some() {
         split.unwrap()
             .parse::<usize>()
-            .map_err(|e| ())
+            .map_err(|_| ())
     } else {
         Err(())
     }
@@ -163,7 +163,7 @@ where
     T: Copy
 {
     if index >= vec.len() {
-        for i in 0..index - vec.len() + 1 {
+        for _ in 0..index - vec.len() + 1 {
             vec.push(value);
         }
     }

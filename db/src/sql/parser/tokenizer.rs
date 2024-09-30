@@ -178,7 +178,7 @@ impl Tokenizer {
                 if self.advance_if_next_string_eq("ATE") {
                     Ok(Token::ColumnType(Type::Date))
                 } else if self.advance_if_next_string_eq("ESCRIBE"){
-                    Ok(Token::Databases)
+                    Ok(Token::Describe)
                 } else if self.advance_if_next_string_eq("ATABASES"){
                     Ok(Token::Databases)
                 } else if self.advance_if_next_string_eq("ELETE"){

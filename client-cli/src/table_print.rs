@@ -57,10 +57,19 @@ impl TablePrint {
         self.print_rows();
 
         self.print_horizontal_line();
+
+        self.print_resume();
+    }
+
+    fn print_resume(&self) {
+        println!("{} rows in set", self.rows.len());
     }
 
     fn print_rows(&self) {
-        print!("|");
+        if !self.rows.is_empty() {
+            print!("|");
+        }
+
         for (row_index, row) in self.rows.iter().enumerate() {
             for (column_index, cell) in row.iter().enumerate() {
                 let column_width: usize = self.columns_width[column_index];

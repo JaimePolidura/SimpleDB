@@ -1,8 +1,7 @@
-use std::collections::HashMap;
-use std::fmt;
 use bytes::Bytes;
-use shared::{utils, ColumnId, ErrorTypeId};
 use shared::connection::Connection;
+use shared::{utils, ColumnId, ErrorTypeId};
+use std::collections::HashMap;
 
 pub enum Response {
     Statement(StatementResponse),
@@ -50,7 +49,6 @@ pub enum ColumnType {
     String,
     Date,
     Blob,
-    Null
 }
 
 impl Response {
@@ -176,7 +174,6 @@ impl ColumnType {
             ColumnType::String => String::from_utf8(value.to_vec()).unwrap(),
             ColumnType::Date => todo!(),
             ColumnType::Blob => format!("{:02X?}", value.to_vec()),
-            ColumnType::Null => panic!("")
         }
     }
 
@@ -196,7 +193,6 @@ impl ColumnType {
             ColumnType::String => "String",
             ColumnType::Date => "Date",
             ColumnType::Blob => "Blob",
-            ColumnType::Null => "Null",
         }
     }
 }

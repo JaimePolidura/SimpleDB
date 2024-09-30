@@ -1,9 +1,8 @@
 use crate::types;
+use bytes::Bytes;
 use std::fmt::{Debug, Formatter};
-use std::panic::Location;
 use std::path::PathBuf;
 use std::string::FromUtf8Error;
-use bytes::Bytes;
 
 pub enum DecodeErrorType {
     CorruptedCrc(u32, u32), //Expected crc, actual crc
@@ -159,7 +158,7 @@ impl Debug for SimpleDbError {
             SimpleDbError::CannotReadSSTableFile(keyspace_id, sstable_id, io_error) => {
                 write!(f, "Cannot read SSTable. SSTable ID: {}. Error: {}. Keyspace ID: {}", sstable_id, io_error, keyspace_id)
             }
-            SimpleDbError::CannotDecodeSSTable(keyspace_id, sstable_id, error_part, decode_error) => {
+            SimpleDbError::CannotDecodeSSTable(_, sstable_id, error_part, decode_error) => {
                 write!(f, "{}", sstable_decode_error_to_message(*sstable_id, error_part.clone(), decode_error))
             }
             SimpleDbError::CannotDeleteSSTable(keyspace_id, sstable_id, io_error) => {

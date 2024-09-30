@@ -8,6 +8,7 @@ use std::io::Write;
 use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use crossbeam_skiplist::map::Entry;
 use threadpool::ThreadPool;
 use shared::connection::Connection;
 use shared::SimpleDbError::InvalidPassword;
@@ -104,13 +105,12 @@ impl Server {
         server: Arc<Server>,
         statement: String
     ) -> Result<StatementResponse, SimpleDbError> {
-        let context = server.context_by_connection_id.get(&connection_id);
-        if context.is_none() {
-            return Err(SimpleDbError::IllegalMessageProtocolState);
-        }
+        let mut context = match server.context_by_connection_id.get(&connection_id) {
+            Some(context_entry) => context_entry.value().clone(),
+            None => Context::empty()
+        };
 
-        let context = context.as_ref().unwrap().value();
-        let statement_result = server.simple_db.execute_only_one(context, &statement)?;
+        let statement_result = server.simple_db.execute_only_one(&context, &statement)?;
 
         match statement_result {
             StatementResult::Describe(describe) => Ok(StatementResponse::Describe(describe)),
@@ -118,7 +118,6 @@ impl Server {
             StatementResult::Tables(tables) => Ok(StatementResponse::Tables(tables)),
             StatementResult::Ok(n) => Ok(StatementResponse::Ok(n)),
             StatementResult::TransactionStarted(transaction) => {
-                let mut context = context.clone();
                 context.with_transaction(transaction);
                 server.context_by_connection_id.insert(connection_id, context);
                 Ok(StatementResponse::Ok(0))

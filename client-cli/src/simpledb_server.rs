@@ -5,28 +5,26 @@ use crate::response::Response;
 
 pub struct SimpleDbServer {
     connection: Connection,
-    password: String,
 }
 
 impl SimpleDbServer {
+    pub fn create(
+        address: String,
+    ) -> SimpleDbServer {
+        println!("simpledb> Connecting to {}!", address);
+
+        match TcpStream::connect(address.clone()) {
+            Ok(stream) => {
+                println!("simpledb> Connected to {}!", address);
+                SimpleDbServer { connection: Connection::create(stream), }
+            },
+            Err(_) => panic!("ERROR Cannot connect to {}. Make sure the server is running or the address is correct", address)
+        }
+    }
+
     pub fn send_request(&mut self, request: Request) -> Response {
         let serialized = request.serialize();
         self.connection.write(serialized).expect("Cannto write to server");
         Response::deserialize_from_connection(&mut self.connection)
-    }
-
-    pub fn create(
-        address: String,
-        password: String,
-    ) -> SimpleDbServer {
-        match TcpStream::connect(address) {
-            Ok(stream) => {
-                SimpleDbServer {
-                    connection: Connection::create(stream),
-                    password
-                }
-            },
-            Err(e) => panic!("{}", e)
-        }
     }
 }

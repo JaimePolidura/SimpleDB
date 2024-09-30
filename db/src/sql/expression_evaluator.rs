@@ -234,6 +234,7 @@ mod test {
             storage_keyspace_id: 1,
             columns_by_name: SkipMap::new(),
             columns_by_id: SkipMap::new(),
+            flags: 0
         };
 
         table.add_columns(vec![
