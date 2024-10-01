@@ -6,7 +6,6 @@ use crate::sql::expression_evaluator::{evaluate_constant_expressions, evaluate_e
 use crate::sql::plan::planner::Planner;
 use crate::sql::query_iterator::QueryIterator;
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
-use crate::sql::table_flags::USER_TABLE;
 use crate::sql::validator::StatementValidator;
 use crate::table::table::Table;
 use crate::value::Value;
@@ -149,7 +148,7 @@ impl StatementExecutor {
         create_table_statement: CreateTableStatement,
     ) -> Result<StatementResult, SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
-        database.create_table(create_table_statement.table_name.as_str(), create_table_statement.columns, USER_TABLE)?;
+        database.create_table(create_table_statement.table_name.as_str(), create_table_statement.columns)?;
         Ok(StatementResult::Ok(0))
     }
 

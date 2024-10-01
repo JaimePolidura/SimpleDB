@@ -1,7 +1,6 @@
 use crate::types;
 use bytes::Bytes;
 use std::fmt::{Debug, Formatter};
-use std::path::PathBuf;
 use std::string::FromUtf8Error;
 
 pub enum DecodeErrorType {
@@ -13,7 +12,6 @@ pub enum DecodeErrorType {
 }
 
 pub struct DecodeError {
-    pub path: PathBuf,
     pub offset: usize,
     pub index: usize,
     pub error_type: DecodeErrorType,
@@ -70,6 +68,9 @@ pub enum SimpleDbError {
     CannotCreateDatabaseFolder(String, std::io::Error),
 
     //Storage layer errors
+    CannotCreateKeyspaceDescriptorFile(types::KeyspaceId, std::io::Error),
+    CannotReadKeyspaceDescriptorFile(types::KeyspaceId, std::io::Error),
+    CannotOpenKeyspaceDescriptorFile(types::KeyspaceId, std::io::Error),
     KeyspaceNotFound(types::KeyspaceId),
     CannotReadKeyspacesDirectories(std::io::Error),
     CannotReadKeyspaceFile(types::KeyspaceId, std::io::Error),
@@ -199,6 +200,15 @@ impl Debug for SimpleDbError {
             }
             SimpleDbError::CannotCreateKeyspaceDirectory(keyspace_id, io_error) => {
                 write!(f, "Cannot create keyspace directory. IO Error: {}. Keyspace ID: {}", io_error, keyspace_id)
+            }
+            SimpleDbError::CannotCreateKeyspaceDescriptorFile(keyspace_id, io_error) => {
+                write!(f, "Cannot create keyspace descriptor. IO Error: {}, Keyspace ID: {}", io_error, keyspace_id)
+            },
+            SimpleDbError::CannotReadKeyspaceDescriptorFile(keyspace_id, io_error) => {
+                write!(f, "Cannot read keyspace descriptor file. IO Error: {} Keyspace ID: {}", io_error, keyspace_id)
+            },
+            SimpleDbError::CannotOpenKeyspaceDescriptorFile(keyspace_id, io_error) => {
+                write!(f, "Cannot open keyspace descriptor file. IO Error: {} Keyspace ID: {}", io_error, keyspace_id)
             }
             SimpleDbError::CannotReadDatabases(io_error) => {
                 write!(f, "Cannot list database files in base path. IO Error: {}", io_error)
@@ -339,6 +349,9 @@ impl SimpleDbError {
             SimpleDbError::InvalidRequestBinaryFormat => 56,
             SimpleDbError::InvalidPassword => 57,
             SimpleDbError::NetworkError(_) => 58,
+            SimpleDbError::CannotCreateKeyspaceDescriptorFile(_, _) => 59,
+            SimpleDbError::CannotReadKeyspaceDescriptorFile(_, _) => 60,
+            SimpleDbError::CannotOpenKeyspaceDescriptorFile(_, _) => 61,
         }
     }
 }
@@ -379,8 +392,8 @@ fn sstable_decode_error_to_message(
 fn decode_error_to_message(decode_error: &DecodeError) -> String {
     let mut message = String::new();
 
-    message.push_str(format!("File {} in file offset {} in index {}: ", decode_error.path.as_path().to_str().unwrap(),
-                         decode_error.offset, decode_error.index).as_str());
+    message.push_str(format!("File offset {} in index {}: ", decode_error.offset,
+                             decode_error.index).as_str());
     message.push_str(decode_error_type_to_message(&decode_error.error_type).as_str());
 
     message

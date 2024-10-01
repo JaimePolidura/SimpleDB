@@ -10,11 +10,11 @@ use bytes::Bytes;
 use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use shared::{SimpleDbError, SimpleDbOptions};
+use shared::{Flag, KeyspaceId, SimpleDbError, SimpleDbOptions};
 
 pub struct Storage {
     transaction_manager: Arc<TransactionManager>,
-    options: Arc<shared::SimpleDbOptions>,
+    options: Arc<SimpleDbOptions>,
     keyspaces: Keyspaces,
 }
 
@@ -177,6 +177,11 @@ impl Storage {
         Ok(())
     }
 
+    pub fn get_flags(&self, keyspace_id: KeyspaceId) -> Result<Flag, SimpleDbError> {
+        let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
+        Ok(keyspace.flags())
+    }
+
     pub fn start_transaction_with_isolation(&self, isolation_level: IsolationLevel) -> Transaction {
         self.transaction_manager.start_transaction(isolation_level)
     }
@@ -193,8 +198,8 @@ impl Storage {
         self.transaction_manager.rollback(transaction)
     }
 
-    pub fn create_keyspace(&self) -> Result<shared::KeyspaceId, shared::SimpleDbError> {
-        let keyspace = self.keyspaces.create_keyspace()?;
+    pub fn create_keyspace(&self, flag: Flag) -> Result<shared::KeyspaceId, shared::SimpleDbError> {
+        let keyspace = self.keyspaces.create_keyspace(flag)?;
         keyspace.start_compaction_thread();
         Ok(keyspace.keyspace_id())
     }

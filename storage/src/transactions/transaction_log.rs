@@ -89,9 +89,7 @@ impl TransactionLog {
             let (decoded_entry, decoded_size) = TransactionLogEntry::decode(
                 &mut current_ptr,
                 current_offset,
-                entries.len(),
-                &self.options
-            )?;
+                entries.len())?;
 
             current_offset = current_offset + decoded_size;
             entries.push(decoded_entry);
@@ -106,12 +104,10 @@ impl TransactionLogEntry {
         current_ptr: &mut &[u8],
         current_offset: usize,
         n_entry_to_decode: usize,
-        options: &Arc<shared::SimpleDbOptions>,
     ) -> Result<(TransactionLogEntry, usize), shared::SimpleDbError> {
         let expected_crc = current_ptr.get_u32_le();
         let encoded_size = Self::encoded_size(current_ptr[0])
             .map_err(|_| shared::SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
-                path: to_transaction_log_file_path(options),
                 offset: current_offset,
                 index: n_entry_to_decode,
                 error_type: shared::DecodeErrorType::UnknownFlag(current_ptr[0] as usize)
@@ -120,7 +116,6 @@ impl TransactionLogEntry {
 
         if actual_crc != expected_crc {
             return Err(shared::SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
-                path: to_transaction_log_file_path(options),
                 offset: current_offset,
                 index: n_entry_to_decode,
                 error_type: shared::DecodeErrorType::CorruptedCrc(expected_crc, actual_crc)
@@ -140,7 +135,6 @@ impl TransactionLogEntry {
             COMMIT_BINARY_CODE => TransactionLogEntry::Commit(txn_id),
             START_BINARY_CODE => TransactionLogEntry::Start(txn_id),
             _ => return Err(shared::SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
-                path: to_transaction_log_file_path(options),
                 offset: current_offset,
                 index: n_entry_to_decode,
                 error_type: shared::DecodeErrorType::UnknownFlag(current_ptr[0] as usize)

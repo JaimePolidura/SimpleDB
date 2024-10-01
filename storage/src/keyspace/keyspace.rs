@@ -11,6 +11,8 @@ use crate::SimpleDbStorageIterator;
 use bytes::Bytes;
 use std::fs;
 use std::sync::Arc;
+use shared::Flag;
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::utils::storage_engine_iterator::StorageEngineItertor;
 
 pub struct Keyspace {
@@ -21,17 +23,20 @@ pub struct Keyspace {
     sstables: Arc<SSTables>,
     memtables: Memtables,
     manifest: Arc<Manifest>,
+    descriptor: KeyspaceDescriptor,
 }
 
 impl Keyspace {
     pub fn create_new(
         keyspace_id: shared::KeyspaceId,
         transaction_manager: Arc<TransactionManager>,
-        options: Arc<shared::SimpleDbOptions>
+        options: Arc<shared::SimpleDbOptions>,
+        flags: Flag
     ) -> Result<Arc<Keyspace>, shared::SimpleDbError> {
         let path = shared::get_directory_usize(&options.base_path, keyspace_id);
         fs::create_dir(path.as_path())
             .map_err(|e| shared::SimpleDbError::CannotCreateKeyspaceDirectory(keyspace_id, e))?;
+        KeyspaceDescriptor::create(flags, path.clone(), keyspace_id)?;
         Self::create_and_load(keyspace_id, transaction_manager, options)
     }
 
@@ -40,19 +45,22 @@ impl Keyspace {
         transaction_manager: Arc<TransactionManager>,
         options: Arc<shared::SimpleDbOptions>
     ) -> Result<Arc<Keyspace>, shared::SimpleDbError> {
+        let path = shared::get_directory_usize(&options.base_path, keyspace_id);
         let manifest = Arc::new(Manifest::create(options.clone(), keyspace_id)?);
         let sstables = Arc::new(SSTables::open(options.clone(), keyspace_id, manifest.clone())?);
         let memtables = Memtables::create_and_recover_from_wal(options.clone(), keyspace_id)?;
-        let compaction =  Compaction::create(transaction_manager.clone(), options.clone(),
-                                             sstables.clone(), manifest.clone(), keyspace_id);
+        let descriptor = KeyspaceDescriptor::load_from_disk(keyspace_id, path)?;
+        let compaction = Compaction::create(transaction_manager.clone(), options.clone(),
+                                            sstables.clone(), manifest.clone(), keyspace_id);
 
-        Ok(Arc::new(Keyspace{
-            keyspace_id,
+        Ok(Arc::new(Keyspace {
             transaction_manager,
-            options,
+            keyspace_id,
             compaction,
-            sstables,
+            descriptor,
             memtables,
+            sstables,
+            options,
             manifest
         }))
     }
@@ -153,6 +161,10 @@ impl Keyspace {
 
     pub fn keyspace_id(&self) -> shared::KeyspaceId {
         self.keyspace_id
+    }
+
+    pub fn flags(&self) -> Flag {
+        self.descriptor.flags
     }
 
     //TODO If lsm engine crash during recovering from manifest, we will likely lose some operations

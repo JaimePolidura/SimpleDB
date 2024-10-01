@@ -95,7 +95,6 @@ impl SSTable {
                 shared::SSTableCorruptedPart::BlockMetadata,
                 shared::DecodeError {
                     offset: meta_offset as usize,
-                    path: file.path(),
                     error_type,
                     index: 0,
                 }
@@ -108,7 +107,6 @@ impl SSTable {
                 shared::SSTableCorruptedPart::BloomFilter,
                 shared::DecodeError {
                     offset: bloom_offset as usize,
-                    path: file.path(),
                     error_type,
                     index: 0,
                 }
@@ -196,7 +194,6 @@ impl SSTable {
                 shared::SSTableCorruptedPart::Block(block_id),
                 shared::DecodeError {
                     offset: metadata.offset,
-                    path: self.file.path(),
                     error_type,
                     index: 0,
                 }

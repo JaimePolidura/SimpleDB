@@ -123,7 +123,6 @@ impl Manifest {
                     error_type: shared::DecodeErrorType::CorruptedCrc(expected_crc, actual_crc),
                     index: all_records.len(),
                     offset: current_offset,
-                    path: file.path(),
                 }));
             }
 
@@ -132,7 +131,6 @@ impl Manifest {
                     error_type: shared::DecodeErrorType::JsonSerdeDeserialization(e),
                     index: all_records.len(),
                     offset: current_offset,
-                    path: file.path(),
                 }))?;
 
             all_records.push(deserialized_record);

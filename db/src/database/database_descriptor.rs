@@ -85,10 +85,9 @@ impl DatabaseDescriptor {
 
             let table_name_string = String::from_utf8(table_name_bytes.to_vec())
                 .map_err(|e| SimpleDbError::CannotDecodeDatabaseDescriptor(database_name.clone(), shared::DecodeError {
-                    path: path.clone(),
-                    offset: 0,
+                    error_type: shared::DecodeErrorType::Utf8Decode(e),
                     index: keyspace_id_by_table_name.len(),
-                    error_type: shared::DecodeErrorType::Utf8Decode(e)
+                    offset: 0,
                 }))?;
 
             let database_keyspace_id = current_ptr.get_u64_le() as shared::KeyspaceId;

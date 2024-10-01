@@ -5,6 +5,7 @@ mod database;
 mod table;
 mod sql;
 mod value;
+mod index;
 
 pub use table::table_descriptor::ColumnDescriptor;
 pub use simple_db::SimpleDb;

@@ -1,35 +1,38 @@
 use crate::selection::Selection;
 use crate::table::record::Record;
 use crate::table::row::Row;
-use crate::table::table_descriptor::{ColumnDescriptor, TableDescriptor, TableFlags};
+use crate::table::table_descriptor::{ColumnDescriptor, TableDescriptor};
 use crate::table::table_iterator::TableIterator;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::{ColumnNameAlreadyDefined, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
-use shared::{ColumnId, SimpleDbError, SimpleDbFileWrapper};
+use shared::{ColumnId, FlagMethods, KeyspaceId, SimpleDbError, SimpleDbFileWrapper};
 use std::cell::UnsafeCell;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hasher;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
+use storage::Storage;
 use storage::transactions::transaction::Transaction;
+use crate::index::secondary_index::SecondaryIndex;
+use crate::table::table_flags::KEYSPACE_TABLE_USER;
 use crate::value::{Type, Value};
 
 pub struct Table {
-    pub(crate) storage_keyspace_id: shared::KeyspaceId,
+    pub(crate) storage_keyspace_id: KeyspaceId,
     pub(crate) table_name: String,
 
     pub(crate) table_descriptor_file: SimpleDbFileWrapper,
 
     pub(crate) columns_by_id: SkipMap<ColumnId, ColumnDescriptor>,
-    pub(crate) columns_by_name: SkipMap<String, shared::ColumnId>,
+    pub(crate) columns_by_name: SkipMap<String, ColumnId>,
     pub(crate) next_column_id: AtomicUsize,
     pub(crate) primary_column_name: String,
 
     pub(crate) storage: Arc<storage::Storage>,
 
-    pub(crate) flags: TableFlags,
+    pub(crate) secondary_index_by_column_id: SkipMap<ColumnId, Arc<SecondaryIndex>>
 }
 
 impl Table {
@@ -38,20 +41,19 @@ impl Table {
         options: &Arc<shared::SimpleDbOptions>,
         storage: &Arc<storage::Storage>,
         primary_column_name: String,
-        flags: TableFlags,
     ) -> Result<Arc<Table>, SimpleDbError> {
-        let table_keyspace_id = storage.create_keyspace()?;
+        let table_keyspace_id = storage.create_keyspace(KEYSPACE_TABLE_USER)?;
         let (table_descriptor, table_descriptor_file) = TableDescriptor::create(
             table_keyspace_id,
             options,
             table_name,
-            flags
         )?;
 
         let max_column_id = table_descriptor.get_max_column_id();
 
         Ok(Arc::new(Table {
             table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(table_descriptor_file)},
+            secondary_index_by_column_id: SkipMap::new(),
             next_column_id: AtomicUsize::new(max_column_id as usize + 1),
             columns_by_id: table_descriptor.columns,
             table_name: table_descriptor.table_name,
@@ -59,7 +61,6 @@ impl Table {
             columns_by_name: SkipMap::new(),
             storage: storage.clone(),
             primary_column_name,
-            flags
         }))
     }
 
@@ -70,18 +71,26 @@ impl Table {
         let mut tables = Vec::new();
 
         for keyspace_id in storage.get_keyspaces_id() {
-            let (descriptor, descriptor_file) = TableDescriptor::load_table_descriptor(options, keyspace_id)?;
-            tables.push(Arc::new(Table {
-                table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(descriptor_file)},
-                next_column_id: AtomicUsize::new(descriptor.get_max_column_id() as usize + 1),
-                columns_by_name: Self::index_column_id_by_name(&descriptor.columns),
-                primary_column_name: descriptor.get_primary_column_name(),
-                table_name: descriptor.table_name,
-                storage_keyspace_id: keyspace_id,
-                columns_by_id: descriptor.columns,
-                flags: descriptor.flags,
-                storage: storage.clone(),
-            }));
+            let flags = storage.get_flags(keyspace_id)?;
+
+            if flags.has_flag(KEYSPACE_TABLE_USER) {
+                let (descriptor, descriptor_file) = TableDescriptor::load_from_disk(options, keyspace_id)?;
+                let secondary_indexes = Self::create_secondary_indexes_from_table_descriptor(
+                    &descriptor, storage.clone()
+                );
+
+                tables.push(Arc::new(Table {
+                    table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(descriptor_file)},
+                    next_column_id: AtomicUsize::new(descriptor.get_max_column_id() as usize + 1),
+                    columns_by_name: Self::index_column_id_by_name(&descriptor.columns),
+                    primary_column_name: descriptor.get_primary_column_name(),
+                    secondary_index_by_column_id: secondary_indexes,
+                    table_name: descriptor.table_name,
+                    storage_keyspace_id: keyspace_id,
+                    columns_by_id: descriptor.columns,
+                    storage: storage.clone(),
+                }));
+            }
         }
 
         Ok(tables)
@@ -338,6 +347,7 @@ impl Table {
         let column_descriptor = ColumnDescriptor {
             column_id: self.next_column_id.fetch_add(1, Relaxed) as shared::ColumnId,
             column_name: column_name.to_string(),
+            secondary_index_keyspace_id: None,
             column_type,
             is_primary,
         };
@@ -407,5 +417,21 @@ impl Table {
 
     pub fn name(&self) -> &String {
         &self.table_name
+    }
+
+    fn create_secondary_indexes_from_table_descriptor(
+        table_descriptor: &TableDescriptor,
+        storage: Arc<Storage>
+    ) -> SkipMap<ColumnId, Arc<SecondaryIndex>> {
+        let mut secondary_indexes = SkipMap::new();
+        for entry in table_descriptor.columns.iter() {
+            let column_descriptor = entry.value();
+
+            if let Some(secondary_index_keyspace_id) = column_descriptor.secondary_index_keyspace_id {
+                let secondary_index = Arc::new(SecondaryIndex::create(secondary_index_keyspace_id, storage.clone()));
+                secondary_indexes.insert(column_descriptor.column_id, secondary_index);
+            }
+        }
+        secondary_indexes
     }
 }

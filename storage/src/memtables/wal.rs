@@ -90,10 +90,9 @@ impl Wal {
 
             if expected_crc != actual_crc {
                 return Err(shared::SimpleDbError::CannotDecodeWal(self.keyspace_id, self.memtable_id, shared::DecodeError {
-                    path: self.file.path(),
+                    error_type: shared::DecodeErrorType::CorruptedCrc(actual_crc, expected_crc),
                     offset: current_offset,
                     index: entries.len(),
-                    error_type: shared::DecodeErrorType::CorruptedCrc(actual_crc, expected_crc),
                 }));
             }
 
