@@ -83,9 +83,9 @@ impl SimpleDbCli {
         let mut columns_desc = query_data.columns_desc;
         columns_desc.sort_by(|a, b| {
             if a.is_primary {
-                return Ordering::Greater
-            } else if b.is_primary {
                 return Ordering::Less
+            } else if b.is_primary {
+                return Ordering::Greater
             } else {
                 return Ordering::Equal
             }
@@ -160,10 +160,7 @@ impl SimpleDbCli {
         let response = self.server.send_request(Request::UseDatabase(
             self.password.clone(), database_name.clone()
         ));
-        match response {
-            Response::Ok => println!("Changed current database!"),
-            _ => println!("Cannot connect to database"),
-        }
+        self.print_response(response);
     }
 
     fn read_input_from_user(&self) -> String {

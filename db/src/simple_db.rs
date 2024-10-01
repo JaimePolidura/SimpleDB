@@ -6,6 +6,7 @@ use crate::table::table_descriptor::ColumnDescriptor;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::database::database::Database;
 use crate::sql::statement::{Statement, StatementDescriptor};
 
 pub struct SimpleDb {
@@ -59,9 +60,11 @@ impl SimpleDb {
         context: &Context,
         statement: Statement
     ) -> Result<StatementResult, SimpleDbError>{
-        let statement_desc = statement.get_descriptor();
-        let result = self.statement_executor.execute(&context, statement)?;
-        Ok(result)
+        self.statement_executor.execute(&context, statement)
+    }
+
+    pub fn get_databases(&self) -> Arc<Databases> {
+        self.databases.clone()
     }
 }
 

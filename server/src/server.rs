@@ -85,7 +85,7 @@ impl Server {
 
         match request {
             Request::UseDatabase(_, database) => {
-                Self::handle_use_database_connection_request(server, &database, connection_id);
+                Self::handle_use_database_connection_request(server, &database, connection_id)?;
                 logger().debug(&format!("Executed use database. Connection ID: {} Database: {}",
                     connection.connection_id(), database));
                 Ok(Response::Ok)
@@ -217,7 +217,9 @@ impl Server {
         server: Arc<Server>,
         database_name: &String,
         connection_id: ConnectionId
-    )  {
+    )  -> Result<(), SimpleDbError> {
+        server.simple_db.get_databases().get_database_or_err(database_name)?;
+
         match server.context_by_connection_id.get(&connection_id) {
             Some(context) => {
                 let context = context.value();
@@ -228,6 +230,8 @@ impl Server {
                 server.context_by_connection_id.insert(connection_id, Context::create_with_database(&database_name));
             }
         };
+
+        Ok(())
     }
 
     fn handle_close_request(server: Arc<Server>, connection_id: ConnectionId) {
