@@ -24,6 +24,8 @@ impl TablePrint {
     }
 
     pub fn add_header(&mut self, header: &str) {
+        let header = Self::format_cell(header);
+
         let column_index = self.header.len();
         self.header.push(header.to_string());
 
@@ -31,6 +33,8 @@ impl TablePrint {
     }
 
     pub fn add_column_value(&mut self, value: String) {
+        let value = Self::format_cell(value.as_str());
+
         if self.rows.is_empty() {
             self.rows.push(Vec::new());
         }
@@ -68,27 +72,21 @@ impl TablePrint {
     }
 
     fn print_rows(&self) {
-        if !self.rows.is_empty() {
-            print!("|");
-        }
-
-        for (row_index, row) in self.rows.iter().enumerate() {
+        for (_, row) in self.rows.iter().enumerate() {
             for (column_index, cell) in row.iter().enumerate() {
                 let column_width: usize = self.columns_width[column_index];
+
+                print!("|");
 
                 print!("{}", cell);
                 for _ in 0..(column_width - cell.len()) {
                     print!(" ");
                 }
 
-                print!("|");
                 if column_index + 1 == self.n_columns {
+                    print!("|");
                     print!("\n");
                 }
-            }
-
-            if row_index + 1 < self.rows.len() {
-                self.print_horizontal_line();
             }
         }
     }
@@ -120,7 +118,13 @@ impl TablePrint {
             total_width = column_max_width + total_width;
         }
 
-        total_width
+        total_width + (self.n_columns - 1)
     }
 
+    fn format_cell(value: &str) -> String {
+        let mut value = value.to_string();
+        value.push(' ');
+        value.insert(0, ' ');
+        value
+    }
 }

@@ -53,55 +53,41 @@ pub struct CreateTableStatement {
     pub(crate) columns: Vec<(String, Type, bool)>
 }
 
-enum Requiremnt {
+enum Requirement {
     ObligatoryToNotHave,
     ObligatoryToHave,
     Optional,
 }
 
-struct StatementRequirement {
-    transaction: Requiremnt,
-    database: Requiremnt,
+pub struct StatementDescriptor {
+    transaction_req: Requirement,
+    database_req: Requirement,
+    creates_transaction: bool,
+    terminates_transaction: bool
 }
 
-impl Statement {
+impl StatementDescriptor {
     pub fn terminates_transaction(&self) -> bool {
-        match *self {
-            Statement::Rollback | Statement::Commit => true,
-            _ => false
-        }
+        self.terminates_transaction
+    }
+
+    pub fn creates_transaction(&self) -> bool {
+        self.creates_transaction
     }
 
     pub fn requires_transaction(&self) -> bool {
-        match self.get_requirements().transaction {
-            Requiremnt::ObligatoryToHave => true,
-            Requiremnt::ObligatoryToNotHave => false,
-            Requiremnt::Optional => false,
+        match self.transaction_req {
+            Requirement::ObligatoryToHave => true,
+            Requirement::ObligatoryToNotHave => false,
+            Requirement::Optional => false,
         }
     }
 
     pub fn requires_database(&self) -> bool {
-        match self.get_requirements().database {
-            Requiremnt::ObligatoryToHave => true,
-            Requiremnt::ObligatoryToNotHave => false,
-            Requiremnt::Optional => false,
-        }
-    }
-
-    fn get_requirements(&self) -> StatementRequirement {
-        match self {
-            Statement::Select(_) => StatementRequirement { transaction: Requiremnt::ObligatoryToHave, database: Requiremnt::ObligatoryToHave },
-            Statement::Update(_) => StatementRequirement { transaction: Requiremnt::ObligatoryToHave, database: Requiremnt::ObligatoryToHave },
-            Statement::Delete(_) => StatementRequirement { transaction: Requiremnt::ObligatoryToHave, database: Requiremnt::ObligatoryToHave },
-            Statement::Insert(_) => StatementRequirement { transaction: Requiremnt::ObligatoryToHave, database: Requiremnt::ObligatoryToHave },
-            Statement::CreateTable(_) => StatementRequirement { transaction: Requiremnt::Optional, database: Requiremnt::ObligatoryToHave },
-            Statement::CreateDatabase(_) => StatementRequirement { transaction: Requiremnt::Optional, database: Requiremnt::ObligatoryToNotHave },
-            Statement::Describe(_) => StatementRequirement { transaction: Requiremnt::Optional, database: Requiremnt::ObligatoryToHave },
-            Statement::StartTransaction => StatementRequirement { transaction: Requiremnt::ObligatoryToNotHave, database: Requiremnt::ObligatoryToHave },
-            Statement::Rollback => StatementRequirement { transaction: Requiremnt::ObligatoryToHave, database: Requiremnt::ObligatoryToHave },
-            Statement::Commit => StatementRequirement { transaction: Requiremnt::ObligatoryToHave, database: Requiremnt::ObligatoryToHave },
-            Statement::ShowDatabases => StatementRequirement { transaction: Requiremnt::Optional, database: Requiremnt::ObligatoryToNotHave },
-            Statement::ShowTables => StatementRequirement { transaction: Requiremnt::Optional, database: Requiremnt::ObligatoryToHave },
+        match self.database_req {
+            Requirement::ObligatoryToHave => true,
+            Requirement::ObligatoryToNotHave => false,
+            Requirement::Optional => false,
         }
     }
 }
@@ -114,5 +100,99 @@ impl UpdateStatement {
         }
 
         Selection::Some(column_names)
+    }
+}
+
+impl Statement {
+    pub fn terminates_transaction(&self) -> bool {
+        match *self {
+            Statement::Rollback | Statement::Commit => true,
+            _ => false
+        }
+    }
+
+    pub fn requires_transaction(&self) -> bool {
+        self.get_descriptor().requires_transaction()
+    }
+
+    pub fn requires_database(&self) -> bool {
+        self.get_descriptor().requires_database()
+    }
+
+    pub fn get_descriptor(&self) -> StatementDescriptor {
+        match self {
+            Statement::Select(_) => StatementDescriptor {
+                creates_transaction: false,
+                terminates_transaction: false,
+                transaction_req: Requirement::ObligatoryToHave,
+                database_req: Requirement::ObligatoryToHave
+            },
+            Statement::Update(_) => StatementDescriptor {
+                creates_transaction: false,
+                terminates_transaction: false,
+                transaction_req: Requirement::ObligatoryToHave,
+                database_req: Requirement::ObligatoryToHave
+            },
+            Statement::Delete(_) => StatementDescriptor {
+                creates_transaction: false,
+                terminates_transaction: false,
+                transaction_req: Requirement::ObligatoryToHave,
+                database_req: Requirement::ObligatoryToHave
+            },
+            Statement::Insert(_) => StatementDescriptor {
+                creates_transaction: false,
+                terminates_transaction: false,
+                transaction_req: Requirement::ObligatoryToHave,
+                database_req: Requirement::ObligatoryToHave
+            },
+            Statement::CreateTable(_) => StatementDescriptor {
+                creates_transaction: false,
+                terminates_transaction: false,
+                transaction_req: Requirement::Optional,
+                database_req: Requirement::ObligatoryToHave
+            },
+            Statement::CreateDatabase(_) => StatementDescriptor {
+                creates_transaction: false,
+                terminates_transaction: false,
+                transaction_req: Requirement::Optional,
+                database_req: Requirement::ObligatoryToNotHave
+            },
+            Statement::Describe(_) => StatementDescriptor {
+                creates_transaction: false,
+                terminates_transaction: false,
+                transaction_req: Requirement::Optional,
+                database_req: Requirement::ObligatoryToHave
+            },
+            Statement::StartTransaction => StatementDescriptor {
+                creates_transaction: true,
+                terminates_transaction: false,
+                transaction_req: Requirement::ObligatoryToNotHave,
+                database_req: Requirement::ObligatoryToHave
+            },
+            Statement::Rollback => StatementDescriptor {
+                creates_transaction: false,
+                terminates_transaction: true,
+                transaction_req: Requirement::ObligatoryToHave,
+                database_req: Requirement::ObligatoryToHave
+            },
+            Statement::Commit => StatementDescriptor {
+                creates_transaction: false,
+                terminates_transaction: true,
+                transaction_req: Requirement::ObligatoryToHave,
+                database_req: Requirement::ObligatoryToHave
+            },
+            Statement::ShowDatabases => StatementDescriptor {
+                creates_transaction: false,
+                terminates_transaction: false,
+                transaction_req: Requirement::Optional,
+                database_req: Requirement::ObligatoryToNotHave
+            },
+            Statement::ShowTables => StatementDescriptor {
+                creates_transaction: false,
+                terminates_transaction: false,
+                transaction_req: Requirement::Optional,
+                database_req: Requirement::ObligatoryToHave
+            },
+        }
     }
 }

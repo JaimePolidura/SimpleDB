@@ -2,7 +2,7 @@ use bytes::BufMut;
 
 pub enum Request {
     //Password, statement
-    Statement(String, String), //Request Type ID: 1
+    Statement(String, bool, String), //Request Type ID: 1
     //Password
     Close(String), //Request Type ID: 2
     //Password, database
@@ -15,8 +15,9 @@ impl Request {
         serialized.extend(self.serialize_auth());
 
         match self {
-            Request::Statement(_, statement) => {
+            Request::Statement(_, is_standalone, statement) => {
                 serialized.put_u8(1);
+                serialized.put_u8(*is_standalone as u8);
                 serialized.put_u32_le(statement.len() as u32);
                 serialized.extend(statement.bytes());
             }
@@ -43,7 +44,7 @@ impl Request {
 
     pub fn get_password(&self) -> &String {
         match self {
-            Request::Statement(password, _) => password,
+            Request::Statement(password, _, _) => password,
             Request::Close(password) => password,
             Request::UseDatabase(password, _) => password,
         }

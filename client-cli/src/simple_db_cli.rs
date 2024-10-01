@@ -11,6 +11,7 @@ use shared::ErrorTypeId;
 pub struct SimpleDbCli {
     server: SimpleDbServer,
     password: String,
+    is_standalone: bool,
 }
 
 impl SimpleDbCli {
@@ -20,6 +21,7 @@ impl SimpleDbCli {
     ) -> SimpleDbCli {
         SimpleDbCli {
             server: SimpleDbServer::create(address),
+            is_standalone: true,
             password
         }
     }
@@ -42,10 +44,18 @@ impl SimpleDbCli {
     }
 
     fn statement_command(&mut self, statement: &str) {
+        if statement.starts_with("start_transaction") {
+            self.is_standalone = false;
+        }
+
         let response = self.server.send_request(Request::Statement(
-            self.password.clone(), statement.to_string()
+            self.password.clone(), self.is_standalone, statement.to_string()
         ));
         self.print_response(response);
+
+        if statement.starts_with("rollback") || statement.starts_with("commit") {
+            self.is_standalone = true;
+        }
     }
 
     fn print_response(&mut self, response: Response) {

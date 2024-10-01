@@ -85,10 +85,10 @@ impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
 
                 let key_smaller_than_prev_iteration: bool = self.last_key_iterated.is_some() &&
                     current_key <= &self.last_key_iterated.as_mut().unwrap();
-                let key_largen_than_min: bool = min_key_seen.is_some() &&
+                let key_larger_than_min: bool = min_key_seen.is_some() &&
                     current_key >= min_key_seen.as_ref().unwrap();
 
-                if !key_smaller_than_prev_iteration && !key_largen_than_min {
+                if !key_smaller_than_prev_iteration && !key_larger_than_min {
                     min_key_seen_index = current_index as usize;
 
                     match min_key_seen {

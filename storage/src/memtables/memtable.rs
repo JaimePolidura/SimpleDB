@@ -1,6 +1,6 @@
 use crate::key;
 use crate::key::Key;
-use crate::memtables::memtable::MemtableState::{Active, Flushed, Flusing, Inactive, RecoveringFromWal};
+use crate::memtables::memtable::MemtableState::{Active, Flushed, Flushing, Inactive, RecoveringFromWal};
 use crate::memtables::memtable_iterator::MemtableIterator;
 use crate::memtables::wal::Wal;
 use crate::sst::sstable_builder::SSTableBuilder;
@@ -35,7 +35,7 @@ enum MemtableState {
     RecoveringFromWal,
     Active,
     Inactive,
-    Flusing,
+    Flushing,
     Flushed
 }
 
@@ -111,7 +111,7 @@ impl MemTable {
     }
 
     pub fn set_flushing(&self) {
-        unsafe { (* self.state.get()) = Flusing; }
+        unsafe { (* self.state.get()) = Flushing; }
     }
 
     pub fn set_recovering_from_wal(&self) {

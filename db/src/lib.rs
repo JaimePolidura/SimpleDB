@@ -10,3 +10,4 @@ pub use table::table_descriptor::ColumnDescriptor;
 pub use simple_db::SimpleDb;
 pub use simple_db::Context;
 pub use table::row::Row;
+pub use sql::statement::*;

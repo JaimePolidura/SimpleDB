@@ -37,9 +37,10 @@ impl TableDescriptor {
         flags: u64,
     ) -> Result<(TableDescriptor, SimpleDbFile), SimpleDbError> {
         let mut table_descriptor_file_bytes: Vec<u8> = Vec::new();
-        let table_name_butes = table_name.bytes();
-        table_descriptor_file_bytes.put_u16_le(table_name_butes.len() as u16);
-        table_descriptor_file_bytes.extend(table_name_butes);
+        let table_name_bytes = table_name.bytes();
+        table_descriptor_file_bytes.put_u64_le(flags);
+        table_descriptor_file_bytes.put_u32_le(table_name_bytes.len() as u32);
+        table_descriptor_file_bytes.extend(table_name_bytes);
 
         let table_descriptor_file = SimpleDbFile::create(
             Self::table_descriptor_file_path(options, keyspace_id).as_path(),
@@ -119,7 +120,7 @@ impl TableDescriptor {
 
         let table_flags = current_ptr.get_u64_le() as TableFlags;
         //Table name
-        let table_name_length = current_ptr.get_u16_le() as usize;
+        let table_name_length = current_ptr.get_u32_le() as usize;
         let name_bytes = &current_ptr[..table_name_length];
         current_ptr.advance(table_name_length);
         let table_name = Self::decode_string(name_bytes, keyspace_id, path, 0)?;

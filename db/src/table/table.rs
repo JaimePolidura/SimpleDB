@@ -69,15 +69,15 @@ impl Table {
     ) -> Result<Vec<Arc<Table>>, SimpleDbError> {
         let mut tables = Vec::new();
 
-        for keysapce_id in storage.get_keyspaces_id() {
-            let (descriptor, descriptor_file) = TableDescriptor::load_table_descriptor(options, keysapce_id)?;
+        for keyspace_id in storage.get_keyspaces_id() {
+            let (descriptor, descriptor_file) = TableDescriptor::load_table_descriptor(options, keyspace_id)?;
             tables.push(Arc::new(Table {
                 table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(descriptor_file)},
                 next_column_id: AtomicUsize::new(descriptor.get_max_column_id() as usize + 1),
                 columns_by_name: Self::index_column_id_by_name(&descriptor.columns),
                 primary_column_name: descriptor.get_primary_column_name(),
                 table_name: descriptor.table_name,
-                storage_keyspace_id: keysapce_id,
+                storage_keyspace_id: keyspace_id,
                 columns_by_id: descriptor.columns,
                 flags: descriptor.flags,
                 storage: storage.clone(),

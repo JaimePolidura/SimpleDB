@@ -199,23 +199,37 @@ impl Memtables {
         wals: Vec<Wal>,
         keyspace_id: shared::KeyspaceId
     ) -> Result<Memtables, shared::SimpleDbError> {
-        let current_memtable = MemTable::create_new(options.clone(), max_memtable_id + 1, keyspace_id)?;
-        current_memtable.set_active();
-
-        let mut memtables: Vec<Arc<MemTable>> = Vec::new();
-        let next_memtable_id = max_memtable_id + 2;
+        let mut active_memtable = None;
+        let mut inactive_memtables: Vec<Arc<MemTable>> = Vec::new();
+        let next_memtable_id = max_memtable_id + 1;
 
         for wal in wals {
             let memtable_id = wal.get_memtable_id();
             let mut memtable_created = MemTable::create_and_recover_from_wal(options.clone(), memtable_id, keyspace_id, wal)?;
 
-            memtable_created.set_inactive();
-            memtables.push(Arc::new(memtable_created));
+            if memtable_created.current_size_bytes.load(Relaxed) < options.memtable_max_size_bytes && active_memtable.is_none() {
+                //Active memtable
+                memtable_created.set_active();
+                active_memtable = Some(memtable_created);
+            } else {
+                //Inactive memtable
+                memtable_created.set_inactive();
+                inactive_memtables.push(Arc::new(memtable_created));
+            }
         }
 
+        let active_memtable = match active_memtable {
+            Some(active_memtable) => active_memtable,
+            None => {
+                let active_memtable = MemTable::create_new(options.clone(), max_memtable_id + 1, keyspace_id)?;
+                active_memtable.set_active();
+                active_memtable
+            }
+        };
+
         Ok(Memtables {
-            inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(memtables)))),
-            current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(current_memtable)))),
+            inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(inactive_memtables)))),
+            current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(active_memtable)))),
             next_memtable_id: AtomicUsize::new(next_memtable_id),
             keyspace_id,
             options

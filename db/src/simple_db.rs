@@ -6,6 +6,7 @@ use crate::table::table_descriptor::ColumnDescriptor;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::sql::statement::{Statement, StatementDescriptor};
 
 pub struct SimpleDb {
     statement_executor: StatementExecutor,
@@ -44,41 +45,23 @@ pub struct Context {
 }
 
 impl SimpleDb {
+    pub fn parse(
+        &self,
+        statement: &str
+    ) -> Result<Statement, SimpleDbError> {
+        let mut parser = Parser::create(statement.to_string());
+        let statement = parser.next_statement()?.unwrap();
+        Ok(statement)
+    }
+
     pub fn execute(
         &self,
         context: &Context,
-        query: &str,
-    ) -> Result<Vec<StatementResult>, SimpleDbError> {
-        let mut parser = Parser::create(query.to_string());
-        let mut results = Vec::new();
-
-        while let Some(statement) = parser.next_statement()? {
-            let terminates_transaction = statement.terminates_transaction();
-
-            let result = self.statement_executor.execute(
-                &context,
-                statement
-            )?;
-
-            results.push(result);
-
-            //No more statements will be run after a commit or a rollback
-            if terminates_transaction {
-                break
-            }
-        }
-
-        Ok(results)
-    }
-
-    pub fn execute_only_one(
-        &self,
-        context: &Context,
-        query: &str
+        statement: Statement
     ) -> Result<StatementResult, SimpleDbError>{
-        let mut parser = Parser::create(query.to_string());
-        let statement = parser.next_statement()?.unwrap();
-        self.statement_executor.execute(&context, statement)
+        let statement_desc = statement.get_descriptor();
+        let result = self.statement_executor.execute(&context, statement)?;
+        Ok(result)
     }
 }
 
@@ -102,6 +85,10 @@ impl Context {
             database: Some(name.to_string()),
             transaction: Some(transaction),
         }
+    }
+
+    pub fn clear_transaction(&mut self) -> Transaction {
+        self.transaction.take().unwrap()
     }
 
     pub fn with_transaction(&mut self, transaction: Transaction) {
@@ -130,9 +117,9 @@ impl Context {
 }
 
 impl StatementResult {
-    pub fn get_transaction(self) -> Transaction {
+    pub fn get_transaction(&self) -> Transaction {
         match self {
-            StatementResult::TransactionStarted(transaction) => transaction,
+            StatementResult::TransactionStarted(transaction) => transaction.clone(),
             _ => panic!("")
         }
     }

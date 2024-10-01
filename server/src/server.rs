@@ -2,7 +2,7 @@ use crate::request::Request;
 use crate::response::{QueryDataResponse, Response, StatementResponse};
 use crossbeam_skiplist::SkipMap;
 use db::simple_db::StatementResult;
-use db::{Context, SimpleDb};
+use db::{Context, SimpleDb, Statement};
 use shared::connection::Connection;
 use shared::logger::{logger, Logger};
 use shared::SimpleDbError::InvalidPassword;
@@ -90,8 +90,8 @@ impl Server {
                     connection.connection_id(), database));
                 Ok(Response::Ok)
             },
-            Request::Statement(_, statement) => {
-                let statement_result = Self::handle_statement_request(connection_id, server, statement)?;
+            Request::Statement(_, is_stand_alone, statement) => {
+                let statement_result = Self::handle_statement_request(connection_id, server, is_stand_alone, statement)?;
                 Ok(Response::Statement(statement_result))
             },
             Request::Close(_) => {
@@ -117,15 +117,53 @@ impl Server {
     fn handle_statement_request(
         connection_id: ConnectionId,
         server: Arc<Server>,
-        statement: String
+        is_stand_alone: bool,
+        statement_string: String
     ) -> Result<StatementResponse, SimpleDbError> {
         let mut context = match server.context_by_connection_id.get(&connection_id) {
             Some(context_entry) => context_entry.value().clone(),
             None => Context::empty()
         };
 
-        let statement_result = server.simple_db.execute_only_one(&context, &statement)?;
+        let statement = server.simple_db.parse(&statement_string)?;
+        let statement_desc = statement.get_descriptor();
 
+        if statement_desc.requires_transaction() && !context.has_transaction() && is_stand_alone {
+            let transaction = server.simple_db.execute(&context, Statement::StartTransaction)?
+                .get_transaction();
+            context.with_transaction(transaction);
+        }
+
+        match server.simple_db.execute(&context, statement) {
+            Ok(statement_result) => {
+                if statement_desc.requires_transaction() && is_stand_alone {
+                    server.simple_db.execute(&context, Statement::Commit)?;
+                }
+                if statement_desc.creates_transaction() {
+                    context.with_transaction(statement_result.get_transaction());
+                    server.context_by_connection_id.insert(connection_id, context);
+                } else if statement_desc.terminates_transaction() {
+                    context.clear_transaction();
+                    server.context_by_connection_id.insert(connection_id, context);
+                }
+
+                Self::create_response(statement_result, connection_id, statement_string)
+            }
+            Err(error) => {
+                if statement_desc.requires_transaction() && is_stand_alone {
+                    server.simple_db.execute(&context, Statement::Rollback);
+                }
+
+                Err(error)
+            }
+        }
+    }
+
+    fn create_response(
+        statement_result: StatementResult,
+        connection_id: ConnectionId,
+        statement: String,
+    ) -> Result<StatementResponse, SimpleDbError> {
         match statement_result {
             StatementResult::Describe(describe) => {
                 logger().debug(&format!(
@@ -160,9 +198,6 @@ impl Server {
                     "Executed start transaction request with connection ID: {} Transaction ID: {}",
                     connection_id, transaction.id()
                 ));
-
-                context.with_transaction(transaction);
-                server.context_by_connection_id.insert(connection_id, context);
                 Ok(StatementResponse::Ok(0))
             },
             StatementResult::Data(mut query_iterator) => {
@@ -186,7 +221,7 @@ impl Server {
         match server.context_by_connection_id.get(&connection_id) {
             Some(context) => {
                 let context = context.value();
-                server.simple_db.execute(context, "ROLLBACK;");
+                server.simple_db.execute(context, Statement::Rollback);
                 server.context_by_connection_id.insert(connection_id, Context::create_with_database(&database_name));
             }
             None => {
@@ -199,8 +234,10 @@ impl Server {
         if let Some(context_entry) = server.context_by_connection_id.get(&connection_id) {
             let context = context_entry.value();
             if context.has_transaction() {
-                server.simple_db.execute(context, "ROLLBACK;");
+                server.simple_db.execute(context, Statement::Rollback);
             }
+
+            server.context_by_connection_id.remove(&connection_id);
         }
     }
 

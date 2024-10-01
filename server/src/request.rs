@@ -4,7 +4,8 @@ use shared::SimpleDbError;
 use shared::SimpleDbError::{InvalidRequestBinaryFormat};
 
 pub enum Request {
-    Statement(Authentication, String), //Request Type ID: 1
+    //Authentication, standalone, statement
+    Statement(Authentication, bool, String), //Request Type ID: 1
     Close(Authentication), //Request Type ID: 2
     UseDatabase(Authentication, String), //Request Type ID: 3
 }
@@ -19,6 +20,7 @@ impl Request {
 
         match connection.read_u8()? {
             1 => {
+                let is_standalone = connection.read_u8()? != 0x00;
                 let statement_length = connection.read_u32()?;
                 let statement_bytes = connection.read_n(statement_length as usize)?;
                 let statement = String::from_utf8(statement_bytes)
@@ -29,7 +31,7 @@ impl Request {
                     connection.connection_id(), authentication.password, statement
                 ));
 
-                Ok(Request::Statement(authentication, statement))
+                Ok(Request::Statement(authentication, is_standalone, statement))
             },
             2 => {
                 logger().debug(&format!("Received close request. ConnectionID: {}", connection.connection_id()));
@@ -54,7 +56,7 @@ impl Request {
 
     pub fn get_authentication(&self) -> &Authentication {
         match self {
-            Request::Statement(authentication, _,) => authentication,
+            Request::Statement(authentication, _, _) => authentication,
             Request::Close(authentication) => authentication,
             Request::UseDatabase(authentication, _) => authentication
         }

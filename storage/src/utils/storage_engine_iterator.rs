@@ -90,7 +90,7 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
 
             let current_key_bytes = Bytes::copy_from_slice(self.inner_iterator.key().as_bytes());
 
-            let has_next = self.inner_iterator.has_next();
+            let mut has_next = self.inner_iterator.has_next();
 
             while has_next {
                 self.inner_iterator.next();
@@ -101,6 +101,7 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
                         self.inner_iterator.key().clone(),
                         Bytes::copy_from_slice(self.inner_iterator.value()))
                     );
+                    has_next = self.inner_iterator.has_next();
                 } else {
                     break
                 }
