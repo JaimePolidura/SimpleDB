@@ -2,6 +2,7 @@ use crate::transactions::transaction_manager::IsolationLevel;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::AtomicUsize;
 use std::collections::HashSet;
+use shared::TxnId;
 use crate::key::Key;
 
 pub struct Transaction {
@@ -26,7 +27,7 @@ impl Transaction {
         self.n_writes_rolled_back.fetch_add(1, Relaxed);
     }
 
-    pub(crate) fn increase_nwrites(&self) {
+    pub(crate) fn increase_n_writes(&self) {
         self.n_writes.fetch_add(1, Relaxed);
     }
 
@@ -46,6 +47,10 @@ impl Transaction {
             n_writes: AtomicUsize::new(0),
             txn_id: 0
         }
+    }
+
+    pub fn id(&self) -> TxnId {
+        self.txn_id
     }
 }
 

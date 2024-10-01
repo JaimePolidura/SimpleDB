@@ -26,6 +26,7 @@ impl TablePrint {
     pub fn add_header(&mut self, header: &str) {
         let column_index = self.header.len();
         self.header.push(header.to_string());
+
         self.columns_width[column_index] = max(self.columns_width[column_index], header.len());
     }
 
@@ -40,13 +41,14 @@ impl TablePrint {
             let new_row_vec = Vec::new();
             self.rows.push(new_row_vec);
             row_vec_index = self.rows.len() - 1;
-            row_vec = &mut self.rows[row_vec_index - 1];
+            row_vec = &mut self.rows[row_vec_index];
         }
 
         let n_column_index = row_vec.len();
         let value_width = value.len();
 
         row_vec.push(value);
+
         self.columns_width[n_column_index] = max(self.columns_width[n_column_index], value_width);
     }
 
@@ -75,11 +77,14 @@ impl TablePrint {
                 let column_width: usize = self.columns_width[column_index];
 
                 print!("{}", cell);
-                for _ in 0..(cell.len() - column_width) {
+                for _ in 0..(column_width - cell.len()) {
                     print!(" ");
                 }
 
                 print!("|");
+                if column_index + 1 == self.n_columns {
+                    print!("\n");
+                }
             }
 
             if row_index + 1 < self.rows.len() {
@@ -93,13 +98,14 @@ impl TablePrint {
         for (column_index, header) in self.header.iter().enumerate() {
             print!("{}", header);
             let column_width: usize = self.columns_width[column_index];
-            for _ in 0..(header.len() - column_width) {
+            for _ in 0..(column_width - header.len()) {
                 print!(" ");
             }
 
             print!("|");
         }
         print!("\n");
+        self.print_horizontal_line();
     }
 
     fn print_horizontal_line(&self) {

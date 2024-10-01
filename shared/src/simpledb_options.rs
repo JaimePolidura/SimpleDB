@@ -22,11 +22,11 @@ pub struct SimpleDbOptions {
     //Common/Shared option
     #[serde(skip)]
     pub base_path: String,
+    pub use_debug_logging: bool,
 
     //Server layer options
-    pub server_n_worker_threads: u32,
-    pub server_port: u16,
     pub server_password: String,
+    pub server_port: u16,
 
     //DB Layer options
     pub db_range_scan_allowed: bool,
@@ -84,8 +84,8 @@ impl Default for SimpleDbOptions {
             sst_size_bytes: 268435456, //256 MB ~ 64 blocks
             max_memtables_inactive: 8,
             db_full_scan_allowed: true,
-            server_n_worker_threads: 64,
             block_size_bytes: 4096, //4kb
+            use_debug_logging: true,
             server_port: 8888,
             server_password: String::from("123456"),
         }

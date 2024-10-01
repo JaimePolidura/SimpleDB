@@ -5,7 +5,6 @@ use std::collections::HashMap;
 
 pub enum Response {
     Statement(StatementResponse),
-    Init(usize), //ConnectionId
     Error(ErrorTypeId), //Error number
     Ok,
 }
@@ -53,7 +52,7 @@ pub enum ColumnType {
 
 impl Response {
     pub fn deserialize_from_connection(connection: &mut Connection) -> Response {
-        match connection.read_u8().expect("Cannot read response type ID") {
+        match connection.read_u8().unwrap() {
             1 => {
                 Response::Statement(match connection.read_u8().expect("Cannot read response statement type ID") {
                     1 => StatementResponse::Ok(connection.read_u64().expect("Cannot read Nº Affected rows") as usize),
@@ -64,9 +63,8 @@ impl Response {
                     _ => panic!("Invalid statement response type Id")
                 })
             },
-            2 => Response::Init(connection.read_u64().expect("Cannot read connection ID") as usize),
-            3 => Response::Error(connection.read_u8().expect("Cannot read response error type ID")),
-            4 => Response::Ok,
+            2 => Response::Error(connection.read_u8().expect("Cannot read response error type ID")),
+            3 => Response::Ok,
             _ => panic!("Invalid server response type Id")
         }
     }

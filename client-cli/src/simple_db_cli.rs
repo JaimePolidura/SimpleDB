@@ -6,14 +6,9 @@ use std::cmp::Ordering;
 use std::io;
 use std::io::{stdout, Write};
 use std::process::exit;
-
-pub enum SimpleDbClientState {
-    ConnectedToDatabase(usize),
-    NotConnectedToDatabase,
-}
+use shared::ErrorTypeId;
 
 pub struct SimpleDbCli {
-    state: SimpleDbClientState,
     server: SimpleDbServer,
     password: String,
 }
@@ -25,7 +20,6 @@ impl SimpleDbCli {
     ) -> SimpleDbCli {
         SimpleDbCli {
             server: SimpleDbServer::create(address),
-            state: SimpleDbClientState::NotConnectedToDatabase,
             password
         }
     }
@@ -37,9 +31,7 @@ impl SimpleDbCli {
             let input = self.read_input_from_user().to_lowercase();
             let input = input.trim_end();
 
-            if input.eq("show databases;") {
-                self.show_databases_command();
-            } else if input.eq("use")  {
+            if input.starts_with("use") {
                 self.use_command(input);
             } else if input.eq("exit") {
                 self.exit_command();
@@ -49,23 +41,11 @@ impl SimpleDbCli {
         }
     }
 
-    fn show_databases_command(&mut self) {
+    fn statement_command(&mut self, statement: &str) {
         let response = self.server.send_request(Request::Statement(
-            self.password.clone(), 0, String::from("SHOW DATABASES;")
+            self.password.clone(), statement.to_string()
         ));
         self.print_response(response);
-    }
-
-    fn statement_command(&mut self, statement: &str) {
-        match self.state {
-            SimpleDbClientState::ConnectedToDatabase(connection_id) => {
-                let response = self.server.send_request(Request::Statement(
-                    self.password.clone(), connection_id, statement.to_string()
-                ));
-                self.print_response(response);
-            }
-            SimpleDbClientState::NotConnectedToDatabase => println!("No database selected!"),
-        }
     }
 
     fn print_response(&mut self, response: Response) {
@@ -74,21 +54,19 @@ impl SimpleDbCli {
                 match statement_result {
                     StatementResponse::Ok(n_rows_affected) => println!("{} rows affected!", n_rows_affected),
                     StatementResponse::Data(data) => self.print_query_data(data),
-                    StatementResponse::Databases(databases) => self.print_vec_string_as_tabble("Databases", databases),
-                    StatementResponse::Tables(tables) => self.print_vec_string_as_tabble("Tables", tables),
+                    StatementResponse::Databases(databases) => self.print_vec_string_as_table("Databases", databases),
+                    StatementResponse::Tables(tables) => self.print_vec_string_as_table("Tables", tables),
                     StatementResponse::Describe(desc) => self.print_table_describe(&desc)
                 };
             }
-            Response::Init(_) => {
-                println!("Connected to database!");
-            }
-            Response::Error(usize) => {
-                println!("Received error: {}", usize);
+            Response::Error(error_type_id) => {
+                Self::print_error(error_type_id);
             }
             Response::Ok => {
                 println!("Ok");
             }
-        }
+        };
+        print!("\n");
     }
 
     fn print_query_data(&self, query_data: QueryDataResponse) {
@@ -141,7 +119,7 @@ impl SimpleDbCli {
         table.print();
     }
 
-    fn print_vec_string_as_tabble(&self, table_header_name: &str, vec: Vec<String>) {
+    fn print_vec_string_as_table(&self, table_header_name: &str, vec: Vec<String>) {
         let mut table = TablePrint::create(1);
         table.add_header(table_header_name);
         for item in vec {
@@ -151,47 +129,31 @@ impl SimpleDbCli {
     }
 
     fn exit_command(&mut self) {
-        if matches!(self.state, SimpleDbClientState::ConnectedToDatabase(_)) {
-            self.disconnect_from_current_database();
-        }
-        
+        self.server.send_request(Request::Close(self.password.clone()));
+
         println!("Bye");
         exit(0)
     }
 
     fn use_command(&mut self, input: &str) {
-        if let Some(database_name) = input.split_whitespace().next() {
+        let statement_split_by_space: Vec<&str> = input.split_whitespace().collect();
+
+        if let Some(database_name) = statement_split_by_space.get(1) {
+            let database_name = database_name.replace(';', "");
             self.connect_to_database(database_name.to_string());
-            println!("Changed current database!");
         } else {
             println!("Invalid syntax. Usage: USE <Database name>");
         }
     }
 
     fn connect_to_database(&mut self, database_name: String) {
-        match self.state {
-            SimpleDbClientState::ConnectedToDatabase(_) => self.disconnect_from_current_database(),
-            _ => {}
-        };
-
-        let response = self.server.send_request(Request::InitConnection(
+        let response = self.server.send_request(Request::UseDatabase(
             self.password.clone(), database_name.clone()
         ));
         match response {
-            Response::Init(connection_id) => {
-                self.state = SimpleDbClientState::ConnectedToDatabase(connection_id);
-            },
-            _ => {
-                println!("Cannot connect to database")
-            }
+            Response::Ok => println!("Changed current database!"),
+            _ => println!("Cannot connect to database"),
         }
-    }
-
-    fn disconnect_from_current_database(&mut self) {
-        self.server.send_request(Request::Close(
-            self.password.clone(), self.state.get_connection_id()
-        ));
-        println!("mysql> Exited ")
     }
 
     fn read_input_from_user(&self) -> String {
@@ -203,13 +165,27 @@ impl SimpleDbCli {
 
         line
     }
-}
 
-impl SimpleDbClientState {
-    pub fn get_connection_id(&self) -> usize {
-        match self {
-            SimpleDbClientState::ConnectedToDatabase(connection_id) => *connection_id,
-            SimpleDbClientState::NotConnectedToDatabase => panic!("Illegal code path")
+    fn print_error(error_type_id: ErrorTypeId) {
+        match error_type_id {
+            57 => println!("Invalid password!"),
+            56 => println!("Invalid request binary format!"),
+            2 => println!("Range scan is not allowed!"),
+            5 => println!("Full scan is not allowed!"),
+            3 | 4 => println!("Invalid query syntax"),
+            6 => println!("You should connect to a database or start a transaction first"),
+            7 => println!("Column not found"),
+            8 => println!("Table not found"),
+            9 => println!("Table already exists"),
+            10 => println!("Primary column should be included when creating a table"),
+            11 => println!("Only one primary column can be created in a table"),
+            12 => println!("Column already exists"),
+            13 => println!("Column not found"),
+            14 => println!("Invalid column type"),
+            16 => println!("Database already exists"),
+            17 => println!("Database not found"),
+            _ => println!("Received error {} code from server", error_type_id)
         }
     }
+
 }

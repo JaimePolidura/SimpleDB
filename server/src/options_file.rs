@@ -1,4 +1,4 @@
-use serde_json::{from_slice, to_vec};
+use serde_json::from_slice;
 use shared::{start_simpledb_options_builder_from, SimpleDbFile, SimpleDbFileMode, SimpleDbOptions};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -8,9 +8,18 @@ pub fn load_options(
 ) -> Result<Arc<SimpleDbOptions>, ()> {
     let path = Path::new(path.as_str());
     if path.exists() {
-        let options = load_options_from_existing_file(path);
-        let options = add_path_to_options(options, path);
-        Ok(Arc::new(options))
+        match load_options_from_existing_file(path) {
+            Ok(options) => {
+                let options = add_path_to_options(options, path);
+                Ok(Arc::new(options))
+            }
+            Err(_) => {
+                //Reset to default settings
+                populate_options_file_with_default_data(path);
+                let options = add_path_to_options(SimpleDbOptions::default(), path);
+                Ok(Arc::new(options))
+            }
+        }
     } else {
         populate_options_file_with_default_data(path);
         let options = add_path_to_options(SimpleDbOptions::default(), path);
@@ -30,7 +39,7 @@ fn populate_options_file_with_default_data(base_path: &Path) {
     file.fsync();
 }
 
-fn load_options_from_existing_file(base_path: &Path) -> SimpleDbOptions {
+fn load_options_from_existing_file(base_path: &Path) -> Result<SimpleDbOptions, ()> {
     let config_file_path = config_file_path(base_path);
     let config_file_path = config_file_path.as_path();
 
@@ -38,8 +47,9 @@ fn load_options_from_existing_file(base_path: &Path) -> SimpleDbOptions {
         .expect("Cannot create options file");
     let bytes = file.read_all()
         .expect("Cannot read file bytes");
-    let options: SimpleDbOptions = from_slice(&bytes).unwrap();
-    options
+    let options: SimpleDbOptions = from_slice(&bytes)
+        .map_err(|_| ())?;
+    Ok(options)
 }
 
 fn add_path_to_options(options: SimpleDbOptions, path: &Path) -> SimpleDbOptions {

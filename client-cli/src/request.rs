@@ -1,12 +1,12 @@
 use bytes::BufMut;
 
 pub enum Request {
-    //Password, connectionId, statement
-    Statement(String, usize, String), //Request Type ID: 1
-    //Password, connectionId
-    Close(String, usize), //Request Type ID: 2
+    //Password, statement
+    Statement(String, String), //Request Type ID: 1
+    //Password
+    Close(String), //Request Type ID: 2
     //Password, database
-    InitConnection(String, String), //Request Type ID: 3
+    UseDatabase(String, String), //Request Type ID: 3
 }
 
 impl Request {
@@ -15,17 +15,15 @@ impl Request {
         serialized.extend(self.serialize_auth());
 
         match self {
-            Request::Statement(_, connection_id, statement) => {
+            Request::Statement(_, statement) => {
                 serialized.put_u8(1);
-                serialized.put_u64_le(*connection_id as u64);
                 serialized.put_u32_le(statement.len() as u32);
                 serialized.extend(statement.bytes());
             }
-            Request::Close(_, connection_id) => {
-                serialized.put_u8(1);
-                serialized.put_u64_le(*connection_id as u64);
+            Request::Close(_) => {
+                serialized.put_u8(2);
             }
-            Request::InitConnection(_, database_name) => {
+            Request::UseDatabase(_, database_name) => {
                 serialized.put_u8(3);
                 serialized.put_u32_le(database_name.len() as u32);
                 serialized.extend(database_name.bytes());
@@ -45,9 +43,9 @@ impl Request {
 
     pub fn get_password(&self) -> &String {
         match self {
-            Request::Statement(password, _, _) => password,
-            Request::Close(password, _) => password,
-            Request::InitConnection(password, _) => password,
+            Request::Statement(password, _) => password,
+            Request::Close(password) => password,
+            Request::UseDatabase(password, _) => password,
         }
     }
 }

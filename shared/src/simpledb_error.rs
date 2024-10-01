@@ -35,15 +35,15 @@ pub type ErrorTypeId = u8;
 
 pub enum SimpleDbError {
     //Network layer errors
-    CannotDecodeNetworkMessage(String),
-    IllegalMessageProtocolState,
     InvalidPassword,
-    InvalidRequest,
+    InvalidRequestBinaryFormat,
+    NetworkError(std::io::Error),
 
     //DB Layer errors
     IllegalToken(TokenLocation, String),
     MalformedQuery(String),
     FullScanNotAllowed(),
+    RangeScanNotAllowed(),
     InvalidContext(&'static str),
     ColumnNotFound(types::KeyspaceId, String),
     TableNotFound(String),
@@ -263,17 +263,17 @@ impl Debug for SimpleDbError {
             SimpleDbError::InvalidContext(message) => {
                 write!(f, "Invalid context: {}", message)
             }
-            SimpleDbError::CannotDecodeNetworkMessage(message) => {
-                write!(f, "Invalid context: {}", message)
-            }
-            SimpleDbError::IllegalMessageProtocolState => {
-                write!(f, "Illegal protocol message in current state.")
-            }
-            SimpleDbError::InvalidRequest => {
+            SimpleDbError::InvalidRequestBinaryFormat => {
                 write!(f, "Invalid request.")
             }
             SimpleDbError::InvalidPassword => {
                 write!(f, "Invalid password.")
+            }
+            SimpleDbError::NetworkError(e) => {
+                write!(f, "Network error: {}", e)
+            }
+            SimpleDbError::RangeScanNotAllowed() => {
+                write!(f, "Range scan not allowed")
             }
         }
     }
@@ -282,8 +282,7 @@ impl Debug for SimpleDbError {
 impl SimpleDbError {
     pub fn serialize(&self) -> ErrorTypeId {
         match self {
-            SimpleDbError::CannotDecodeNetworkMessage(_) => 1,
-            SimpleDbError::IllegalMessageProtocolState => 2,
+            SimpleDbError::RangeScanNotAllowed() => 2,
             SimpleDbError::IllegalToken(_, _) => 3,
             SimpleDbError::MalformedQuery(_) => 4,
             SimpleDbError::FullScanNotAllowed() => 5,
@@ -337,8 +336,9 @@ impl SimpleDbError {
             SimpleDbError::CannotDecodeTransactionLogEntry(_) => 53,
             SimpleDbError::CannotResetTransactionLog(_) => 54,
             SimpleDbError::Internal => 55,
-            SimpleDbError::InvalidRequest => 56,
-            SimpleDbError::InvalidPassword => 57
+            SimpleDbError::InvalidRequestBinaryFormat => 56,
+            SimpleDbError::InvalidPassword => 57,
+            SimpleDbError::NetworkError(_) => 58,
         }
     }
 }

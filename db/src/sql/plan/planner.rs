@@ -9,7 +9,7 @@ use crate::sql::plan::steps::limit_step::LimitStep;
 use crate::sql::plan::steps::range_scan_step::RangeScanStep;
 use crate::sql::statement::{DeleteStatement, Limit, SelectStatement, UpdateStatement};
 use crate::table::table::Table;
-use shared::SimpleDbError::MalformedQuery;
+use shared::SimpleDbError::{FullScanNotAllowed, MalformedQuery, RangeScanNotAllowed};
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
@@ -102,12 +102,12 @@ impl Planner {
         match scan_type {
             ScanType::Full => {
                 if !self.options.db_full_scan_allowed {
-                    return Err(MalformedQuery(String::from("Full steps is not allowed")));
+                    return Err(FullScanNotAllowed());
                 }
             },
             ScanType::Range(_) => {
                 if !self.options.db_range_scan_allowed {
-                    return Err(MalformedQuery(String::from("Range steps is not allowed")));
+                    return Err(RangeScanNotAllowed());
                 }
             }
             ScanType::Exact(_) => {}

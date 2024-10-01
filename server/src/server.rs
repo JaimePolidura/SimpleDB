@@ -3,24 +3,21 @@ use crate::response::{QueryDataResponse, Response, StatementResponse};
 use crossbeam_skiplist::SkipMap;
 use db::simple_db::StatementResult;
 use db::{Context, SimpleDb};
+use shared::connection::Connection;
+use shared::logger::{logger, Logger};
+use shared::SimpleDbError::InvalidPassword;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::io::Write;
 use std::net::TcpListener;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use crossbeam_skiplist::map::Entry;
-use threadpool::ThreadPool;
-use shared::connection::Connection;
-use shared::SimpleDbError::InvalidPassword;
+use std::thread;
 
 pub type ConnectionId = usize;
 
 pub struct Server {
     simple_db: Arc<SimpleDb>,
     options: Arc<SimpleDbOptions>,
-    pool: ThreadPool,
 
-    next_connection_id: AtomicUsize,
     context_by_connection_id: SkipMap<ConnectionId, Context>,
 }
 
@@ -28,10 +25,12 @@ impl Server {
     pub fn create(
         options: Arc<SimpleDbOptions>
     ) -> Result<Server, SimpleDbError> {
+        Logger::init(options.clone());
+
+        logger().info(&format!("Initializing server at address 127.0.0:{}", options.server_port));
+
         let simple_db = db::simple_db::create(options.clone())?;
         Ok(Server {
-            pool: ThreadPool::new(options.server_n_worker_threads as usize),
-            next_connection_id: AtomicUsize::new(0),
             context_by_connection_id: SkipMap::new(),
             simple_db: Arc::new(simple_db),
             options
@@ -44,45 +43,60 @@ impl Server {
 
         loop {
             let (socket, _) = listener.accept().unwrap();
-            let self_cloned = self.clone();
+            let server = self.clone();
+            logger().debug(&format!("Accepted new connection {}", socket.peer_addr().unwrap()));
+            let connection = Connection::create(socket);
 
-            self.pool.execute(move || {
-                let mut connection = Connection::create(socket);
-
-                match Self::handle_connection(&mut connection, self_cloned) {
-                    Ok(result) => {
-                        let serialized = result.serialize();
-                        connection.write(serialized).unwrap();
-                    }
-                    Err(error) => {
-                        let response = Response::from_simpledb_error(error);
-                        let serialized = response.serialize();
-                        connection.write(serialized).unwrap();
-                    }
-                }
+            thread::spawn(|| {
+                Self::handle_connection(connection, server);
             });
         }
     }
 
-    fn handle_connection(
+    fn handle_connection(mut connection: Connection, server: Arc<Server>) {
+        let connection_id = connection.connection_id();
+        server.context_by_connection_id.insert(connection_id, Context::empty());
+
+        loop {
+            let response = Self::handle_request(&mut connection, server.clone())
+                .unwrap_or_else(|error| Response::from_simpledb_error(error));
+
+            match connection.write(response.serialize()) {
+                //The connection was closed
+                Ok(n) => if n == 0 {
+                    server.context_by_connection_id.remove(&connection_id);
+                    break;
+                }
+                Err(_) => {
+                    break;
+                }
+            };
+        }
+    }
+
+    fn handle_request(
         connection: &mut Connection,
         server: Arc<Server>,
     )  -> Result<Response, SimpleDbError> {
         let request = Request::deserialize_from_connection(connection)?;
+        let connection_id = connection.connection_id();
 
         Self::authenticate(&server, &request)?;
 
         match request {
-            Request::Init(_, database) => {
-                let connection_id = Self::handle_init_connection_request(server, database)?;
-                Ok(Response::Init(connection_id))
+            Request::UseDatabase(_, database) => {
+                Self::handle_use_database_connection_request(server, &database, connection_id);
+                logger().debug(&format!("Executed use database. Connection ID: {} Database: {}",
+                    connection.connection_id(), database));
+                Ok(Response::Ok)
             },
-            Request::Statement(_, connection_id, statement) => {
+            Request::Statement(_, statement) => {
                 let statement_result = Self::handle_statement_request(connection_id, server, statement)?;
                 Ok(Response::Statement(statement_result))
             },
-            Request::Close(_, connection_id) => {
+            Request::Close(_) => {
                 Self::handle_close_request(server, connection_id);
+                logger().debug(&format!("Executed close request with connection ID: {}", connection_id));
                 Ok(Response::Ok)
             }
         }
@@ -113,17 +127,50 @@ impl Server {
         let statement_result = server.simple_db.execute_only_one(&context, &statement)?;
 
         match statement_result {
-            StatementResult::Describe(describe) => Ok(StatementResponse::Describe(describe)),
-            StatementResult::Databases(databases) => Ok(StatementResponse::Databases(databases)),
-            StatementResult::Tables(tables) => Ok(StatementResponse::Tables(tables)),
-            StatementResult::Ok(n) => Ok(StatementResponse::Ok(n)),
+            StatementResult::Describe(describe) => {
+                logger().debug(&format!(
+                    "Executed describe request with connection ID: {} Entries to return {}",
+                    connection_id, describe.len())
+                );
+                Ok(StatementResponse::Describe(describe))
+            },
+            StatementResult::Databases(databases) => {
+                logger().debug(&format!(
+                    "Executed show databases request with connection ID: {} Entries to return {}",
+                    connection_id, databases.len())
+                );
+                Ok(StatementResponse::Databases(databases))
+            },
+            StatementResult::Tables(tables) => {
+                logger().debug(&format!(
+                    "Executed show tables request with connection ID: {} Entries to return {}",
+                    connection_id, tables.len())
+                );
+                Ok(StatementResponse::Tables(tables))
+            },
+            StatementResult::Ok(n) => {
+                logger().debug(&format!(
+                    "Executed statement request with connection ID: {} Rows affected {}. Statement: {}",
+                    connection_id, n, statement
+                ));
+                Ok(StatementResponse::Ok(n))
+            },
             StatementResult::TransactionStarted(transaction) => {
+                logger().debug(&format!(
+                    "Executed start transaction request with connection ID: {} Transaction ID: {}",
+                    connection_id, transaction.id()
+                ));
+
                 context.with_transaction(transaction);
                 server.context_by_connection_id.insert(connection_id, context);
                 Ok(StatementResponse::Ok(0))
             },
             StatementResult::Data(mut query_iterator) => {
                 let rows = query_iterator.all()?;
+                logger().debug(&format!(
+                    "Executed query request request with connection ID: {} Rows returned: {} Statement: {}",
+                    connection_id, rows.len(), statement
+                ));
                 Ok(StatementResponse::Data(QueryDataResponse::create(
                     query_iterator.columns_descriptor_selection().clone(), rows
                 )))
@@ -131,10 +178,21 @@ impl Server {
         }
     }
 
-    fn handle_init_connection_request(server: Arc<Server>, database_name: String) -> Result<ConnectionId, SimpleDbError> {
-        let connection_id = server.next_connection_id.fetch_add(1, Ordering::Relaxed) as ConnectionId;
-        server.context_by_connection_id.insert(connection_id, Context::create_with_database(database_name.as_str()));
-        Ok(connection_id)
+    fn handle_use_database_connection_request(
+        server: Arc<Server>,
+        database_name: &String,
+        connection_id: ConnectionId
+    )  {
+        match server.context_by_connection_id.get(&connection_id) {
+            Some(context) => {
+                let context = context.value();
+                server.simple_db.execute(context, "ROLLBACK;");
+                server.context_by_connection_id.insert(connection_id, Context::create_with_database(&database_name));
+            }
+            None => {
+                server.context_by_connection_id.insert(connection_id, Context::create_with_database(&database_name));
+            }
+        };
     }
 
     fn handle_close_request(server: Arc<Server>, connection_id: ConnectionId) {

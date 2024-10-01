@@ -129,6 +129,7 @@ dependencies = [
  "bytes",
  "crossbeam-skiplist",
  "farmhash",
+ "log",
  "serde",
  "serde_json",
 ]

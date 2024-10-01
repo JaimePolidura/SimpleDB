@@ -1,11 +1,9 @@
 use bytes::BufMut;
 use db::{ColumnDescriptor, Row};
 use shared::{ErrorTypeId, SimpleDbError};
-use crate::server::ConnectionId;
 
 pub enum Response {
     Statement(StatementResponse),
-    Init(ConnectionId),
     Error(ErrorTypeId), //Error number
     Ok,
 }
@@ -42,7 +40,6 @@ impl Response {
 
         match self {
             Response::Statement(result) => serialized.extend(result.serialize()),
-            Response::Init(connection_id) => serialized.put_u64_le((*connection_id) as u64),
             Response::Error(errorTypeId) => serialized.put_u8(*errorTypeId as u8),
             Response::Ok => {},
         };
@@ -53,9 +50,8 @@ impl Response {
     fn message_type_id(&self) -> u8 {
         match self {
             Response::Statement(_) => 1,
-            Response::Init(_) => 2,
-            Response::Error(_) => 3,
-            Response::Ok => 4
+            Response::Error(_) => 2,
+            Response::Ok => 3
         }
     }
 }

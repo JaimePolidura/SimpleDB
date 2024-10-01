@@ -7,6 +7,7 @@ mod types;
 
 pub mod connection;
 pub mod utils;
+pub mod logger;
 
 pub use simpledb_file::*;
 pub use utils::*;
