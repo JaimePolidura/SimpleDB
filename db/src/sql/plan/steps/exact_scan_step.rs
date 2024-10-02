@@ -19,7 +19,7 @@ impl ExactScanStep {
         transaction: &Transaction
     ) -> Result<Plan, SimpleDbError> {
         Ok(Box::new(ExactScanStep {
-            row: table.get_by_primary_column(&id, transaction, selection)?
+            row: table.get_by_primary_column(&id, transaction, &selection)?
         }))
     }
 }

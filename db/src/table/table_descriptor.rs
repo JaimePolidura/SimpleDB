@@ -206,6 +206,10 @@ impl ColumnDescriptor {
     pub fn get_index_keyspace(&self) -> KeyspaceId {
         self.secondary_index_keyspace_id.unwrap_or_else(|| NO_INDEX as KeyspaceId)
     }
+
+    pub fn is_secondary_indexed(&self) -> bool {
+        self.secondary_index_keyspace_id.is_some()
+    }
 }
 
 fn decode_string(bytes: &[u8], keyspace_id: KeyspaceId, index: usize) -> Result<String, SimpleDbError> {

@@ -1,8 +1,11 @@
+use crate::index::secondary_indexes::SecondaryIndexes;
 use crate::selection::Selection;
 use crate::table::record::Record;
 use crate::table::row::Row;
 use crate::table::table_descriptor::{ColumnDescriptor, TableDescriptor};
+use crate::table::table_flags::KEYSPACE_TABLE_USER;
 use crate::table::table_iterator::TableIterator;
+use crate::value::{Type, Value};
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::{ColumnNameAlreadyDefined, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
@@ -13,11 +16,7 @@ use std::hash::Hasher;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
-use storage::Storage;
 use storage::transactions::transaction::Transaction;
-use crate::index::secondary_index::SecondaryIndex;
-use crate::table::table_flags::KEYSPACE_TABLE_USER;
-use crate::value::{Type, Value};
 
 pub struct Table {
     pub(crate) storage_keyspace_id: KeyspaceId,
@@ -32,7 +31,7 @@ pub struct Table {
 
     pub(crate) storage: Arc<storage::Storage>,
 
-    pub(crate) secondary_index_by_column_id: SkipMap<ColumnId, Arc<SecondaryIndex>>
+    pub(crate) secondary_indexes: SecondaryIndexes
 }
 
 impl Table {
@@ -53,8 +52,8 @@ impl Table {
 
         Ok(Arc::new(Table {
             table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(table_descriptor_file)},
-            secondary_index_by_column_id: SkipMap::new(),
             next_column_id: AtomicUsize::new(max_column_id as usize + 1),
+            secondary_indexes: SecondaryIndexes::create_empty(),
             columns_by_id: table_descriptor.columns,
             table_name: table_descriptor.table_name,
             storage_keyspace_id: table_keyspace_id,
@@ -75,16 +74,12 @@ impl Table {
 
             if flags.has_flag(KEYSPACE_TABLE_USER) {
                 let (descriptor, descriptor_file) = TableDescriptor::load_from_disk(options, keyspace_id)?;
-                let secondary_indexes = Self::create_secondary_indexes_from_table_descriptor(
-                    &descriptor, storage.clone()
-                );
-
                 tables.push(Arc::new(Table {
+                    secondary_indexes: SecondaryIndexes::create_from_table_descriptor(&descriptor, storage.clone()),
                     table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(descriptor_file)},
                     next_column_id: AtomicUsize::new(descriptor.get_max_column_id() as usize + 1),
                     columns_by_name: Self::index_column_id_by_name(&descriptor.columns),
                     primary_column_name: descriptor.get_primary_column_name(),
-                    secondary_index_by_column_id: secondary_indexes,
                     table_name: descriptor.table_name,
                     storage_keyspace_id: keyspace_id,
                     columns_by_id: descriptor.columns,
@@ -107,11 +102,15 @@ impl Table {
     }
 
     pub fn get_by_primary_column(
-        self: Arc<Self>,
+        self: &Arc<Self>,
         key: &Bytes,
         transaction: &Transaction,
-        selection: Selection
+        selection: &Selection
     ) -> Result<Option<Row>, SimpleDbError> {
+        if selection.is_empty() {
+            return Ok(None);
+        }
+
         let mut table_iterator = TableIterator::create(
             self.storage.scan_from_key_with_transaction(
                 transaction,
@@ -141,7 +140,7 @@ impl Table {
         transaction: &Transaction,
         selection: Selection,
     ) -> Result<TableIterator, SimpleDbError> {
-        let selection = self.selection_to_columns_id(selection)?;
+        let selection = self.selection_to_columns_id(&selection)?;
         let storage_iterator = self.storage.scan_from_key_with_transaction(
             transaction,
             self.storage_keyspace_id,
@@ -161,7 +160,7 @@ impl Table {
         transaction: &Transaction,
         selection: Selection
     ) -> Result<TableIterator, SimpleDbError> {
-        let selection = self.selection_to_columns_id(selection)?;
+        let selection = self.selection_to_columns_id(&selection)?;
         let storage_iterator = self.storage.scan_all_with_transaction(transaction, self.storage_keyspace_id)?;
 
         Ok(TableIterator::create(
@@ -173,12 +172,12 @@ impl Table {
 
     //Expect call to validate_insert before calling this function
     pub fn insert(
-        &self,
+        self: Arc<Self>,
         transaction: &Transaction,
         to_insert_data: &mut Vec<(String, Bytes)>
     ) -> Result<(), SimpleDbError> {
         let id_value = self.extract_primary_value(to_insert_data).unwrap();
-        self.update(transaction, id_value, to_insert_data)
+        self.upsert(transaction, id_value, true, to_insert_data)
     }
 
     pub fn delete(
@@ -194,20 +193,45 @@ impl Table {
     }
 
     pub fn update(
-        &self,
+        self: &Arc<Self>,
         transaction: &Transaction,
         id: Bytes,
         to_update_data: &Vec<(String, Bytes)>
     ) -> Result<(), SimpleDbError> {
-        let record = self.build_record(to_update_data)?;
-        let value = record.serialize();
+        self.upsert(transaction, id, true, to_update_data)
+    }
+
+    fn upsert(
+        self: &Arc<Self>,
+        transaction: &Transaction,
+        id: Bytes,
+        is_new_values: bool,
+        to_update_data: &Vec<(String, Bytes)>
+    ) -> Result<(), SimpleDbError> {
+        let new_record = self.build_record(to_update_data)?;
+        let new_value = new_record.serialize();
+
+        let old_record = Record::create(if !is_new_values {
+            self.get_old_data_to_invalidate_secondary_index(&id, transaction, to_update_data)?
+        } else {
+            Vec::new()
+        });
 
         self.storage.set_with_transaction(
             self.storage_keyspace_id,
             transaction,
+            id.clone(),
+            new_value.as_slice()
+        )?;
+
+        self.secondary_indexes.update_all(
+            transaction,
             id,
-            value.as_slice()
-        )
+            &new_record,
+            &old_record
+        )?;
+
+        Ok(())
     }
 
     pub fn get_column_desc(
@@ -388,12 +412,12 @@ impl Table {
             .is_some()
     }
 
-    fn selection_to_columns_id(&self, selection: Selection) -> Result<Vec<ColumnId>, SimpleDbError> {
+    fn selection_to_columns_id(&self, selection: &Selection) -> Result<Vec<ColumnId>, SimpleDbError> {
         match selection {
             Selection::Some(columns_names) => {
                 let mut column_ids = Vec::new();
 
-                for column_name in &columns_names {
+                for column_name in columns_names {
                     let column_id = self.get_column_id_by_name(column_name)?;
                     column_ids.push(column_id);
                 }
@@ -419,19 +443,41 @@ impl Table {
         &self.table_name
     }
 
-    fn create_secondary_indexes_from_table_descriptor(
-        table_descriptor: &TableDescriptor,
-        storage: Arc<Storage>
-    ) -> SkipMap<ColumnId, Arc<SecondaryIndex>> {
-        let mut secondary_indexes = SkipMap::new();
-        for entry in table_descriptor.columns.iter() {
-            let column_descriptor = entry.value();
+    fn get_old_data_to_invalidate_secondary_index(
+        self: &Arc<Self>,
+        key: &Bytes,
+        transaction: &Transaction,
+        updated_data: &Vec<(String, Bytes)>
+    ) -> Result<Vec<(ColumnId, Bytes)>, SimpleDbError> {
+        let mut old_data = Vec::new();
 
-            if let Some(secondary_index_keyspace_id) = column_descriptor.secondary_index_keyspace_id {
-                let secondary_index = Arc::new(SecondaryIndex::create(secondary_index_keyspace_id, storage.clone()));
-                secondary_indexes.insert(column_descriptor.column_id, secondary_index);
+        let secondary_indexed_columns_names: Vec<String> = updated_data.iter()
+            .map(|(column_name, _) | self.get_column_desc(column_name).unwrap())
+            .filter(|column| column.is_secondary_indexed())
+            .map(|column| column.column_name.clone())
+            .collect();
+
+        let old_value_selection = Selection::Some(secondary_indexed_columns_names);
+
+        if !old_value_selection.is_empty() {
+            if let Some(old_row_value) = self.get_by_primary_column(
+                key,
+                transaction,
+                &old_value_selection,
+            )? {
+                for column_secondary_indexed_column_name in old_value_selection.get_some_selected_columns() {
+                    let column_id = self.get_column_desc(&column_secondary_indexed_column_name)
+                        .unwrap()
+                        .column_id;
+
+                    match old_row_value.get_column_value(&column_secondary_indexed_column_name)? {
+                        Value::Null => continue,
+                        value => old_data.push((column_id, value.serialize())),
+                    };
+                }
             }
         }
-        secondary_indexes
+
+        Ok(old_data)
     }
 }

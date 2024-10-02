@@ -10,6 +10,10 @@ pub struct Record {
 }
 
 impl Record {
+    pub fn create(data_records: Vec<(ColumnId, Bytes)>) -> Record {
+        Record { data_records }
+    }
+
     //Missing records from other will be added
     //Repeated records will be replaced by other
     pub fn merge(&mut self, mut other: Record) {
@@ -53,11 +57,10 @@ impl Record {
         None
     }
 
-    pub fn serialize(mut self) -> Vec<u8> {
+    pub fn serialize(&self) -> Vec<u8> {
         let mut result = Vec::new();
-
-        while let Some((column_id, column_value)) = self.data_records.pop() {
-            result.put_u16_le(column_id);
+        for (column_id, column_value) in &self.data_records {
+            result.put_u16_le(*column_id);
             result.put_u32_le(column_value.len() as u32);
             result.extend(column_value);
         }
