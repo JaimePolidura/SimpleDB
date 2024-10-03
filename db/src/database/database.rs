@@ -1,12 +1,12 @@
 use crate::database::database_descriptor::DatabaseDescriptor;
+use crate::sql::statement::CreateTableStatement;
 use crate::table::table::Table;
+use crate::value::Type;
 use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::{CannotCreateDatabaseFolder, PrimaryColumnNotIncluded, TableAlreadyExists};
 use shared::{utils, SimpleDbError, SimpleDbOptions};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LockResult, Mutex, RwLock, RwLockWriteGuard};
 use storage::transactions::transaction::Transaction;
-use crate::sql::statement::CreateTableStatement;
-use crate::value::Type;
 
 pub struct Database {
     name: String,
@@ -14,7 +14,10 @@ pub struct Database {
     tables: SkipMap<String, Arc<Table>>,
     database_descriptor: Mutex<DatabaseDescriptor>,
 
-    options: Arc<SimpleDbOptions>
+    options: Arc<SimpleDbOptions>,
+
+    //See self::lock_rollbacks() method docks
+    rollback_lock: RwLock<()>,
 }
 
 impl Database {
@@ -29,6 +32,7 @@ impl Database {
         Ok(Arc::new(Database {
             database_descriptor: Mutex::new(DatabaseDescriptor::create(options, &database_name.to_string())?),
             storage: Arc::new(storage::create(options.clone())?),
+            rollback_lock: RwLock::new(()),
             name: database_name.to_string(),
             options: options.clone(),
             tables: SkipMap::new(),
@@ -40,19 +44,34 @@ impl Database {
         database_name: &str
     ) -> Result<Arc<Database>, SimpleDbError> {
         let storage = Arc::new(storage::create(database_options.clone())?);
-        let mut tables = Table::load_tables(database_options, &storage)?;
         let database_descriptor = DatabaseDescriptor::load_database_descriptor(
             database_options,
             &String::from(database_name),
         )?;
 
-        Ok(Arc::new(Database {
+        let mut database = Arc::new(Database {
             database_descriptor: Mutex::new(database_descriptor),
             name: String::from(database_name),
             options: database_options.clone(),
-            tables: Self::index_by_table_name(&mut tables),
-            storage,
-        }))
+            rollback_lock: RwLock::new(()),
+            storage: storage.clone(),
+            tables: SkipMap::new(),
+        });
+
+        database.set_tables(Table::load_tables(database_options, &storage, database.clone())?);
+
+        Ok(database)
+    }
+
+    pub(crate) fn create_mock(options: &Arc<SimpleDbOptions>) -> Arc<Database> {
+        Arc::new(Database {
+            database_descriptor: Mutex::new(DatabaseDescriptor::mock()),
+            storage: Arc::new(storage::mock(&options.clone())),
+            rollback_lock: RwLock::new(()),
+            name: String::from("mock"),
+            tables: SkipMap::new(),
+            options: options.clone()
+        })
     }
 
     pub fn validate_create_table(
@@ -68,7 +87,7 @@ impl Database {
     }
 
     pub fn create_table(
-        &self,
+        self: &Arc<Self>,
         table_name: &str,
         columns: Vec<(String, Type, bool)>,
     ) -> Result<Arc<Table>, SimpleDbError> {
@@ -83,6 +102,7 @@ impl Database {
             &self.options,
             &self.storage,
             primary_column_name,
+            self.clone()
         )?;
 
         let mut lock_result = self.database_descriptor.lock();
@@ -116,6 +136,7 @@ impl Database {
     }
 
     pub fn rollback_transaction(&self, transaction: &Transaction) -> Result<(), SimpleDbError> {
+        let lock = self.rollback_lock.read();
         self.storage.rollback_transaction(transaction)
     }
 
@@ -136,21 +157,24 @@ impl Database {
         tables
     }
 
-    fn index_by_table_name(tables: &mut Vec<Arc<Table>>) -> SkipMap<String, Arc<Table>> {
-        let mut indexed = SkipMap::new();
-
-        while let Some(table) = tables.pop() {
-            indexed.insert(table.name().clone(), table);
-        }
-
-        indexed
-    }
-
     fn validate_table_name(&self, table_name: &str) -> Result<(), SimpleDbError> {
         if self.tables.contains_key(table_name) {
             return Err(TableAlreadyExists(table_name.to_string()));
         }
 
         Ok(())
+    }
+
+    //Only used at creation time
+    pub(crate) fn set_tables(&self, mut tables: Vec<Arc<Table>>) {
+        while let Some(table) = tables.pop() {
+            self.tables.insert(table.name().clone(), table);
+        }
+    }
+
+    //This is only used to solve a race condition when a secondary index is being created
+    //and a transaction is rolledback.
+    pub(crate) fn lock_rollbacks(&self) -> LockResult<RwLockWriteGuard<'_, ()>> {
+        self.rollback_lock.write()
     }
 }

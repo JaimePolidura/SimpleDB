@@ -1,9 +1,9 @@
 use crate::sql::expression::Expression::Binary;
 use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
+use crate::value::Value;
 use crate::Row;
 use shared::SimpleDbError;
 use SimpleDbError::MalformedQuery;
-use crate::value::Value;
 
 //expression is expected to have been passed to evaluate_constant_expressions() before calling this function
 //If the row returns null, we will return false
@@ -116,21 +116,22 @@ fn evaluate_constant_binary_op(
 
 #[cfg(test)]
 mod test {
+    use crate::database::database::Database;
+    use crate::index::secondary_indexes::SecondaryIndexes;
     use crate::sql::expression::Expression::Binary;
     use crate::sql::expression::{BinaryOperator, Expression};
     use crate::sql::expression_evaluator::{evaluate_constant_expressions, evaluate_where_expression};
     use crate::sql::parser::parser::Parser;
     use crate::table::record::Record;
+    use crate::table::table::Table;
+    use crate::value::{Type, Value};
+    use crate::Row;
     use bytes::Bytes;
     use crossbeam_skiplist::SkipMap;
     use shared::{SimpleDbFile, SimpleDbFileWrapper, SimpleDbOptions};
     use std::cell::UnsafeCell;
     use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
-    use crate::index::secondary_indexes::SecondaryIndexes;
-    use crate::Row;
-    use crate::table::table::Table;
-    use crate::value::{Type, Value};
 
     //Where id == 10 OR dinero > 100
     #[test]
@@ -235,7 +236,8 @@ mod test {
             storage_keyspace_id: 1,
             columns_by_name: SkipMap::new(),
             columns_by_id: SkipMap::new(),
-            secondary_indexes: SecondaryIndexes::create_mock(Arc::new(SimpleDbOptions::default()))
+            secondary_indexes: SecondaryIndexes::create_mock(Arc::new(SimpleDbOptions::default())),
+            database: Database::create_mock(&Arc::new(SimpleDbOptions::default()))
         };
 
         table.add_columns(vec![

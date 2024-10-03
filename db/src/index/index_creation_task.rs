@@ -5,9 +5,12 @@ use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use storage::utils::storage_iterator::StorageIterator;
 use storage::Storage;
+use crate::database::database::Database;
 
 pub struct IndexCreationTask {
     table: Arc<Table>,
+    database: Arc<Database>,
+
     indexed_column_id: ColumnId,
     index_keyspace_id: KeyspaceId,
     storage: Arc<Storage>
@@ -17,10 +20,11 @@ impl IndexCreationTask {
     pub fn create(
         indexed_column_id: ColumnId,
         keyspace_id: KeyspaceId,
+        database: Arc<Database>,
         storage: Arc<Storage>,
         table: Arc<Table>,
     ) -> IndexCreationTask {
-        IndexCreationTask { table, indexed_column_id, index_keyspace_id: keyspace_id, storage }
+        IndexCreationTask { table, indexed_column_id, index_keyspace_id: keyspace_id, storage, database }
     }
 
     pub fn start(&self) -> usize {
@@ -29,6 +33,9 @@ impl IndexCreationTask {
             &Transaction::none(),
             self.index_keyspace_id,
         ).unwrap();
+        
+        //This will get unlocked when it goes out of scope
+        let guard = self.database.lock_rollbacks();
 
         while iterator.has_next() {
             let key = iterator.key();

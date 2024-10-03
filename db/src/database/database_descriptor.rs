@@ -16,6 +16,13 @@ pub(crate) struct DatabaseDescriptor {
 }
 
 impl DatabaseDescriptor {
+    pub fn mock() -> DatabaseDescriptor {
+        DatabaseDescriptor {
+            keyspace_id_by_table_name: SkipMap::new(),
+            file: SimpleDbFile::mock()
+        }
+    }
+
     pub fn create(
         database_options: &Arc<SimpleDbOptions>,
         database_name: &String,

@@ -1,3 +1,4 @@
+use crate::database::database::Database;
 use crate::index::index_creation_task::IndexCreationTask;
 use crate::index::secondary_indexes::SecondaryIndexes;
 use crate::selection::Selection;
@@ -9,13 +10,13 @@ use crate::table::table_iterator::TableIterator;
 use crate::value::{Type, Value};
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
-use shared::SimpleDbError::{ColumnNameAlreadyDefined, ColumnNotFound, IndexAlreadyExists, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
+use shared::SimpleDbError::{ColumnNameAlreadyDefined, IndexAlreadyExists, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
 use shared::{ColumnId, FlagMethods, KeyspaceId, SimpleDbError, SimpleDbFileWrapper};
 use std::cell::UnsafeCell;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hasher;
-use std::sync::atomic::{fence, AtomicUsize, Ordering};
 use std::sync::atomic::Ordering::Relaxed;
+use std::sync::atomic::{fence, AtomicUsize, Ordering};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 
@@ -32,7 +33,9 @@ pub struct Table {
 
     pub(crate) storage: Arc<storage::Storage>,
 
-    pub(crate) secondary_indexes: SecondaryIndexes
+    pub(crate) secondary_indexes: SecondaryIndexes,
+
+    pub(crate) database: Arc<Database>
 }
 
 impl Table {
@@ -41,6 +44,7 @@ impl Table {
         options: &Arc<shared::SimpleDbOptions>,
         storage: &Arc<storage::Storage>,
         primary_column_name: String,
+        database: Arc<Database>
     ) -> Result<Arc<Table>, SimpleDbError> {
         let table_keyspace_id = storage.create_keyspace(KEYSPACE_TABLE_USER)?;
         let (table_descriptor, table_descriptor_file) = TableDescriptor::create(
@@ -61,12 +65,14 @@ impl Table {
             columns_by_name: SkipMap::new(),
             storage: storage.clone(),
             primary_column_name,
+            database
         }))
     }
 
     pub(crate) fn load_tables(
         options: &Arc<shared::SimpleDbOptions>,
         storage: &Arc<storage::Storage>,
+        database: Arc<Database>
     ) -> Result<Vec<Arc<Table>>, SimpleDbError> {
         let mut tables = Vec::new();
 
@@ -85,6 +91,7 @@ impl Table {
                     storage_keyspace_id: keyspace_id,
                     columns_by_id: descriptor.columns,
                     storage: storage.clone(),
+                    database: database.clone()
                 }));
             }
         }
@@ -189,6 +196,7 @@ impl Table {
         let task = IndexCreationTask::create(
             column.column_id,
             secondary_index_keyspace_id,
+            self.database.clone(),
             self.storage.clone(),
             self.clone(),
         );
