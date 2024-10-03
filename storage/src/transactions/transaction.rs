@@ -14,6 +14,26 @@ pub struct Transaction {
 }
 
 impl Transaction {
+    pub fn none() -> Transaction {
+        Transaction {
+            isolation_level: IsolationLevel::ReadUncommited,
+            n_writes_rolled_back: AtomicUsize::new(0),
+            active_transactions: HashSet::new(),
+            n_writes: AtomicUsize::new(0),
+            txn_id: 0
+        }
+    }
+
+    pub fn create(id: TxnId) -> Transaction {
+        Transaction {
+            isolation_level: IsolationLevel::SnapshotIsolation,
+            n_writes_rolled_back: AtomicUsize::new(0),
+            active_transactions: HashSet::new(),
+            n_writes: AtomicUsize::new(0),
+            txn_id: id
+        }
+    }
+
     pub(crate) fn can_read(&self, key: &Key) -> bool {
         match self.isolation_level {
             IsolationLevel::SnapshotIsolation => {
@@ -37,16 +57,6 @@ impl Transaction {
 
     pub(crate) fn all_writes_have_been_rolledback(&self) -> bool {
         self.n_writes.load(Relaxed) == self.n_writes_rolled_back.load(Relaxed)
-    }
-
-    pub fn none() -> Transaction {
-        Transaction {
-            isolation_level: IsolationLevel::ReadUncommited,
-            n_writes_rolled_back: AtomicUsize::new(0),
-            active_transactions: HashSet::new(),
-            n_writes: AtomicUsize::new(0),
-            txn_id: 0
-        }
     }
 
     pub fn id(&self) -> TxnId {

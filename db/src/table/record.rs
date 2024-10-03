@@ -43,6 +43,19 @@ impl Record {
         None
     }
 
+    pub fn take_value(&mut self, column_id_lookup: ColumnId) -> Option<Bytes> {
+        for (current_index, current_entry) in self.data_records.iter().enumerate() {
+            let (current_column_id, _) = current_entry;
+
+            if *current_column_id == column_id_lookup {
+                let (_, value) =  self.data_records.remove(current_index);
+                return Some(value);
+            }
+        }
+
+        None
+    }
+
     fn get_column_id_index(&self, column_id_lookup: ColumnId) -> Option<usize> {
         let mut current_column_index = 0;
 

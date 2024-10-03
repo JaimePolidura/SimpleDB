@@ -118,8 +118,8 @@ impl TransactionManager {
     fn copy_active_transactions(&self) -> HashSet<shared::TxnId> {
         let mut active_transactions: HashSet<shared::TxnId> = HashSet::new();
 
-        for atctive_transactions in &self.active_transactions {
-            active_transactions.insert(*atctive_transactions.value());
+        for active_transaction in &self.active_transactions {
+            active_transactions.insert(*active_transaction.value());
         }
 
         active_transactions

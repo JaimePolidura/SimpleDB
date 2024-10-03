@@ -8,9 +8,10 @@ use crate::utils::storage_engine_iterator::StorageEngineIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use bytes::Bytes;
 use std::collections::{HashSet, VecDeque};
+use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use shared::{Flag, KeyspaceId, SimpleDbError, SimpleDbOptions};
+use shared::{Flag, KeyspaceId, SimpleDbError, SimpleDbOptions, TxnId};
 
 pub struct Storage {
     transaction_manager: Arc<TransactionManager>,
@@ -20,15 +21,15 @@ pub struct Storage {
 
 //Key value
 pub enum WriteBatch {
-    Put(shared::KeyspaceId, Bytes, Bytes),
-    Delete(shared::KeyspaceId, Bytes)
+    Put(KeyspaceId, Bytes, Bytes),
+    Delete(KeyspaceId, Bytes)
 }
 
 pub type SimpleDbStorageIterator = StorageEngineIterator<
     TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>
 >;
 
-pub fn create(options: Arc<shared::SimpleDbOptions>) -> Result<Storage, shared::SimpleDbError> {
+pub fn create(options: Arc<SimpleDbOptions>) -> Result<Storage, SimpleDbError> {
     println!("Starting storage engine!");
     let transaction_manager = Arc::new(
         TransactionManager::create_recover_from_log(options.clone())?
@@ -61,7 +62,7 @@ pub fn mock(simple_db_options: &Arc<SimpleDbOptions>) -> Storage {
 }
 
 impl Storage {
-    pub fn scan_all(&self, keyspace_id: shared::KeyspaceId) -> Result<SimpleDbStorageIterator, shared::SimpleDbError> {
+    pub fn scan_all(&self, keyspace_id: KeyspaceId) -> Result<SimpleDbStorageIterator, SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         let mut iterator = self.scan_all_with_transaction(&transaction, keyspace_id)?;
         iterator.set_transaction_standalone(&self.transaction_manager, transaction);
@@ -70,10 +71,10 @@ impl Storage {
 
     pub fn scan_from(
         &self,
-        keyspace_id: shared::KeyspaceId,
+        keyspace_id: KeyspaceId,
         key: &Bytes,
         inclusive: bool
-    ) -> Result<SimpleDbStorageIterator, shared::SimpleDbError> {
+    ) -> Result<SimpleDbStorageIterator, SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         let mut iterator = self.scan_from_key_with_transaction(&transaction, keyspace_id, key, inclusive)?;
         iterator.set_transaction_standalone(&self.transaction_manager, transaction);
@@ -83,10 +84,10 @@ impl Storage {
     pub fn scan_from_key_with_transaction(
         &self,
         transaction: &Transaction,
-        keyspace_id: shared::KeyspaceId,
+        keyspace_id: KeyspaceId,
         key: &Bytes,
         inclusive: bool,
-    ) -> Result<SimpleDbStorageIterator, shared::SimpleDbError> {
+    ) -> Result<SimpleDbStorageIterator, SimpleDbError> {
         let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         Ok(keyspace.scan_from_key_with_transaction(transaction, key, inclusive))
     }
@@ -94,72 +95,72 @@ impl Storage {
     pub fn scan_all_with_transaction(
         &self,
         transaction: &Transaction,
-        keyspace_id: shared::KeyspaceId,
-    ) -> Result<SimpleDbStorageIterator, shared::SimpleDbError> {
+        keyspace_id: KeyspaceId,
+    ) -> Result<SimpleDbStorageIterator, SimpleDbError> {
         let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         Ok(keyspace.scan_all_with_transaction(transaction))
     }
 
     pub fn get(
         &self,
-        keyspace_id: shared::KeyspaceId,
+        keyspace_id: KeyspaceId,
         key: &Bytes
-    ) -> Result<Option<Bytes>, shared::SimpleDbError> {
+    ) -> Result<Option<Bytes>, SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         self.get_with_transaction(keyspace_id, &transaction, key)
     }
 
     pub fn get_with_transaction(
         &self,
-        keyspace_id: shared::KeyspaceId,
+        keyspace_id: KeyspaceId,
         transaction: &Transaction,
         key: &Bytes,
-    ) -> Result<Option<Bytes>, shared::SimpleDbError> {
+    ) -> Result<Option<Bytes>, SimpleDbError> {
         let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         keyspace.get_with_transaction(transaction, key)
     }
 
     pub fn set(
         &self,
-        keyspace_id: shared::KeyspaceId,
+        keyspace_id: KeyspaceId,
         key: Bytes,
         value: &[u8]
-    ) -> Result<(), shared::SimpleDbError> {
+    ) -> Result<(), SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         self.set_with_transaction(keyspace_id, &transaction, key, value)
     }
 
     pub fn set_with_transaction(
         &self,
-        keyspace_id: shared::KeyspaceId,
+        keyspace_id: KeyspaceId,
         transaction: &Transaction,
         key: Bytes,
         value: &[u8],
-    ) -> Result<(), shared::SimpleDbError> {
+    ) -> Result<(), SimpleDbError> {
         let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         keyspace.set_with_transaction(transaction, key, value)
     }
 
     pub fn delete(
         &self,
-        keyspace_id: shared::KeyspaceId,
+        keyspace_id: KeyspaceId,
         key: Bytes
-    ) -> Result<(), shared::SimpleDbError> {
+    ) -> Result<(), SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::ReadUncommited);
         self.delete_with_transaction(keyspace_id, &transaction, key)
     }
 
     pub fn delete_with_transaction(
         &self,
-        keyspace_id: shared::KeyspaceId,
+        keyspace_id: KeyspaceId,
         transaction: &Transaction,
         key: Bytes,
-    ) -> Result<(), shared::SimpleDbError> {
+    ) -> Result<(), SimpleDbError> {
         let keyspace = self.keyspaces.get_keyspace(keyspace_id)?;
         keyspace.delete_with_transaction(transaction, key)
     }
 
-    pub fn write_batch(&self, batch: Vec<WriteBatch>) -> Result<(), shared::SimpleDbError> {
+    pub fn write_batch(&self, batch: Vec<WriteBatch>) -> Result<(), SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         let mut batch = VecDeque::from(batch);
 
@@ -198,7 +199,7 @@ impl Storage {
         self.transaction_manager.rollback(transaction)
     }
 
-    pub fn create_keyspace(&self, flag: Flag) -> Result<shared::KeyspaceId, shared::SimpleDbError> {
+    pub fn create_keyspace(&self, flag: Flag) -> Result<KeyspaceId, SimpleDbError> {
         let keyspace = self.keyspaces.create_keyspace(flag)?;
         keyspace.start_compaction_thread();
         Ok(keyspace.keyspace_id())
@@ -222,7 +223,7 @@ impl Storage {
         }
     }
 
-    pub fn get_keyspaces_id(&self) -> Vec<shared::KeyspaceId> {
+    pub fn get_keyspaces_id(&self) -> Vec<KeyspaceId> {
         self.keyspaces.get_keyspaces_id()
     }
 }

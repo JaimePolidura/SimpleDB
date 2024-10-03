@@ -102,7 +102,7 @@ impl PostingList {
         let mut serialized = Vec::new();
         serialized.put_u64_le(self.entries.len() as u64);
 
-        for entry in self.entries {
+        for entry in &self.entries {
             serialized.put_u8(if entry.is_present { 0x01 } else { 0x00 });
             serialized.extend(entry.primary_key.serialize());
         }

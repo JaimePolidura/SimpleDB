@@ -172,7 +172,7 @@ impl Table {
     }
 
     pub fn create_secondary_index(
-        &self: &Arc<Self>,
+        self: &Arc<Self>,
         column_name: &str,
         wait: bool
     ) -> Result<(), SimpleDbError> {
@@ -185,14 +185,13 @@ impl Table {
 
         let secondary_index_keyspace_id = self.secondary_indexes.create_new_secondary_index(column.column_id)?;
         let task = IndexCreationTask::create(
-            self.clone(),
             column.column_id,
-            secondary_index_keyspace_id
+            secondary_index_keyspace_id,
+            self.storage.clone(),
+            self.clone(),
         );
 
-        let join_handle = std::thread::spawn(|| {
-            task.start();
-        });
+        let join_handle = std::thread::spawn(move || task.start());
 
         if wait {
             join_handle.join().unwrap();
