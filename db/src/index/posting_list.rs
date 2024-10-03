@@ -1,6 +1,4 @@
 use bytes::{Buf, BufMut, Bytes};
-use shared::SimpleDbError::OnlyOnePrimaryColumnAllowed;
-use shared::StorageValueMergeResult;
 use storage::key;
 use storage::key::Key;
 use storage::transactions::transaction::Transaction;

@@ -82,7 +82,16 @@ impl Tokenizer {
 
     fn identifier(&mut self) -> Result<Token, shared::SimpleDbError> {
         match self.advance().to_uppercase().next().unwrap() {
-            'A' => self.match_string_or_other_identifier("ND", Token::And, 1),
+            'A' => {
+                if self.advance_if_next_string_eq("ND") {
+                    Ok(Token::And)
+                } else if self.advance_if_next_string_eq("SYNC") {
+                    Ok(Token::Async)
+                } else {
+                    self.next -= 1;
+                    Ok(self.other_identifier())
+                }
+            },
             'B' => {
                 if self.advance_if_next_string_eq("OOLEAN") {
                     Ok(Token::ColumnType(Type::Boolean))
@@ -96,7 +105,16 @@ impl Tokenizer {
             },
             'K' => self.match_string_or_other_identifier("EY", Token::Key, 1),
             'P' => self.match_string_or_other_identifier("RIMARY", Token::Primary, 1),
-            'O' => self.match_string_or_other_identifier("R", Token::Or, 1),
+            'O' => {
+                if self.advance_if_next_string_eq("R") {
+                    Ok(Token::Or)
+                } else if self.advance_if_next_string_eq("N") {
+                    Ok(Token::On)
+                } else {
+                    self.next -= 1;
+                    Ok(self.other_identifier())
+                }
+            },
             'N' => self.match_string_or_other_identifier("ULL", Token::Null, 1),
             'R' => {
                 if self.advance_if_next_string_eq("OLLBACK") {
@@ -193,7 +211,9 @@ impl Tokenizer {
             'I' => {
                 if self.advance_if_next_string_eq("NSERT") {
                     Ok(Token::Insert)
-                }else if self.advance_if_next_string_eq("NTO") {
+                } else if self.advance_if_next_string_eq("NDEX") {
+                    Ok(Token::Index)
+                } else if self.advance_if_next_string_eq("NTO") {
                     Ok(Token::Into)
                 } else if self.advance_if_next_string_eq("8") {
                     Ok(Token::ColumnType(Type::I8))

@@ -23,7 +23,8 @@ impl IndexCreationTask {
         IndexCreationTask { table, indexed_column_id, index_keyspace_id: keyspace_id, storage }
     }
 
-    pub fn start(&self) {
+    pub fn start(&self) -> usize {
+        let mut n_affected_rows = 0;
         let iterator = self.storage.scan_all_with_transaction(
             &Transaction::none(),
             self.index_keyspace_id,
@@ -35,6 +36,8 @@ impl IndexCreationTask {
             let mut record = Record::deserialize(value.to_vec());
 
             if let Some(value_to_be_indexed) = record.take_value(self.indexed_column_id) {
+                n_affected_rows += 1;
+
                 self.storage.set_with_transaction(
                     self.index_keyspace_id,
                     &Transaction::create(key.txn_id()),
@@ -43,5 +46,7 @@ impl IndexCreationTask {
                 );
             }
         }
+
+        n_affected_rows
     }
 }

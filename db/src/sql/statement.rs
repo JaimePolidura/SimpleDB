@@ -8,6 +8,7 @@ pub enum Statement {
     Delete(DeleteStatement),
     Insert(InsertStatement),
     CreateTable(CreateTableStatement),
+    CreateIndex(CreateIndexStatement),
     CreateDatabase(String),
     Describe(String),
     StartTransaction,
@@ -45,6 +46,12 @@ pub struct InsertStatement {
     pub(crate) table_name: String,
     //Column name, Value, Value type
     pub(crate) values: Vec<(String, Value)>,
+}
+
+pub struct CreateIndexStatement {
+    pub(crate) table_name: String,
+    pub(crate) column_name: String,
+    pub(crate) wait: bool,
 }
 
 pub struct CreateTableStatement {
@@ -193,6 +200,12 @@ impl Statement {
                 transaction_req: Requirement::Optional,
                 database_req: Requirement::ObligatoryToHave
             },
+            Statement::CreateIndex(_) => StatementDescriptor {
+                creates_transaction: false,
+                terminates_transaction: false,
+                transaction_req: Requirement::Optional,
+                database_req: Requirement::ObligatoryToHave
+            }
         }
     }
 }

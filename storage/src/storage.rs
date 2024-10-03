@@ -7,11 +7,10 @@ use crate::utils::merge_iterator::MergeIterator;
 use crate::utils::storage_engine_iterator::StorageEngineIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use bytes::Bytes;
+use shared::{Flag, KeyspaceId, SimpleDbError, SimpleDbOptions};
 use std::collections::{HashSet, VecDeque};
-use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use shared::{Flag, KeyspaceId, SimpleDbError, SimpleDbOptions, TxnId};
 
 pub struct Storage {
     transaction_manager: Arc<TransactionManager>,

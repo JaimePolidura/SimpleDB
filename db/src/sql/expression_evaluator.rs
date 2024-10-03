@@ -127,6 +127,7 @@ mod test {
     use std::cell::UnsafeCell;
     use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
+    use crate::index::secondary_indexes::SecondaryIndexes;
     use crate::Row;
     use crate::table::table::Table;
     use crate::value::{Type, Value};
@@ -234,7 +235,7 @@ mod test {
             storage_keyspace_id: 1,
             columns_by_name: SkipMap::new(),
             columns_by_id: SkipMap::new(),
-            flags: 0
+            secondary_indexes: SecondaryIndexes::create_mock(Arc::new(SimpleDbOptions::default()))
         };
 
         table.add_columns(vec![

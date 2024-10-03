@@ -9,7 +9,7 @@ use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStateme
 use crate::sql::validator::StatementValidator;
 use crate::table::table::Table;
 use crate::value::Value;
-use crate::ColumnDescriptor;
+use crate::{ColumnDescriptor, CreateIndexStatement};
 use bytes::Bytes;
 use shared::SimpleDbError::MalformedQuery;
 use shared::{SimpleDbError, SimpleDbOptions};
@@ -41,18 +41,19 @@ impl StatementExecutor {
     ) -> Result<StatementResult, SimpleDbError> {
         self.validator.validate(context, &statement)?;
         let statement = self.evaluate_constant_expressions(statement)?;
-
+        
         match statement {
             Statement::Select(select_statement) => self.select(context.database(), context.transaction(), select_statement),
             Statement::Update(update_statement) => self.update(context.database(), context.transaction(), update_statement),
             Statement::Delete(delete_statement) => self.delete(context.database(), context.transaction(), delete_statement),
             Statement::Insert(insert_statement) => self.insert(context.database(), context.transaction(), insert_statement),
             Statement::CreateTable(create_table_statement) => self.create_table(context.database(), create_table_statement),
-            Statement::StartTransaction => self.start_transaction(context.database()),
+            Statement::CreateIndex(statement) => self.create_secondary_index(context.database(), statement),
             Statement::Rollback => self.rollback_transaction(context.database(), context.transaction()),
             Statement::Commit => self.commit_transaction(context.database(), context.transaction()),
             Statement::CreateDatabase(database_name) => self.create_database(database_name),
             Statement::Describe(table_name) => self.describe_table(&table_name, context),
+            Statement::StartTransaction => self.start_transaction(context.database()),
             Statement::ShowTables => self.show_tables(&context),
             Statement::ShowDatabases => self.show_databases(),
         }
@@ -150,6 +151,21 @@ impl StatementExecutor {
         let database = self.databases.get_database_or_err(database_name)?;
         database.create_table(create_table_statement.table_name.as_str(), create_table_statement.columns)?;
         Ok(StatementResult::Ok(0))
+    }
+
+    fn create_secondary_index(
+        &self,
+        database_name: &String,
+        statement: CreateIndexStatement,
+    ) -> Result<StatementResult, SimpleDbError> {
+        let database = self.databases.get_database_or_err(database_name)?;
+        let table = database.get_table_or_err(&statement.table_name)?;
+
+        let n_affected_rows = table.create_secondary_index(
+            &statement.column_name, statement.wait
+        )?;
+
+        Ok(StatementResult::Ok(n_affected_rows))
     }
 
     fn start_transaction(

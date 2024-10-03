@@ -4,7 +4,7 @@ use crate::table::table_descriptor::TableDescriptor;
 use crate::table::table_flags::KEYSPACE_TABLE_INDEX;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
-use shared::{ColumnId, KeyspaceId, SimpleDbError};
+use shared::{ColumnId, KeyspaceId, SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use storage::Storage;
@@ -19,6 +19,13 @@ impl SecondaryIndexes {
         SecondaryIndexes {
             secondary_index_by_column_id: SkipMap::new(),
             storage
+        }
+    }
+
+    pub fn create_mock(options: Arc<SimpleDbOptions>) -> SecondaryIndexes {
+        SecondaryIndexes {
+            secondary_index_by_column_id: SkipMap::new(),
+            storage: Arc::new(storage::mock(&options))
         }
     }
 

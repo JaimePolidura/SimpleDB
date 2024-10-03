@@ -7,6 +7,7 @@ use crate::value::{Type, Value};
 use shared::SimpleDbError;
 use shared::SimpleDbError::IllegalToken;
 use std::cmp::PartialEq;
+use crate::CreateIndexStatement;
 
 const MAX_PRECEDENCE: u8 = u8::MAX;
 
@@ -306,7 +307,27 @@ impl Parser {
         match self.advance()? {
             Token::Database => self.create_database(),
             Token::Table => self.create_table(),
+            Token::Index => self.create_index(),
             _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Invalid token after create")))
+        }
+    }
+
+    fn create_index(&mut self) -> Result<Statement, SimpleDbError> {
+        match self.advance()? {
+            Token::On => {
+                let table_name = self.identifier()?;
+                self.expect_token(Token::OpenParen)?;
+                let column_name = self.identifier()?;
+                self.expect_token(Token::CloseParen)?;
+                let is_async = self.maybe_expect_token(Token::Async)?;
+
+                Ok(Statement::CreateIndex(CreateIndexStatement {
+                    column_name,
+                    table_name,
+                    wait: !is_async
+                }))
+            },
+            _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Expect ON after CREATE INDEX")))
         }
     }
 
@@ -688,6 +709,23 @@ mod test {
                 assert_eq!(createStatement.columns[2], (String::from("dinero"), Type::F64, false));
             },
             _ => panic!()
+        }
+    }
+
+    #[test]
+    fn create_index() {
+        let mut parser = Parser::create(String::from(
+            "CREATE INDEX ON personas (dinero) ASYNC;"
+        ));
+        let statement = parser.next_statement().unwrap().unwrap();
+
+        match statement {
+            Statement::CreateIndex(statement) => {
+                assert_eq!(statement.table_name, String::from("personas"));
+                assert_eq!(statement.column_name, String::from("dinero"));
+                assert_eq!(statement.wait, false);
+            }
+            _ => panic!("")
         }
     }
 }

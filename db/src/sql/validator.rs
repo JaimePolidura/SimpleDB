@@ -7,6 +7,7 @@ use crate::value::Type;
 use shared::SimpleDbError::UnknownColumn;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
+use crate::{CreateIndexStatement, StatementDescriptor};
 
 pub struct StatementValidator {
     databases: Arc<Databases>,
@@ -33,6 +34,7 @@ impl StatementValidator {
         self.validate_context(context, statement)?;
 
         match statement {
+            Statement::CreateIndex(statement) => self.validate_create_secondary_index(statement, context.database()),
             Statement::CreateTable(statement) => self.validate_create_table(context.database(), statement),
             Statement::Select(statement) => self.validate_select(context.database(), statement),
             Statement::Update(statement) => self.validate_update(context.database(), statement),
@@ -46,6 +48,16 @@ impl StatementValidator {
             Statement::Rollback |
             Statement::Commit => Ok(()),
         }
+    }
+
+    fn validate_create_secondary_index(
+        &self,
+        statement: &CreateIndexStatement,
+        database_name: &str,
+    ) -> Result<(), SimpleDbError> {
+        let database = self.databases.get_database_or_err(database_name)?;
+        let table = database.get_table_or_err(&statement.table_name)?;
+        table.validate_create_index(&statement.column_name)
     }
 
     fn validate_create_database(

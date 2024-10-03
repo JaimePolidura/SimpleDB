@@ -175,9 +175,8 @@ impl Table {
         self: &Arc<Self>,
         column_name: &str,
         wait: bool
-    ) -> Result<(), SimpleDbError> {
-        let column = self.get_column_desc(column_name)
-            .ok_or(ColumnNotFound(self.storage_keyspace_id, column_name.to_string()))?;
+    ) -> Result<usize, SimpleDbError> {
+        let column = self.get_column_desc(column_name).unwrap();
 
         if self.secondary_indexes.has(column.column_id) {
             return Err(IndexAlreadyExists(self.storage_keyspace_id, column_name.to_string()));
@@ -192,12 +191,13 @@ impl Table {
         );
 
         let join_handle = std::thread::spawn(move || task.start());
+        let mut n_affected_rows = 0;
 
         if wait {
-            join_handle.join().unwrap();
+            n_affected_rows = join_handle.join().unwrap();
         }
 
-        Ok(())
+        Ok(n_affected_rows)
     }
 
     //Expect call to validate_insert before calling this function
@@ -332,6 +332,19 @@ impl Table {
                 Ok(())
             }
         }
+    }
+
+    pub fn validate_create_index(
+        &self,
+        column_name: &str
+    ) -> Result<(), SimpleDbError> {
+        let column = self.get_column_desc(column_name).unwrap();
+
+        if self.secondary_indexes.has(column.column_id) || column.is_primary{
+            return Err(IndexAlreadyExists(self.storage_keyspace_id, column_name.to_string()));
+        }
+
+        Ok(())
     }
 
     pub fn validate_column_values(
