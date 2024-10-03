@@ -5,13 +5,13 @@ use storage::transactions::transaction::Transaction;
 
 #[derive(Clone)]
 pub struct PostingList {
-    entries: Vec<PostingListEntry>,
+    pub(crate) entries: Vec<PostingListEntry>,
 }
 
 #[derive(Clone)]
 pub struct PostingListEntry {
-    is_present: bool,
-    primary_key: Key
+    pub(crate) is_present: bool,
+    pub(crate) primary_key: Key
 }
 
 impl PostingList {

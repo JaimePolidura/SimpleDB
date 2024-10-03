@@ -29,7 +29,7 @@ impl Transaction {
         }
     }
 
-    pub(crate) fn can_read(&self, key: &Key) -> bool {
+    pub fn can_read(&self, key: &Key) -> bool {
         match self.isolation_level {
             IsolationLevel::SnapshotIsolation => {
                 key.txn_id() <= self.txn_id && !self.active_transactions.contains(&key.txn_id())

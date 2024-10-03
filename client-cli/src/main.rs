@@ -13,7 +13,6 @@ fn main() {
     app.start()
 }
 
-
 //Address, Password
 fn get_database_args() -> (String, String) {
     let args: Vec<String> = env::args().collect();

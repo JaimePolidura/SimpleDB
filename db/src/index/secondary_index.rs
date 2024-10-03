@@ -3,6 +3,7 @@ use bytes::Bytes;
 use shared::{KeyspaceId, SimpleDbError};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 
 pub enum SecondaryIndexState {
     Creating,
@@ -44,6 +45,14 @@ impl SecondaryIndex {
             new_value,
             &new_entry
         )
+    }
+
+    pub fn scan_all(
+        &self,
+        transaction: &Transaction
+    ) -> Result<SecondaryIndexIterator, SimpleDbError> {
+        let iterator = self.storage.scan_all_with_transaction(transaction, self.keyspace_id)?;
+        Ok(SecondaryIndexIterator::create(transaction, iterator))
     }
 
     pub fn delete(
