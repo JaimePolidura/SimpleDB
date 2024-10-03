@@ -7,7 +7,8 @@ use std::collections::HashSet;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::sync::Arc;
-use shared::SimpleDbError;
+use crossbeam_skiplist::map::Entry;
+use shared::{SimpleDbError, TxnId};
 
 #[derive(Clone)]
 pub enum IsolationLevel {
@@ -16,8 +17,8 @@ pub enum IsolationLevel {
 }
 
 pub struct TransactionManager {
-    rolledback_transactions: SkipMap<shared::TxnId, Arc<Transaction>>,
-    active_transactions: SkipSet<shared::TxnId>,
+    rolledback_transactions: SkipMap<TxnId, AtomicUsize>,
+    active_transactions: SkipMap<TxnId, AtomicUsize>,
     next_txn_id: AtomicU64,
     log: TransactionLog,
 }
@@ -26,15 +27,18 @@ impl TransactionManager {
     pub fn create_recover_from_log(options: Arc<shared::SimpleDbOptions>) -> Result<TransactionManager, shared::SimpleDbError> {
         let mut log = TransactionLog::create(options)?;
         let transaction_log_entries = log.read_entries()?;
-        let rolledback_transactions = Self::get_pending_transactions_to_rollback_from_log_entries(&transaction_log_entries);
-        let (active_transactions, max_txn_id) = Self::get_active_transactions_from_log_entries(&transaction_log_entries);
+        let (active_transactions, pending_to_rollback, max_txn_id) =
+            Self::get_pending_transactions(&transaction_log_entries);
 
-        log.replace_entries(&Self::create_new_transaction_log_entries(&rolledback_transactions, &active_transactions))?;
+        let mut new_log_entries = Vec::new();
+        new_log_entries.extend(Self::pending_transactions_to_log_entries(&active_transactions));
+        new_log_entries.extend(Self::pending_transactions_to_log_entries(&pending_to_rollback));
+        log.replace_entries(&new_log_entries)?;
 
         Ok(TransactionManager {
+            rolledback_transactions: Self::pending_transactions_to_txnids(&active_transactions, &pending_to_rollback),
             next_txn_id: AtomicU64::new((max_txn_id + 1) as u64),
-            rolledback_transactions,
-            active_transactions,
+            active_transactions: SkipMap::new(),
             log,
         })
     }
@@ -43,7 +47,7 @@ impl TransactionManager {
         let mut active_transactions = Vec::new();
 
         for active_transaction_id in &self.active_transactions {
-            active_transactions.push(*active_transaction_id.value());
+            active_transactions.push(*active_transaction_id.key());
         }
 
         active_transactions
@@ -53,7 +57,7 @@ impl TransactionManager {
         TransactionManager {
             log: TransactionLog::create_mock(options),
             rolledback_transactions: SkipMap::new(),
-            active_transactions: SkipSet::new(),
+            active_transactions: SkipMap::new(),
             next_txn_id: AtomicU64::new(0),
         }
     }
@@ -63,17 +67,19 @@ impl TransactionManager {
         self.log.add_entry(TransactionLogEntry::Commit(transaction.txn_id))
     }
 
-    pub fn rollback_active_transaction_failure(&self, txn_id: shared::TxnId) -> Result<(), shared::SimpleDbError> {
-        self.log.add_entry(TransactionLogEntry::RolledbackActiveTransactionFailure(txn_id))?;
-        self.active_transactions.remove(&txn_id);
-        Ok(())
-    }
-
-    //A rolledback transaction won't be removed from active transactions, so no other transaction can see its changes
-    //Once all writes has been discareded in compaction or memtable flush, it wil be removed.
+    //Before calling this function it is expected that the written keys have been removed
     pub fn rollback(&self, transaction: &Transaction) -> Result<(), SimpleDbError> {
-        self.log.add_entry(TransactionLogEntry::StartRollback(transaction.txn_id, transaction.n_writes.load(Relaxed)))?;
-        self.rolledback_transactions.insert(transaction.txn_id, Arc::new(transaction.clone()));
+        self.log.add_entry(TransactionLogEntry::StartRollback(transaction.txn_id))?;
+        let n_writes = self.active_transactions.get(&transaction.txn_id)
+            .unwrap()
+            .value()
+            .load(Relaxed);
+        self.active_transactions.remove(&transaction.txn_id);
+
+        if n_writes > 0 {
+            self.rolledback_transactions.insert(transaction.txn_id, AtomicUsize::new(n_writes));
+        }
+
         Ok(())
     }
 
@@ -81,15 +87,15 @@ impl TransactionManager {
     //Returns Ok if the key with that transaction ID hasn't been rolledback
     //Returns Err if it has been rolledback
     pub fn on_write_key(&self, key: &Key) -> Result<(), ()> {
-        match self.rolledback_transactions.get(&key.txn_id())
-            .map(|entry| entry.value().clone()) {
+        match self.rolledback_transactions.get(&key.txn_id()) {
+            Some(entry_rolledback_transaction) => {
+                let n_writes_entry_rolledback_transaction = entry_rolledback_transaction.value();
 
-            Some(rolledback_transaction) => {
-                self.log.add_entry(TransactionLogEntry::RolledbackWrite(rolledback_transaction.txn_id));
-                rolledback_transaction.increase_n_writes_rolledback();
+                self.log.add_entry(TransactionLogEntry::RolledbackWrite(key.txn_id()));
+                n_writes_entry_rolledback_transaction.fetch_sub(1, Relaxed);
 
-                if rolledback_transaction.all_writes_have_been_rolledback() {
-                    self.rolledback_transactions.remove(&rolledback_transaction.txn_id);
+                if n_writes_entry_rolledback_transaction.load(Relaxed) == 0 {
+                    self.rolledback_transactions.remove(&key.txn_id());
                 }
                 Err(())
             }
@@ -100,100 +106,116 @@ impl TransactionManager {
     pub fn start_transaction(&self, isolation_level: IsolationLevel) -> Transaction {
         let active_transactions = self.copy_active_transactions();
         let txn_id = self.next_txn_id.fetch_add(1, Relaxed) as shared::TxnId;
-        self.active_transactions.insert(txn_id);
+        self.active_transactions.insert(txn_id, AtomicUsize::new(0));
 
         Transaction {
-            n_writes_rolled_back: AtomicUsize::new(0),
-            n_writes: AtomicUsize::new(0),
             active_transactions,
             isolation_level,
             txn_id
         }
     }
 
-    pub fn is_active(&self, txn_id: shared::TxnId) -> bool {
-        self.active_transactions.contains(&txn_id)
+    pub fn mark_write(&self, transaction: &Transaction) -> Result<(), SimpleDbError> {
+        match self.active_transactions.get(&transaction.txn_id) {
+            Some(n_writes) => {
+                self.log.add_entry(TransactionLogEntry::Write(transaction.txn_id))?;
+                n_writes.value().fetch_add(1, Relaxed);
+                Ok(())
+            }
+            None => Ok(())
+        }
     }
 
-    fn copy_active_transactions(&self) -> HashSet<shared::TxnId> {
-        let mut active_transactions: HashSet<shared::TxnId> = HashSet::new();
+    pub fn is_active(&self, txn_id: TxnId) -> bool {
+        self.active_transactions.get(&txn_id).is_some()
+    }
+
+    fn copy_active_transactions(&self) -> HashSet<TxnId> {
+        let mut active_transactions: HashSet<TxnId> = HashSet::new();
 
         for active_transaction in &self.active_transactions {
-            active_transactions.insert(*active_transaction.value());
+            active_transactions.insert(*active_transaction.key());
         }
 
         active_transactions
     }
 
-    fn get_pending_transactions_to_rollback_from_log_entries(entries: &Vec<TransactionLogEntry>) -> SkipMap<shared::TxnId, Arc<Transaction>> {
-        let mut rolledback_transactions: SkipMap<shared::TxnId, Arc<Transaction>> = SkipMap::new();
+    fn get_pending_transactions(
+        entries: &Vec<TransactionLogEntry>
+    ) -> (SkipMap<TxnId, usize>, SkipMap<TxnId, usize>, TxnId) {
+        //Transaction ID -> Nº writes
+        let mut active_transactions = SkipMap::new();
+        let mut transactions_to_rollback = SkipMap::new();
+        let mut max_txn_id = 1 as TxnId;
 
         for entry in entries.iter() {
+            max_txn_id = max(entry.txn_id(), max_txn_id);
+
             match entry {
-                TransactionLogEntry::StartRollback(txn_id, n_writes) => {
-                    rolledback_transactions.insert(*txn_id, Arc::new(Transaction{
-                        isolation_level: IsolationLevel::SnapshotIsolation, //These two fields doest matter
-                        active_transactions: HashSet::new(),
-                        n_writes_rolled_back: AtomicUsize::new(0),
-                        n_writes: AtomicUsize::new(*n_writes),
-                        txn_id: *txn_id
-                    }));
-                },
-                TransactionLogEntry::RolledbackWrite(txn_id) => {
-                    let entry = rolledback_transactions.get(txn_id).unwrap();
-                    let transaction = entry.value();
-                    transaction.increase_n_writes_rolledback();
-                    if transaction.all_writes_have_been_rolledback() {
-                        rolledback_transactions.remove(txn_id);
+                TransactionLogEntry::StartRollback(txn_id) => {
+                    if let Some(n_writes_to_rollback_entry) = active_transactions.get(txn_id) {
+                        let n_writes_to_rollback = *n_writes_to_rollback_entry.value();
+                        transactions_to_rollback.insert(*txn_id, n_writes_to_rollback);
+                        active_transactions.remove(txn_id);
                     }
                 },
-                TransactionLogEntry::RolledbackActiveTransactionFailure(txn_id ) => {
-                    rolledback_transactions.remove(txn_id);
+                TransactionLogEntry::Write(txn_id) => {
+                    if !active_transactions.contains_key(txn_id) {
+                        active_transactions.insert(*txn_id, 0);
+                    }
+                    active_transactions.insert(*txn_id, active_transactions.get(txn_id).unwrap().value() + 1);
+                },
+                TransactionLogEntry::Commit(txn_id) => {
+                    active_transactions.remove(txn_id);
+                }
+                TransactionLogEntry::RolledbackWrite(txn_id) => {
+                    if transactions_to_rollback.contains_key(txn_id) {
+                        let new_nwrites = transactions_to_rollback.get(txn_id).unwrap().value() - 1;
+                        if new_nwrites > 0 {
+                            transactions_to_rollback.insert(
+                                *txn_id, transactions_to_rollback.get(txn_id).unwrap().value() - 1
+                            );
+                        } else {
+                            transactions_to_rollback.remove(txn_id);
+                        }
+                    }
                 },
                 _ => {  },
             };
         }
 
-        rolledback_transactions
+        (active_transactions, transactions_to_rollback, max_txn_id)
     }
 
-    fn get_active_transactions_from_log_entries(entries: &Vec<TransactionLogEntry>) -> (SkipSet<shared::TxnId>, shared::TxnId) {
-        let mut active_transactions: SkipSet<shared::TxnId> = SkipSet::new();
-        let mut max_txn_id: shared::TxnId = 0;
-
-        for entry in entries.iter() {
-            max_txn_id = max(max_txn_id as usize, entry.txn_id());
-
-            match *entry {
-                TransactionLogEntry::RolledbackActiveTransactionFailure(txn_id) => { active_transactions.remove(&txn_id); }
-                TransactionLogEntry::Start(txn_id) => { active_transactions.insert(txn_id); },
-                TransactionLogEntry::Commit(txn_id) => { active_transactions.remove(&txn_id); },
-                TransactionLogEntry::StartRollback(txn_id, _) => { active_transactions.remove(&txn_id); },
-                TransactionLogEntry::RolledbackWrite(_) => { }
-            };
+    fn pending_transactions_to_txnids(
+        rollback_transaction: &SkipMap<TxnId, usize>,
+        active_transaction: &SkipMap<TxnId, usize>,
+    ) -> SkipMap<TxnId, AtomicUsize> {
+        let mut txnids = SkipMap::new();
+        for entry in rollback_transaction.iter() {
+            txnids.insert(*entry.key(), AtomicUsize::new(*entry.value()));
+        }
+        for entry in active_transaction.iter() {
+            txnids.insert(*entry.key(), AtomicUsize::new(*entry.value()));
         }
 
-        (active_transactions, max_txn_id)
+        txnids
     }
 
-
-    fn create_new_transaction_log_entries(
-        rolledback_transactions: &SkipMap<shared::TxnId, Arc<Transaction>>,
-        active_transactions: &SkipSet<shared::TxnId>,
+    fn pending_transactions_to_log_entries(
+        pending_transaction: &SkipMap<TxnId, usize>
     ) -> Vec<TransactionLogEntry> {
-        let mut entries: Vec<TransactionLogEntry> = Vec::new();
+        let mut entries = Vec::new();
 
-        for active_txn_id in active_transactions {
-            entries.push(TransactionLogEntry::Start(*active_txn_id.value()));
-        }
+        for entry in pending_transaction.iter() {
+            let n_writes = *entry.value() as u32;
+            let txn_id = *entry.key();
 
-        for rolledback_transaction in rolledback_transactions.iter() {
-            let rolledback_transaction = rolledback_transaction.value();
-            let pending_writes_to_rollback = rolledback_transaction.get_pending_writes_to_rollback();
-
-            if pending_writes_to_rollback > 0 {
-                entries.push(TransactionLogEntry::StartRollback(rolledback_transaction.txn_id, pending_writes_to_rollback));
+            for _ in 0..n_writes {
+                entries.push(TransactionLogEntry::Write(txn_id));
             }
+            entries.push(TransactionLogEntry::StartRollback(txn_id));
+            entries.push(TransactionLogEntry::Write(txn_id));
         }
 
         entries

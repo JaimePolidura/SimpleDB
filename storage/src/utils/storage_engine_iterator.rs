@@ -186,9 +186,9 @@ impl<I: StorageIterator> StorageIterator for StorageEngineIterator<I> {
         while self.do_do_next() {
             if let Some(seeked_key) = self.seeked_key.as_ref() {
                 let is_inbound = if self.is_seeked_key_inclusive {
-                    self.key().bytes().ge(seeked_key)
+                    self.key().as_bytes().ge(seeked_key)
                 } else {
-                    self.key().bytes().gt(seeked_key)
+                    self.key().as_bytes().gt(seeked_key)
                 };
 
                 if is_inbound {

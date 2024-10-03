@@ -1,32 +1,27 @@
 use bytes::{Buf, BufMut};
+use shared::{SimpleDbError, TxnId};
 use std::cell::UnsafeCell;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-const ROLLED_BACK_ACTIVE_TRANSACTION_FAILURE_BINARY_CODE: u8 = 0x05;
-const ROLLEDBACK_WRITE_BINARY_CODE: u8 = 0x04;
-const START_ROLLBACK_BINARY_CODE: u8 = 0x03;
-const COMMIT_BINARY_CODE: u8 = 0x02;
 const START_BINARY_CODE: u8 = 0x01;
+const COMMIT_BINARY_CODE: u8 = 0x02;
+const WRITE_BINARY_CODE: u8 = 0x03;
+const START_ROLLBACK_BINARY_CODE: u8 = 0x04;
+const ROLLEDBACK_WRITE_BINARY_CODE: u8 = 0x05;
 
 pub enum TransactionLogEntry {
-    //Transaction has been started
-    Start(shared::TxnId),
-    //Transaction has been commited
-    Commit(shared::TxnId),
-    //Rollback has started. Writes done by the transaction will be discarded at memtable flush & SSTable compaction
-    //usize is the number of writes that the transaction has done
-    StartRollback(shared::TxnId, usize),
-    //A write done by a rolledback transaction (marked in the log with StartRollback) has been discarded
-    RolledbackWrite(shared::TxnId),
-    //When the Lsm boots, if it finds an active transaction (not commited or rolledback) and there is no present write
-    //in the lsm engine with that transaction ID. It will be marked with RolledbackActiveTransactionFailure
-    //When the LSM reboots again the transaction will be ignored
-    RolledbackActiveTransactionFailure(shared::TxnId)
+    Start(TxnId),
+    Write(TxnId),
+    Commit(TxnId),
+
+    //Transaction has been rolledback
+    StartRollback(TxnId),
+    RolledbackWrite(TxnId),
 }
 
 pub struct TransactionLog {
-    //Wrapped with RwLock Becase TransactionLog needs to be passed to threads. UnsafeCell doest implement Sync
+    //Wrapped with RwLock Because TransactionLog needs to be passed to threads. UnsafeCell doest implement Sync
     log_file: shared::SimpleDbFileWrapper,
     options: Arc<shared::SimpleDbOptions>
 }
@@ -54,7 +49,7 @@ impl TransactionLog {
         //https://nullprogram.com/blog/2016/08/03/
         let log_file = unsafe { &mut *self.log_file.file.get() };
 
-        log_file.write(&entry.encode())
+        log_file.write(&entry.serialize())
             .map_err(|e| shared::SimpleDbError::CannotWriteTransactionLogEntry(e))?;
 
         if matches!(self.options.durability_level, shared::DurabilityLevel::Strong) {
@@ -64,10 +59,10 @@ impl TransactionLog {
         Ok(())
     }
 
-    pub fn replace_entries(&self, new_active_txn_id: &Vec<TransactionLogEntry>) -> Result<(), shared::SimpleDbError> {
+    pub fn replace_entries(&self, new_active_txn_id: &Vec<TransactionLogEntry>) -> Result<(), SimpleDbError> {
         let log_file = unsafe { &mut *self.log_file.file.get() };
         let new_entries_encoded: Vec<u8> = new_active_txn_id.iter()
-            .map(|entry| entry.encode())
+            .map(|entry| entry.serialize())
             .flatten()
             .collect();
 
@@ -77,21 +72,19 @@ impl TransactionLog {
         Ok(())
     }
 
-    pub fn read_entries(&self) -> Result<Vec<TransactionLogEntry>, shared::SimpleDbError> {
+    pub fn read_entries(&self) -> Result<Vec<TransactionLogEntry>, SimpleDbError> {
         let mut entries: Vec<TransactionLogEntry> = Vec::new();
         let log_file = unsafe { &*self.log_file.file.get() };
         let entries_bytes = log_file.read_all()
             .map_err(|e| shared::SimpleDbError::CannotReadTransactionLogEntries(e))?;
         let mut current_ptr = entries_bytes.as_slice();
-        let mut current_offset = 0;
 
         while current_ptr.has_remaining() {
-            let (decoded_entry, decoded_size) = TransactionLogEntry::decode(
+            let decoded_entry = TransactionLogEntry::deserialize(
                 &mut current_ptr,
-                current_offset,
-                entries.len())?;
+                entries.len()
+            )?;
 
-            current_offset = current_offset + decoded_size;
             entries.push(decoded_entry);
         }
 
@@ -100,96 +93,69 @@ impl TransactionLog {
 }
 
 impl TransactionLogEntry {
-    pub fn decode(
+    pub fn deserialize(
         current_ptr: &mut &[u8],
-        current_offset: usize,
-        n_entry_to_decode: usize,
-    ) -> Result<(TransactionLogEntry, usize), shared::SimpleDbError> {
-        let expected_crc = current_ptr.get_u32_le();
-        let encoded_size = Self::encoded_size(current_ptr[0])
-            .map_err(|_| shared::SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
-                offset: current_offset,
-                index: n_entry_to_decode,
-                error_type: shared::DecodeErrorType::UnknownFlag(current_ptr[0] as usize)
-            }))?;
-        let actual_crc = crc32fast::hash(&current_ptr[0..encoded_size]);
+        n_entry_index: usize
+    ) -> Result<TransactionLogEntry, SimpleDbError> {
+        let start_entry_ptr = current_ptr.clone();
 
-        if actual_crc != expected_crc {
-            return Err(shared::SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
-                offset: current_offset,
-                index: n_entry_to_decode,
-                error_type: shared::DecodeErrorType::CorruptedCrc(expected_crc, actual_crc)
-            }));
-        }
-
-        let binary_code = current_ptr.get_u8();
-        let txn_id = current_ptr.get_u64_le() as shared::TxnId;
-
-        let decoded_entry = match binary_code {
-            ROLLED_BACK_ACTIVE_TRANSACTION_FAILURE_BINARY_CODE => TransactionLogEntry::RolledbackActiveTransactionFailure(txn_id),
-            ROLLEDBACK_WRITE_BINARY_CODE => TransactionLogEntry::RolledbackWrite(txn_id),
-            START_ROLLBACK_BINARY_CODE => {
-                let n_writes = current_ptr.get_u64_le();
-                TransactionLogEntry::StartRollback(txn_id, n_writes as usize)
-            },
-            COMMIT_BINARY_CODE => TransactionLogEntry::Commit(txn_id),
-            START_BINARY_CODE => TransactionLogEntry::Start(txn_id),
-            _ => return Err(shared::SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
-                offset: current_offset,
-                index: n_entry_to_decode,
+        let entry = match current_ptr.get_u8() {
+            START_BINARY_CODE => TransactionLogEntry::Start(current_ptr.get_u64_le() as TxnId),
+            COMMIT_BINARY_CODE => TransactionLogEntry::Commit(current_ptr.get_u64_le() as TxnId),
+            WRITE_BINARY_CODE => TransactionLogEntry::Write(current_ptr.get_u64_le() as TxnId),
+            START_ROLLBACK_BINARY_CODE => TransactionLogEntry::StartRollback(current_ptr.get_u64_le() as TxnId),
+            ROLLEDBACK_WRITE_BINARY_CODE => TransactionLogEntry::RolledbackWrite(current_ptr.get_u64_le() as TxnId),
+            _ => return Err(SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
+                offset: n_entry_index,
+                index: n_entry_index,
                 error_type: shared::DecodeErrorType::UnknownFlag(current_ptr[0] as usize)
             }))
         };
 
-        Ok((decoded_entry, encoded_size))
-    }
+        let expected_crc = current_ptr.get_u32_le();
+        let actual_crc = crc32fast::hash(&start_entry_ptr[..entry.serialized_size()]);
 
-    pub fn encoded_size(binary_code: u8) -> Result<usize, ()> {
-        match binary_code {
-            ROLLEDBACK_WRITE_BINARY_CODE => Ok(1 + 8),
-            START_ROLLBACK_BINARY_CODE => Ok(1 + 8 + 8),
-            COMMIT_BINARY_CODE => Ok(1 + 8),
-            START_BINARY_CODE => Ok(1 + 8),
-            _ => Err(())
-        }
-    }
-
-    pub fn encode(&self) -> Vec<u8> {
-        let mut entry_encoded = Vec::new();
-        entry_encoded.put_u8(self.serialize());
-        match *self {
-            TransactionLogEntry::StartRollback(txn_id, n_writes) => {
-                entry_encoded.put_u64_le(txn_id as u64);
-                entry_encoded.put_u64_le(n_writes as u64);
-            },
-            _ => entry_encoded.put_u64_le(self.txn_id() as u64),
+        if expected_crc != actual_crc {
+            return Err(SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
+                offset: n_entry_index,
+                index: n_entry_index,
+                error_type: shared::DecodeErrorType::CorruptedCrc(expected_crc, actual_crc)
+            }));
         }
 
-        let crc_entry = crc32fast::hash(&entry_encoded);
-        let mut encoded_to_return: Vec<u8> = Vec::new();
-        encoded_to_return.put_u32_le(crc_entry);
-        encoded_to_return.extend(entry_encoded);
+        Ok(entry)
+    }
 
-        encoded_to_return
+    pub fn serialized_size(&self) -> usize {
+        //1 -> entry type byte, 8 transaction id, 4 -> crc32
+        1 + 8 + 4
     }
 
     pub fn txn_id(&self) -> shared::TxnId {
-        match *self {
-            TransactionLogEntry::RolledbackActiveTransactionFailure(txn_id) => txn_id,
-            TransactionLogEntry::StartRollback(txn_id, _) => txn_id,
-            TransactionLogEntry::Commit(txn_id) => txn_id,
-            TransactionLogEntry::Start(txn_id) => txn_id,
-            TransactionLogEntry::RolledbackWrite(txn_id) => txn_id,
+        match &self {
+            TransactionLogEntry::RolledbackWrite(id) => *id,
+            TransactionLogEntry::StartRollback(id) => *id,
+            TransactionLogEntry::Commit(id) => *id,
+            TransactionLogEntry::Start(id) => *id,
+            TransactionLogEntry::Write(id) => *id,
         }
     }
 
-    pub fn serialize(&self) -> u8 {
-        match *self {
-            TransactionLogEntry::RolledbackActiveTransactionFailure(_) => ROLLED_BACK_ACTIVE_TRANSACTION_FAILURE_BINARY_CODE,
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut serialized = Vec::new();
+        serialized.put_u8(self.serialize_transaction_log_entry_type());
+        serialized.put_u64_le(self.txn_id() as u64);
+        serialized.put_u32_le(crc32fast::hash(serialized.as_slice()));
+        serialized
+    }
+
+    fn serialize_transaction_log_entry_type(&self) -> u8 {
+        match &self {
             TransactionLogEntry::RolledbackWrite(_) => ROLLEDBACK_WRITE_BINARY_CODE,
-            TransactionLogEntry::StartRollback(_, _) => START_ROLLBACK_BINARY_CODE,
-            TransactionLogEntry::Commit(_txn_id) => COMMIT_BINARY_CODE,
-            TransactionLogEntry::Start(_txn_id) => START_BINARY_CODE,
+            TransactionLogEntry::StartRollback(_) => START_ROLLBACK_BINARY_CODE,
+            TransactionLogEntry::Commit(_) => COMMIT_BINARY_CODE,
+            TransactionLogEntry::Start(_) => START_BINARY_CODE,
+            TransactionLogEntry::Write(_) => WRITE_BINARY_CODE,
         }
     }
 }

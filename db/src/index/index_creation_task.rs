@@ -42,7 +42,7 @@ impl IndexCreationTask {
                     self.index_keyspace_id,
                     &Transaction::create(key.txn_id()),
                     value_to_be_indexed,
-                    key.bytes()
+                    key.as_bytes()
                 );
             }
         }

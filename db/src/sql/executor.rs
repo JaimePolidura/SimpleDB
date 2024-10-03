@@ -41,7 +41,7 @@ impl StatementExecutor {
     ) -> Result<StatementResult, SimpleDbError> {
         self.validator.validate(context, &statement)?;
         let statement = self.evaluate_constant_expressions(statement)?;
-        
+
         match statement {
             Statement::Select(select_statement) => self.select(context.database(), context.transaction(), select_statement),
             Statement::Update(update_statement) => self.update(context.database(), context.transaction(), update_statement),

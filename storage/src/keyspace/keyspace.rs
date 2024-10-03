@@ -114,7 +114,7 @@ impl Keyspace {
         key: Bytes,
         value: &[u8],
     ) -> Result<(), shared::SimpleDbError> {
-        transaction.increase_n_writes();
+        self.transaction_manager.mark_write(transaction);
         match self.memtables.set(key, value, transaction) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(())
@@ -134,7 +134,7 @@ impl Keyspace {
         transaction: &Transaction,
         key: Bytes,
     ) -> Result<(), shared::SimpleDbError> {
-        transaction.increase_n_writes();
+        self.transaction_manager.mark_write(transaction);
         match self.memtables.delete(key, transaction) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(()),

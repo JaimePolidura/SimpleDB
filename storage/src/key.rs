@@ -34,12 +34,8 @@ impl Key {
         self.bytes.is_empty()
     }
 
-    pub fn bytes(&self) -> &Bytes {
+    pub fn as_bytes(&self) -> &Bytes {
         &self.bytes
-    }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        self.bytes.as_ref()
     }
 
     pub fn txn_id(&self) -> TxnId {
@@ -78,6 +74,10 @@ impl Key {
             bytes: Bytes::copy_from_slice(bytes),
             txn_id,
         }
+    }
+
+    pub fn serialized_size(&self) -> usize {
+        8 + 2 + self.bytes.len()
     }
 
     pub fn serialize(&self) -> Vec<u8> {

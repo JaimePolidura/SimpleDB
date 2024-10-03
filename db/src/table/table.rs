@@ -14,7 +14,7 @@ use shared::{ColumnId, FlagMethods, KeyspaceId, SimpleDbError, SimpleDbFileWrapp
 use std::cell::UnsafeCell;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hasher;
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{fence, AtomicUsize, Ordering};
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
@@ -183,6 +183,9 @@ impl Table {
         }
 
         let secondary_index_keyspace_id = self.secondary_indexes.create_new_secondary_index(column.column_id)?;
+        //Before we start reading all the SSTables and Memtables, make sure the new secondary index is visible for writers
+        fence(Ordering::Release);
+
         let task = IndexCreationTask::create(
             column.column_id,
             secondary_index_keyspace_id,

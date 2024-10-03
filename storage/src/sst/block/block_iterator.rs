@@ -33,7 +33,7 @@ impl BlockIterator {
             return false;
         }
 
-        let index = self.block.get_key_iterator_index(key.bytes());
+        let index = self.block.get_key_iterator_index(key.as_bytes());
         self.current_items_iterated = index + 1;
         self.current_index = index;
 

@@ -8,8 +8,7 @@ use crate::utils::storage_engine_iterator::StorageEngineIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use bytes::Bytes;
 use shared::{Flag, KeyspaceId, SimpleDbError, SimpleDbOptions};
-use std::collections::{HashSet, VecDeque};
-use std::sync::atomic::AtomicUsize;
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 pub struct Storage {
@@ -43,7 +42,6 @@ pub fn create(options: Arc<SimpleDbOptions>) -> Result<Storage, SimpleDbError> {
         options
     };
 
-    storage.rollback_active_transactions();
     storage.keyspaces.recover_from_manifest();
     storage.keyspaces.start_keyspaces_compaction_threads();
 
@@ -202,24 +200,6 @@ impl Storage {
         let keyspace = self.keyspaces.create_keyspace(flag)?;
         keyspace.start_compaction_thread();
         Ok(keyspace.keyspace_id())
-    }
-
-    fn rollback_active_transactions(&mut self) {
-        let active_transactions_id = self.transaction_manager.get_active_transactions();
-
-        for active_transaction_id in active_transactions_id {
-            if self.keyspaces.has_txn_id_been_written(active_transaction_id) {
-                self.transaction_manager.rollback(&Transaction {
-                    active_transactions: HashSet::new(),
-                    isolation_level: IsolationLevel::SnapshotIsolation,
-                    n_writes_rolled_back: AtomicUsize::new(0),
-                    n_writes: AtomicUsize::new(usize::MAX),
-                    txn_id: active_transaction_id
-                });
-            } else {
-                self.transaction_manager.rollback_active_transaction_failure(active_transaction_id);
-            }
-        }
     }
 
     pub fn get_keyspaces_id(&self) -> Vec<KeyspaceId> {
