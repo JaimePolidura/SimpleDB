@@ -1,10 +1,11 @@
 use std::sync::Arc;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
+use shared::Flag;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
 use crate::transactions::transaction_manager::TransactionManager;
-use crate::utils::storage_engine_iterator::StorageEngineItertor;
+use crate::utils::storage_engine_iterator::StorageEngineIterator;
 use crate::utils::storage_iterator::StorageIterator;
 use crate::utils::tombstone::TOMBSTONE;
 
@@ -18,7 +19,8 @@ pub(crate) fn start_simple_leveled_compaction(
     transaction_manager: &Arc<TransactionManager>,
     options: &Arc<shared::SimpleDbOptions>,
     sstables: &Arc<SSTables>,
-    keyspace_id: shared::KeyspaceId
+    keyspace_id: shared::KeyspaceId,
+    keyspace_flags: Flag,
 ) -> Result<(), shared::SimpleDbError> {
     let level_to_compact = compaction_task.level;
 
@@ -29,9 +31,10 @@ pub(crate) fn start_simple_leveled_compaction(
     let sstables_id_in_next_level = sstables.get_sstables_id(level_to_compact + 1);
     let sstables_id_in_level = sstables.get_sstables_id(level_to_compact);
     let is_new_level_last_level = sstables.is_last_level(level_to_compact + 1);
-    let mut iterator = StorageEngineItertor::create(
+    let mut iterator = StorageEngineIterator::create(
+        keyspace_flags,
         options,
-        sstables.scan_from_level(&vec![level_to_compact, level_to_compact + 1])
+        sstables.scan_from_level(&vec![level_to_compact, level_to_compact + 1]),
     );
     let mut new_sstable_builder = Some(SSTableBuilder::create(
         options.clone(), transaction_manager.clone(), keyspace_id, (level_to_compact + 1) as u32

@@ -39,7 +39,7 @@ impl Transaction {
         self.n_writes.load(Relaxed) == self.n_writes_rolled_back.load(Relaxed)
     }
 
-    pub(crate) fn none() -> Transaction {
+    pub fn none() -> Transaction {
         Transaction {
             isolation_level: IsolationLevel::ReadUncommited,
             n_writes_rolled_back: AtomicUsize::new(0),

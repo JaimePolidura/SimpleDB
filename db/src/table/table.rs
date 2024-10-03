@@ -72,7 +72,7 @@ impl Table {
         for keyspace_id in storage.get_keyspaces_id() {
             let flags = storage.get_flags(keyspace_id)?;
 
-            if flags.has_flag(KEYSPACE_TABLE_USER) {
+            if flags.has(KEYSPACE_TABLE_USER) {
                 let (descriptor, descriptor_file) = TableDescriptor::load_from_disk(options, keyspace_id)?;
                 tables.push(Arc::new(Table {
                     secondary_indexes: SecondaryIndexes::create_from_table_descriptor(&descriptor, storage.clone()),

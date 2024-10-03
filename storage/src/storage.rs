@@ -4,7 +4,7 @@ use crate::sst::ssttable_iterator::SSTableIterator;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
 use crate::utils::merge_iterator::MergeIterator;
-use crate::utils::storage_engine_iterator::StorageEngineItertor;
+use crate::utils::storage_engine_iterator::StorageEngineIterator;
 use crate::utils::two_merge_iterators::TwoMergeIterator;
 use bytes::Bytes;
 use std::collections::{HashSet, VecDeque};
@@ -24,7 +24,7 @@ pub enum WriteBatch {
     Delete(shared::KeyspaceId, Bytes)
 }
 
-pub type SimpleDbStorageIterator = StorageEngineItertor<
+pub type SimpleDbStorageIterator = StorageEngineIterator<
     TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>
 >;
 

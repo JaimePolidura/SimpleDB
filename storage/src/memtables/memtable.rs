@@ -10,7 +10,7 @@ use crate::utils::storage_iterator::StorageIterator;
 use crate::utils::tombstone::TOMBSTONE;
 use bytes::{Buf, Bytes};
 use crossbeam_skiplist::{SkipMap, SkipSet};
-use shared::StorageValueMergeResult;
+use shared::{Flag, StorageValueMergeResult};
 use std::cell::UnsafeCell;
 use std::ops::Bound::Excluded;
 use std::ops::Shl;
@@ -28,6 +28,7 @@ pub struct MemTable {
     pub(crate) options: Arc<shared::SimpleDbOptions>,
     pub(crate) txn_ids_written: SkipSet<shared::TxnId>,
     pub(crate) keyspace_id: shared::KeyspaceId,
+    pub(crate) keyspace_flags: Flag,
 }
 
 enum MemtableState {
@@ -43,7 +44,8 @@ impl MemTable {
     pub fn create_new(
         options: Arc<shared::SimpleDbOptions>,
         memtable_id: shared::MemtableId,
-        keyspace_id: shared::KeyspaceId
+        keyspace_id: shared::KeyspaceId,
+        keyspace_flags: Flag
     ) -> Result<MemTable, shared::SimpleDbError> {
         Ok(MemTable {
             wal: UnsafeCell::new(Wal::create(options.clone(), keyspace_id, memtable_id)?),
@@ -52,6 +54,7 @@ impl MemTable {
             state: UnsafeCell::new(MemtableState::New),
             data: Arc::new(SkipMap::new()),
             txn_ids_written: SkipSet::new(),
+            keyspace_flags,
             keyspace_id,
             memtable_id,
             options,
@@ -60,7 +63,8 @@ impl MemTable {
 
     pub fn create_mock(
         options: Arc<shared::SimpleDbOptions>,
-        memtable_id: shared::MemtableId
+        memtable_id: shared::MemtableId,
+        keyspace_flags: Flag
     ) -> Result<MemTable, shared::SimpleDbError> {
         Ok(MemTable {
             wal: UnsafeCell::new(Wal::create_mock(options.clone(), memtable_id)?),
@@ -70,6 +74,7 @@ impl MemTable {
             data: Arc::new(SkipMap::new()),
             txn_ids_written: SkipSet::new(),
             keyspace_id: 0,
+            keyspace_flags,
             memtable_id,
             options,
         })
@@ -79,6 +84,7 @@ impl MemTable {
         options: Arc<shared::SimpleDbOptions>,
         memtable_id: shared::MemtableId,
         keyspace_id: shared::KeyspaceId,
+        keyspace_flags: Flag,
         wal: Wal
     ) -> Result<MemTable, shared::SimpleDbError> {
         let mut memtable = MemTable {
@@ -88,6 +94,7 @@ impl MemTable {
             data: Arc::new(SkipMap::new()),
             wal: UnsafeCell::new(wal),
             txn_ids_written: SkipSet::new(),
+            keyspace_flags,
             keyspace_id,
             memtable_id,
             options
@@ -197,9 +204,10 @@ impl MemTable {
             Some(present_entry) => {
                 let merger_fn = self.options.storage_value_merger.unwrap();
 
-                match merger_fn(present_entry.value(), &value) {
+                match merger_fn(present_entry.value(), &value, self.keyspace_flags) {
                     StorageValueMergeResult::Ok(merged_value) => { self.data.insert(key.clone(), merged_value); }
-                    StorageValueMergeResult::DiscardPrevious => { self.data.insert(key.clone(), value); },
+                    StorageValueMergeResult::DiscardPreviousKeepNew => { self.data.insert(key.clone(), value); }
+                    StorageValueMergeResult::DiscardPreviousAndNew => {}
                 };
             }
             None => { self.data.insert(key.clone(), value); },
@@ -277,13 +285,12 @@ mod test {
     use crate::memtables::memtable::MemTable;
     use crate::transactions::transaction::Transaction;
     use crate::transactions::transaction_manager::IsolationLevel;
-    use crate::utils::storage_iterator::StorageIterator;
     use bytes::Bytes;
     use std::sync::Arc;
 
     #[test]
     fn get_set_delete_no_transactions() {
-        let memtable = MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0)
+        let memtable = MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
             .unwrap();
         let value: Vec<u8> = vec![10, 12];
 
@@ -302,7 +309,7 @@ mod test {
 
     #[test]
     fn get_set_delete_transactions() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0).unwrap());
         memtable.set_active();
         memtable.set(&transaction(10), Bytes::from("aa"), &vec![1]); //Cannot be read by the transaction, should be ignored
         memtable.set(&transaction(1), Bytes::from("alberto"), &vec![2]);

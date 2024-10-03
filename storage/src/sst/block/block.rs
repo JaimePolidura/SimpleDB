@@ -1,11 +1,10 @@
-use std::cmp::max;
-use std::sync::Arc;
-use bytes::Bytes;
-use crate::sst::block::block_decoder::decode_block;
-use crate::sst::block::block_encoder::encode_block;
 use crate::key;
 use crate::key::Key;
-use crate::transactions::transaction::{Transaction};
+use crate::sst::block::block_decoder::decode_block;
+use crate::sst::block::block_encoder::encode_block;
+use crate::transactions::transaction::Transaction;
+use bytes::{Buf, Bytes};
+use std::sync::Arc;
 
 pub const PREFIX_COMPRESSED: u64 = 0x01;
 pub const NOT_COMPRESSED: u64 = 0x00;
@@ -111,19 +110,16 @@ impl Block {
     //Expect n_entry_index to be an index to block::offsets aray
     pub fn get_key_by_index(&self, n_entry_index: usize) -> Key {
         let entry_index = self.offsets[n_entry_index] as usize;
-        let key_length = shared::u8_vec_to_u16_le(&self.entries, entry_index) as usize;
-        let key_txn_id = shared::u8_vec_to_u64_le(&self.entries, entry_index + 2) as shared::TxnId;
-        let key_bytes = self.entries[entry_index + 10..(key_length + entry_index + 10)].to_vec();
-
-        key::create(Bytes::from(key_bytes), key_txn_id)
+        let key_ptr = &mut &self.entries[entry_index..];
+        Key::deserialize(key_ptr)
     }
 
     //Expect n_entry_index to be an index to block::offsets aray
     pub fn get_value_by_index(&self, n_entry_index: usize) -> Bytes {
         let entry_index = self.offsets[n_entry_index];
-        let key_length = shared::u8_vec_to_u16_le(&self.entries, entry_index as usize);
-        //10 = (key bytes size u16) + (key txn_id length u64)
-        let value_index = (entry_index as usize) + 10 + key_length as usize;
+        let key_ptr = &mut &self.entries[entry_index as usize..];
+        let key_serialized_size = Key::serialized_key_size(key_ptr);
+        let value_index = (entry_index as usize) + key_serialized_size;
         let value_length = shared::u8_vec_to_u16_le(&self.entries, value_index) as usize;
 
         Bytes::copy_from_slice(&self.entries[(value_index + 2)..((value_index + 2) + value_length)])
@@ -132,11 +128,11 @@ impl Block {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-    use bytes::Bytes;
+    use crate::key;
     use crate::sst::block::block::Block;
     use crate::sst::block::block_builder::BlockBuilder;
-    use crate::key;
+    use bytes::Bytes;
+    use std::sync::Arc;
 
     #[test]
     fn encode_and_decode() {

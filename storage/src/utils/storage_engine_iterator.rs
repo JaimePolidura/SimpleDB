@@ -1,19 +1,20 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 use bytes::Bytes;
-use shared::StorageValueMergeResult;
+use shared::{Flag, StorageValueMergeResult};
 use crate::key::Key;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_iterator::StorageIterator;
 use crate::utils::tombstone::TOMBSTONE;
+
 //TODO Refactor this code
 
 //This is the iterator that will be exposed to users of the storage engine:
 //This iterator merges the values by the merger function defined in SimpleDbOptions
 //And commits the transaction when the iterator is dropped, if the itrerator was created in "standalone" mode
 // which means when the transaction was created only for the iterator, (for example: call to Storage::scan_from or Storage::scan_all)
-pub struct StorageEngineItertor<I: StorageIterator> {
+pub struct StorageEngineIterator<I: StorageIterator> {
     options: Arc<shared::SimpleDbOptions>,
     inner_iterator: I,
 
@@ -29,23 +30,30 @@ pub struct StorageEngineItertor<I: StorageIterator> {
     is_seeked_key_inclusive: bool,
 
     is_finished: bool,
+
+    keyspace_flags: Flag,
 }
 
-impl<I: StorageIterator> StorageEngineItertor<I> {
+impl<I: StorageIterator> StorageEngineIterator<I> {
     //For efficiency, you should call seek_key() in the inner iterator
     pub fn create_seeked_key(
         options: &Arc<shared::SimpleDbOptions>,
         iterator: I,
         seeked_key: Bytes,
         inclusive: bool,
-    ) -> StorageEngineItertor<I> {
-        let mut iterator = Self::create(options, iterator);
+        keyspace_flags: Flag,
+    ) -> StorageEngineIterator<I> {
+        let mut iterator = Self::create(keyspace_flags, options, iterator);
         iterator.is_seeked_key_inclusive = inclusive;
         iterator.seeked_key = Some(seeked_key);
         iterator
     }
 
-    pub fn create(options: &Arc<shared::SimpleDbOptions>, mut iterator: I) -> StorageEngineItertor<I> {
+    pub fn create(
+        keyspace_flags: Flag,
+        options: &Arc<shared::SimpleDbOptions>,
+        mut iterator: I,
+    ) -> StorageEngineIterator<I> {
         let mut is_finished = false;
 
         if iterator.has_next() {
@@ -54,7 +62,7 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
             is_finished = true
         }
 
-        StorageEngineItertor {
+        StorageEngineIterator {
             entries_to_return: VecDeque::new(),
             is_seeked_key_inclusive: false,
             transaction_manager: None,
@@ -64,6 +72,7 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
             current_key: None,
             transaction: None,
             seeked_key: None,
+            keyspace_flags,
             is_finished,
         }
     }
@@ -129,9 +138,10 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
         while let Some((next_key, next_value)) = self.entries_to_return.pop_front() {
             match prev_merged_value.take() {
                 Some((_, previous_merged_value)) => {
-                    match merge_fn(&previous_merged_value, &next_value) {
+                    match merge_fn(&previous_merged_value, &next_value, self.keyspace_flags) {
                         StorageValueMergeResult::Ok(merged_value) => prev_merged_value = Some((next_key, merged_value)),
-                        StorageValueMergeResult::DiscardPrevious => prev_merged_value = Some((next_key, next_value)),
+                        StorageValueMergeResult::DiscardPreviousKeepNew => prev_merged_value = Some((next_key, next_value)),
+                        StorageValueMergeResult::DiscardPreviousAndNew => {}
                     }
                 },
                 None => {
@@ -171,7 +181,7 @@ impl<I: StorageIterator> StorageEngineItertor<I> {
     }
 }
 
-impl<I: StorageIterator> StorageIterator for StorageEngineItertor<I> {
+impl<I: StorageIterator> StorageIterator for StorageEngineIterator<I> {
     fn next(&mut self) -> bool {
         while self.do_do_next() {
             if let Some(seeked_key) = self.seeked_key.as_ref() {
@@ -206,7 +216,7 @@ impl<I: StorageIterator> StorageIterator for StorageEngineItertor<I> {
     }
 }
 
-impl<I: StorageIterator> Drop for StorageEngineItertor<I> {
+impl<I: StorageIterator> Drop for StorageEngineIterator<I> {
     fn drop(&mut self) {
         if let Some(transaction_manager) = self.transaction_manager.as_ref() {
             transaction_manager.commit(self.transaction.as_ref().unwrap());
@@ -223,13 +233,13 @@ mod test {
     use crate::memtables::memtable::{MemTable};
     use crate::memtables::memtable_iterator::MemtableIterator;
     use crate::transactions::transaction::Transaction;
-    use crate::utils::storage_engine_iterator::StorageEngineItertor;
+    use crate::utils::storage_engine_iterator::StorageEngineIterator;
     use crate::utils::storage_iterator::StorageIterator;
 
     #[test]
     fn iterator_no_merger_fn() {
         let options = Arc::new(shared::SimpleDbOptions::default());
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0)
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
             .unwrap());
         memtable.set(&transaction(10), Bytes::from("aa"), &vec![1]);
         memtable.set(&transaction(1), Bytes::from("alberto"), &vec![2]);
@@ -239,9 +249,10 @@ mod test {
         memtable.set(&transaction(5), Bytes::from("jaime"), &vec![8]);
         memtable.set(&transaction(1), Bytes::from("wili"), &vec![9]);
 
-        let mut iterator = StorageEngineItertor::create(
+        let mut iterator = StorageEngineIterator::create(
+            0,
             &options,
-            MemtableIterator::create(&memtable, &Transaction::none())
+            MemtableIterator::create(&memtable, &Transaction::none()),
         );
 
         assert!(iterator.next());
@@ -273,7 +284,7 @@ mod test {
         let b_vec = b.to_vec();
 
         if b_vec[0] == 10 {
-            StorageValueMergeResult::DiscardPrevious
+            StorageValueMergeResult::DiscardPreviousKeepNew
         } else if a_vec[0] == 10 {
             StorageValueMergeResult::Ok(b.clone())
         } else {
@@ -284,10 +295,10 @@ mod test {
     #[test]
     fn iterator_merger_fn() {
         let options = shared::start_simpledb_options_builder_from(&shared::SimpleDbOptions::default())
-            .storage_value_merger(|a, b| merge_values(a, b))
+            .storage_value_merger(|a, b, _| merge_values(a, b))
             .build_arc();
 
-        let memtable = Arc::new(MemTable::create_mock(options.clone(), 0).unwrap());
+        let memtable = Arc::new(MemTable::create_mock(options.clone(), 0, 0).unwrap());
         memtable.set(&transaction(10), Bytes::from("aa"), &vec![1]);
         memtable.set(&transaction(1), Bytes::from("alberto"), &vec![1]);
         memtable.set(&transaction(3), Bytes::from("alberto"), &vec![1]);
@@ -299,9 +310,10 @@ mod test {
         memtable.set(&transaction(1), Bytes::from("wili"), &vec![10]); //10 Equivalent of tombstone
         memtable.set(&transaction(1), Bytes::from("wili"), &vec![2]);
 
-        let mut iterator = StorageEngineItertor::create(
+        let mut iterator = StorageEngineIterator::create(
+            0,
             &options,
-            MemtableIterator::create(&memtable, &Transaction::none())
+            MemtableIterator::create(&memtable, &Transaction::none()),
         );
 
         assert!(iterator.next());

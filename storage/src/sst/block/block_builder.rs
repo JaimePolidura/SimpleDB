@@ -31,9 +31,7 @@ impl BlockBuilder {
             let offset = entries.len();
 
             //Key
-            entries.put_u16_le(entry.key.len() as u16);
-            entries.put_u64_le(entry.key.txn_id() as u64);
-            entries.extend(entry.key.as_bytes());
+            entries.extend(entry.key.serialize());
             //Value
             entries.put_u16_le(entry.value.len() as u16);
             entries.extend(entry.value.as_ref());

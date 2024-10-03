@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
+use crate::Flag;
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum CompactionStrategy {
@@ -15,7 +16,7 @@ pub enum DurabilityLevel {
 }
 
 //a is before b, (example b has greater timestamp (txn_id))
-pub type StorageValueMergerFn = fn(a: &Bytes, b: &Bytes) -> StorageValueMergeResult;
+pub type StorageValueMergerFn = fn(a: &Bytes, b: &Bytes, keyspace_flags: Flag) -> StorageValueMergeResult;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SimpleDbOptions {
@@ -64,7 +65,8 @@ pub struct SimpleLeveledCompactionOptions {
 
 pub enum StorageValueMergeResult {
     Ok(Bytes),
-    DiscardPrevious
+    DiscardPreviousKeepNew,
+    DiscardPreviousAndNew,
 }
 
 impl Default for SimpleDbOptions {

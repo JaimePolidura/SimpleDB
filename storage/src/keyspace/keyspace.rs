@@ -13,7 +13,7 @@ use std::fs;
 use std::sync::Arc;
 use shared::Flag;
 use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
-use crate::utils::storage_engine_iterator::StorageEngineItertor;
+use crate::utils::storage_engine_iterator::StorageEngineIterator;
 
 pub struct Keyspace {
     keyspace_id: shared::KeyspaceId,
@@ -46,12 +46,12 @@ impl Keyspace {
         options: Arc<shared::SimpleDbOptions>
     ) -> Result<Arc<Keyspace>, shared::SimpleDbError> {
         let path = shared::get_directory_usize(&options.base_path, keyspace_id);
+        let descriptor = KeyspaceDescriptor::load_from_disk(keyspace_id, path)?;
         let manifest = Arc::new(Manifest::create(options.clone(), keyspace_id)?);
         let sstables = Arc::new(SSTables::open(options.clone(), keyspace_id, manifest.clone())?);
-        let memtables = Memtables::create_and_recover_from_wal(options.clone(), keyspace_id)?;
-        let descriptor = KeyspaceDescriptor::load_from_disk(keyspace_id, path)?;
+        let memtables = Memtables::create_and_recover_from_wal(options.clone(), keyspace_id, descriptor.flags)?;
         let compaction = Compaction::create(transaction_manager.clone(), options.clone(),
-                                            sstables.clone(), manifest.clone(), keyspace_id);
+                                            sstables.clone(), manifest.clone(), keyspace_id, descriptor.flags);
 
         Ok(Arc::new(Keyspace {
             transaction_manager,
@@ -71,14 +71,15 @@ impl Keyspace {
         key: &Bytes,
         inclusive: bool,
     ) -> SimpleDbStorageIterator {
-        StorageEngineItertor::create_seeked_key(
+        StorageEngineIterator::create_seeked_key(
             &self.options,
             TwoMergeIterator::create(
                 self.memtables.scan_from_key(&transaction, key),
                 self.sstables.scan_from_key(&transaction, key),
             ),
             key.clone(),
-            inclusive
+            inclusive,
+            self.descriptor.flags
         )
     }
 
@@ -86,7 +87,8 @@ impl Keyspace {
         &self,
         transaction: &Transaction
     ) -> SimpleDbStorageIterator {
-        StorageEngineItertor::create(
+        StorageEngineIterator::create(
+            self.descriptor.flags,
             &self.options,
             TwoMergeIterator::create(
                 self.memtables.scan_all(&transaction),

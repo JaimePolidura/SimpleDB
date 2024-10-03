@@ -1,23 +1,24 @@
+use crate::key;
+use bytes::{Buf, BufMut, Bytes};
+use shared::TxnId;
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::Formatter;
-use bytes::Bytes;
-use crate::key;
 
 #[derive(Debug)]
 pub struct Key {
     bytes: Bytes,
-    txn_id: shared::TxnId,
+    txn_id: TxnId,
 }
 
-pub fn create_from_str(string: &str, txn_id: shared::TxnId) -> Key {
+pub fn create_from_str(string: &str, txn_id: TxnId) -> Key {
     Key {
         bytes: Bytes::from(string.to_string()),
         txn_id
     }
 }
 
-pub fn create(bytes: Bytes, txn_id: shared::TxnId) -> Key {
+pub fn create(bytes: Bytes, txn_id: TxnId) -> Key {
     Key {
         bytes,
         txn_id
@@ -41,7 +42,7 @@ impl Key {
         self.bytes.as_ref()
     }
 
-    pub fn txn_id(&self) -> shared::TxnId {
+    pub fn txn_id(&self) -> TxnId {
         self.txn_id
     }
 
@@ -59,6 +60,32 @@ impl Key {
 
     pub fn bytes_eq(&self, other: &Key) -> bool {
         self.bytes == other.bytes
+    }
+
+    pub fn serialized_key_size(ptr: &mut &[u8]) -> usize {
+        let _ = ptr.get_u64_le() as TxnId;
+        let bytes_len = ptr.get_u16_le();
+
+        8 + 2 + bytes_len as usize
+    }
+
+    pub fn deserialize(ptr: &mut &[u8]) -> Key {
+        let txn_id = ptr.get_u64_le() as TxnId;
+        let bytes_len = ptr.get_u16_le();
+        let bytes = &ptr[.. bytes_len as usize];
+
+        Key {
+            bytes: Bytes::copy_from_slice(bytes),
+            txn_id,
+        }
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut serialized = Vec::new();
+        serialized.put_u64_le(self.txn_id as u64);
+        serialized.put_u16_le(self.bytes.len() as u16);
+        serialized.extend(self.bytes.as_ref());
+        serialized
     }
 
     //"Juan".prefix_difference("Justo") -> (2, 2)

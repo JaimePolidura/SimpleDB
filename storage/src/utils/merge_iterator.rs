@@ -155,18 +155,18 @@ mod test {
 
     #[test]
     fn iterator() {
-        let memtable1 = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
+        let memtable1 = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0).unwrap());
         memtable1.set_active();
         memtable1.set(&Transaction::none(), Bytes::from("a"), &vec![1]);
         memtable1.set(&Transaction::none(), Bytes::from("b"), &vec![1]);
         memtable1.set(&Transaction::none(), Bytes::from("d"), &vec![1]);
 
-        let memtable2 = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
+        let memtable2 = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0).unwrap());
         memtable2.set_active();
         memtable2.set(&Transaction::none(), Bytes::from("b"), &vec![2]);
         memtable2.set(&Transaction::none(), Bytes::from("e"), &vec![2]);
 
-        let memtable3 = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
+        let memtable3 = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0).unwrap());
         memtable3.set_active();
         memtable3.set(&Transaction::none(), Bytes::from("c"), &vec![3]);
         memtable3.set(&Transaction::none(), Bytes::from("d"), &vec![3]);

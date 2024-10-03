@@ -139,7 +139,7 @@ mod test {
 
     #[test]
     fn iterators_seekkey() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0).unwrap());
         memtable.set_active();
         let value: Vec<u8> = vec![10, 12];
         memtable.set(&transaction(1), Bytes::from("B"), &value);
@@ -179,7 +179,8 @@ mod test {
 
     #[test]
     fn iterators_readuncommited() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+            .unwrap());
         memtable.set_active();
         let value: Vec<u8> = vec![10, 12];
         memtable.set(&transaction(1), Bytes::from("alberto"), &value);
@@ -225,7 +226,8 @@ mod test {
 
     #[test]
     fn iterators_snapshotisolation() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0).unwrap());
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+            .unwrap());
         memtable.set_active();
         let value: Vec<u8> = vec![10, 12];
         memtable.set(&transaction(10), Bytes::from("aa"), &value); //Cannot be read by the transaction, should be ignored

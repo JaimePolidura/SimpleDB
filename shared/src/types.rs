@@ -9,11 +9,11 @@ pub type ColumnId = u16;
 pub type Flag = u64;
 
 pub trait FlagMethods {
-    fn has_flag(&self, other: Flag) -> bool;
+    fn has(&self, other: Flag) -> bool;
 }
 
 impl FlagMethods for Flag {
-    fn has_flag(&self, other: Flag) -> bool {
+    fn has(&self, other: Flag) -> bool {
         self & other == other
     }
 }

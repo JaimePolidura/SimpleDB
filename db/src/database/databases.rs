@@ -3,9 +3,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
-use shared::{SimpleDbError, SimpleDbOptions, StorageValueMergeResult};
+use shared::{Flag, FlagMethods, SimpleDbError, SimpleDbOptions, StorageValueMergeResult};
 use crate::database::database::Database;
+use crate::index::posting_list::PostingList;
 use crate::table::record::Record;
+use crate::table::table_flags::{KEYSPACE_TABLE_INDEX, KEYSPACE_TABLE_USER};
 
 pub struct Databases {
     databases: SkipMap<String, Arc<Database>>,
@@ -17,7 +19,7 @@ impl Databases {
         options: Arc<SimpleDbOptions>,
     ) -> Result<Databases, SimpleDbError> {
         let options = shared::start_simpledb_options_builder_from(&options)
-            .storage_value_merger(|prev, new| Self::merge_storage_tables(prev, new))
+            .storage_value_merger(|prev, new, flag| Self::merge_storage_tables(prev, new, flag))
             .build_arc();
 
         let mut databases = Self::load_databases(&options)?;
@@ -101,16 +103,31 @@ impl Databases {
         Ok(databases)
     }
 
-    fn merge_storage_tables(prev: &Bytes, new: &Bytes) -> StorageValueMergeResult {
-        let tombstone = Bytes::new();
-        if prev.eq(&tombstone) || new.eq(&tombstone) {
-            StorageValueMergeResult::DiscardPrevious
-        } else {
-            let mut prev = Record::deserialize(prev.to_vec());
-            let new = Record::deserialize(new.to_vec());
-            prev.merge(new);
+    fn merge_storage_tables(prev: &Bytes, new: &Bytes, flag: Flag) -> StorageValueMergeResult {
+        if flag.has(KEYSPACE_TABLE_USER) {
+            let tombstone = Bytes::new();
+            if prev.eq(&tombstone) || new.eq(&tombstone) {
+                StorageValueMergeResult::DiscardPreviousKeepNew
+            } else {
+                let mut prev = Record::deserialize(prev.to_vec());
+                let new = Record::deserialize(new.to_vec());
+                prev.merge(new);
 
-            StorageValueMergeResult::Ok(Bytes::from(prev.serialize()))
+                StorageValueMergeResult::Ok(Bytes::from(prev.serialize()))
+            }
+        } else if flag.has(KEYSPACE_TABLE_INDEX) {
+            let prev = PostingList::deserialize(&mut prev.iter().as_slice());
+            let new = PostingList::deserialize(&mut new.iter().as_slice());
+            let merged_posting_list = PostingList::merge(&new, &prev);
+
+            if !merged_posting_list.is_emtpy() {
+                StorageValueMergeResult::Ok(Bytes::from(merged_posting_list.serialize()))
+            } else {
+                StorageValueMergeResult::DiscardPreviousAndNew
+            }
+
+        } else {
+            panic!("Invalid flag")
         }
     }
 }

@@ -1,8 +1,7 @@
-use std::ops::Shl;
-use std::sync::Arc;
-use bytes::BufMut;
-use crate::sst::block::block::{Block, BLOCK_FOOTER_LENGTH, NOT_COMPRESSED, PREFIX_COMPRESSED};
 use crate::key::Key;
+use crate::sst::block::block::{Block, BLOCK_FOOTER_LENGTH, NOT_COMPRESSED, PREFIX_COMPRESSED};
+use bytes::BufMut;
+use std::sync::Arc;
 
 pub(crate) fn encode_block (
     block: &Block,

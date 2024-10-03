@@ -33,9 +33,9 @@ fn decode_offsets(
     n_entries: u16,
 ) -> Vec<u16> {
     let start_index = offsets_offset as usize;
-    let end_inedx = start_index + (n_entries * std::mem::size_of::<u16>() as u16) as usize;
+    let end_index = start_index + (n_entries * std::mem::size_of::<u16>() as u16) as usize;
 
-    shared::u8_vec_to_u16_vec(&encoded[start_index..end_inedx].to_vec())
+    shared::u8_vec_to_u16_vec(&encoded[start_index..end_index].to_vec())
 }
 
 fn decode_entries_prefix_compressed(
@@ -68,9 +68,7 @@ fn decode_entries_prefix_compressed(
             None => key::create(Bytes::from(rest_key_u8_vec), key_txn_id)
         };
         current_index = current_index + rest_key_size as usize;
-        entries_decoded.put_u16_le(current_key.len() as u16);
-        entries_decoded.put_u64_le(current_key.txn_id() as u64);
-        entries_decoded.extend(current_key.as_bytes());
+        entries_decoded.extend(current_key.serialize());
         prev_key = Some(current_key);
 
         //Decode value
