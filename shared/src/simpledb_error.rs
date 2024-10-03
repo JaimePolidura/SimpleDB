@@ -1,4 +1,4 @@
-use crate::types;
+use crate::{types, KeyspaceId};
 use bytes::Bytes;
 use std::fmt::{Debug, Formatter};
 use std::string::FromUtf8Error;
@@ -38,6 +38,7 @@ pub enum SimpleDbError {
     NetworkError(std::io::Error),
 
     //DB Layer errors
+    IndexAlreadyExists(KeyspaceId, String),
     IllegalToken(TokenLocation, String),
     MalformedQuery(String),
     FullScanNotAllowed(),
@@ -285,6 +286,9 @@ impl Debug for SimpleDbError {
             SimpleDbError::RangeScanNotAllowed() => {
                 write!(f, "Range scan not allowed")
             }
+            SimpleDbError::IndexAlreadyExists(keyspace_id, column_name) => {
+                write!(f, "Index with name: {} already exists. Keyspace ID: {}", column_name, keyspace_id)
+            }
         }
     }
 }
@@ -352,6 +356,7 @@ impl SimpleDbError {
             SimpleDbError::CannotCreateKeyspaceDescriptorFile(_, _) => 59,
             SimpleDbError::CannotReadKeyspaceDescriptorFile(_, _) => 60,
             SimpleDbError::CannotOpenKeyspaceDescriptorFile(_, _) => 61,
+            SimpleDbError::IndexAlreadyExists(_, _) => 62
         }
     }
 }

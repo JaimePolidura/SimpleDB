@@ -4,17 +4,24 @@ use shared::{KeyspaceId, SimpleDbError};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 
+pub enum SecondaryIndexState {
+    Creating,
+    Active
+}
+
 pub struct SecondaryIndex {
     keyspace_id: KeyspaceId,
-    storage: Arc<storage::Storage>
+    storage: Arc<storage::Storage>,
+    state: SecondaryIndexState
 }
 
 impl SecondaryIndex {
     pub fn create(
+        storage: Arc<storage::Storage>,
+        state: SecondaryIndexState,
         keyspace_id: KeyspaceId,
-        storage: Arc<storage::Storage>
     ) -> SecondaryIndex {
-        SecondaryIndex { keyspace_id, storage }
+        SecondaryIndex { keyspace_id, storage, state }
     }
 
     pub fn update(

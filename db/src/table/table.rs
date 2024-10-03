@@ -1,3 +1,4 @@
+use crate::index::index_creation_task::IndexCreationTask;
 use crate::index::secondary_indexes::SecondaryIndexes;
 use crate::selection::Selection;
 use crate::table::record::Record;
@@ -8,7 +9,7 @@ use crate::table::table_iterator::TableIterator;
 use crate::value::{Type, Value};
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
-use shared::SimpleDbError::{ColumnNameAlreadyDefined, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
+use shared::SimpleDbError::{ColumnNameAlreadyDefined, ColumnNotFound, IndexAlreadyExists, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
 use shared::{ColumnId, FlagMethods, KeyspaceId, SimpleDbError, SimpleDbFileWrapper};
 use std::cell::UnsafeCell;
 use std::collections::{HashMap, HashSet};
@@ -53,7 +54,7 @@ impl Table {
         Ok(Arc::new(Table {
             table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(table_descriptor_file)},
             next_column_id: AtomicUsize::new(max_column_id as usize + 1),
-            secondary_indexes: SecondaryIndexes::create_empty(),
+            secondary_indexes: SecondaryIndexes::create_empty(storage.clone()),
             columns_by_id: table_descriptor.columns,
             table_name: table_descriptor.table_name,
             storage_keyspace_id: table_keyspace_id,
@@ -75,7 +76,7 @@ impl Table {
             if flags.has(KEYSPACE_TABLE_USER) {
                 let (descriptor, descriptor_file) = TableDescriptor::load_from_disk(options, keyspace_id)?;
                 tables.push(Arc::new(Table {
-                    secondary_indexes: SecondaryIndexes::create_from_table_descriptor(&descriptor, storage.clone()),
+                    secondary_indexes: SecondaryIndexes::load_secondary_indexes(&descriptor, storage.clone()),
                     table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(descriptor_file)},
                     next_column_id: AtomicUsize::new(descriptor.get_max_column_id() as usize + 1),
                     columns_by_name: Self::index_column_id_by_name(&descriptor.columns),
@@ -168,6 +169,36 @@ impl Table {
             selection,
             self.clone()
         ))
+    }
+
+    pub fn create_secondary_index(
+        &self: &Arc<Self>,
+        column_name: &str,
+        wait: bool
+    ) -> Result<(), SimpleDbError> {
+        let column = self.get_column_desc(column_name)
+            .ok_or(ColumnNotFound(self.storage_keyspace_id, column_name.to_string()))?;
+
+        if self.secondary_indexes.has(column.column_id) {
+            return Err(IndexAlreadyExists(self.storage_keyspace_id, column_name.to_string()));
+        }
+
+        let secondary_index_keyspace_id = self.secondary_indexes.create_new_secondary_index(column.column_id)?;
+        let task = IndexCreationTask::create(
+            self.clone(),
+            column.column_id,
+            secondary_index_keyspace_id
+        );
+
+        let join_handle = std::thread::spawn(|| {
+            task.start();
+        });
+
+        if wait {
+            join_handle.join().unwrap();
+        }
+
+        Ok(())
     }
 
     //Expect call to validate_insert before calling this function

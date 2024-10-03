@@ -1,25 +1,28 @@
-use crate::index::secondary_index::SecondaryIndex;
+use crate::index::secondary_index::{SecondaryIndex, SecondaryIndexState};
 use crate::table::record::Record;
 use crate::table::table_descriptor::TableDescriptor;
-use crossbeam_skiplist::SkipMap;
-use shared::{ColumnId, SimpleDbError};
-use std::sync::Arc;
+use crate::table::table_flags::KEYSPACE_TABLE_INDEX;
 use bytes::Bytes;
+use crossbeam_skiplist::SkipMap;
+use shared::{ColumnId, KeyspaceId, SimpleDbError};
+use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use storage::Storage;
 
 pub struct SecondaryIndexes {
-    secondary_index_by_column_id: SkipMap<ColumnId, Arc<SecondaryIndex>>
+    secondary_index_by_column_id: SkipMap<ColumnId, Arc<SecondaryIndex>>,
+    storage: Arc<Storage>
 }
 
 impl SecondaryIndexes {
-    pub fn create_empty() -> SecondaryIndexes {
+    pub fn create_empty(storage: Arc<Storage>) -> SecondaryIndexes {
         SecondaryIndexes {
             secondary_index_by_column_id: SkipMap::new(),
+            storage
         }
     }
 
-    pub fn create_from_table_descriptor(
+    pub fn load_secondary_indexes(
         table_descriptor: &TableDescriptor,
         storage: Arc<Storage>
     ) -> SecondaryIndexes {
@@ -28,14 +31,34 @@ impl SecondaryIndexes {
             let column_descriptor = entry.value();
 
             if let Some(secondary_index_keyspace_id) = column_descriptor.secondary_index_keyspace_id {
-                let secondary_index = Arc::new(SecondaryIndex::create(secondary_index_keyspace_id, storage.clone()));
+                let secondary_index = Arc::new(SecondaryIndex::create(
+                    storage.clone(),
+                    SecondaryIndexState::Active,
+                    secondary_index_keyspace_id
+                ));
                 secondary_indexes.insert(column_descriptor.column_id, secondary_index);
             }
         }
 
         SecondaryIndexes {
-            secondary_index_by_column_id: secondary_indexes
+            secondary_index_by_column_id: secondary_indexes,
+            storage
         }
+    }
+
+    pub fn create_new_secondary_index(
+        &self,
+        column_id: ColumnId,
+    ) -> Result<KeyspaceId, SimpleDbError> {
+        let keyspace_id = self.storage.create_keyspace(KEYSPACE_TABLE_INDEX)?;
+
+        self.secondary_index_by_column_id.insert(column_id, Arc::new(SecondaryIndex::create(
+            self.storage.clone(),
+            SecondaryIndexState::Creating,
+            keyspace_id
+        )));
+
+        Ok(keyspace_id)
     }
 
     pub fn update_all(
@@ -59,5 +82,9 @@ impl SecondaryIndexes {
         }
 
         Ok(())
+    }
+
+    pub fn has(&self, column_id: ColumnId) -> bool {
+        self.secondary_index_by_column_id.contains_key(&column_id)
     }
 }
