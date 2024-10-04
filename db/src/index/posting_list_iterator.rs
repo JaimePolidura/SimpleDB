@@ -19,6 +19,20 @@ impl PostingListIterator {
         }
     }
 
+    pub fn has_next(&mut self) -> bool {
+        if self.posting_list.is_empty() {
+            return false;
+        }
+
+        for posting_list in &self.posting_list {
+            if self.transaction.can_read(&posting_list.primary_key) {
+                return true;
+            }
+        }
+
+        false
+    }
+
     pub fn next(&mut self) -> Option<PostingListEntry> {
         loop {
             if self.posting_list.is_empty() {
