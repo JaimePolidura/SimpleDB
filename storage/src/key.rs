@@ -69,6 +69,7 @@ impl Key {
         let txn_id = ptr.get_u64_le() as TxnId;
         let bytes_len = ptr.get_u16_le();
         let bytes = &ptr[.. bytes_len as usize];
+        ptr.advance(bytes_len as usize);
 
         Key {
             bytes: Bytes::copy_from_slice(bytes),
@@ -166,5 +167,19 @@ impl Ord for Key {
             Ordering::Equal => self.txn_id.cmp(&other.txn_id),
             other => other,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::key::{create_from_str, Key};
+
+    #[test]
+    fn serialize_deserialize() {
+        let key = create_from_str("Jaime", 1);
+        let serialized = key.serialize();
+        let deserialized = Key::deserialize(&mut serialized.as_slice());
+
+        assert_eq!(deserialized, create_from_str("Jaime", 1));
     }
 }

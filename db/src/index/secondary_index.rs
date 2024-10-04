@@ -2,7 +2,9 @@ use crate::index::posting_list::PostingList;
 use bytes::Bytes;
 use shared::{KeyspaceId, SimpleDbError};
 use std::sync::Arc;
+use storage::SimpleDbStorageIterator;
 use storage::transactions::transaction::Transaction;
+use storage::utils::storage_engine_iterator::StorageEngineIterator;
 use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 
 pub enum SecondaryIndexState {
@@ -50,7 +52,7 @@ impl SecondaryIndex {
     pub fn scan_all(
         &self,
         transaction: &Transaction
-    ) -> Result<SecondaryIndexIterator, SimpleDbError> {
+    ) -> Result<SecondaryIndexIterator<SimpleDbStorageIterator>, SimpleDbError> {
         let iterator = self.storage.scan_all_with_transaction(transaction, self.keyspace_id)?;
         Ok(SecondaryIndexIterator::create(transaction, iterator))
     }
