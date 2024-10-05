@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use bytes::Bytes;
 use shared::{Flag, StorageValueMergeResult};
+use shared::seek_iterator::SeekIterator;
 use crate::key::Key;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::TransactionManager;
@@ -12,7 +13,7 @@ use crate::utils::tombstone::TOMBSTONE;
 
 //This is the iterator that will be exposed to users of the storage engine:
 //This iterator merges the values by the merger function defined in SimpleDbOptions
-//And commits the transaction when the iterator is dropped, if the itrerator was created in "standalone" mode
+//And commits the transaction when the iterator is dropped if the iterator was created in "standalone" mode
 // which means when the transaction was created only for the iterator, (for example: call to Storage::scan_from or Storage::scan_all)
 pub struct StorageEngineIterator<I: StorageIterator> {
     options: Arc<shared::SimpleDbOptions>,
@@ -26,29 +27,12 @@ pub struct StorageEngineIterator<I: StorageIterator> {
     transaction_manager: Option<Arc<TransactionManager>>,
     transaction: Option<Transaction>,
 
-    seeked_key: Option<Bytes>,
-    is_seeked_key_inclusive: bool,
-
     is_finished: bool,
 
     keyspace_flags: Flag,
 }
 
 impl<I: StorageIterator> StorageEngineIterator<I> {
-    //For efficiency, you should call seek_key() in the inner iterator
-    pub fn create_seeked_key(
-        options: &Arc<shared::SimpleDbOptions>,
-        iterator: I,
-        seeked_key: Bytes,
-        inclusive: bool,
-        keyspace_flags: Flag,
-    ) -> StorageEngineIterator<I> {
-        let mut iterator = Self::create(keyspace_flags, options, iterator);
-        iterator.is_seeked_key_inclusive = inclusive;
-        iterator.seeked_key = Some(seeked_key);
-        iterator
-    }
-
     pub fn create(
         keyspace_flags: Flag,
         options: &Arc<shared::SimpleDbOptions>,
@@ -64,14 +48,12 @@ impl<I: StorageIterator> StorageEngineIterator<I> {
 
         StorageEngineIterator {
             entries_to_return: VecDeque::new(),
-            is_seeked_key_inclusive: false,
             transaction_manager: None,
             inner_iterator: iterator,
             options: options.clone(),
             current_value: None,
             current_key: None,
             transaction: None,
-            seeked_key: None,
             keyspace_flags,
             is_finished,
         }
@@ -129,7 +111,7 @@ impl<I: StorageIterator> StorageEngineIterator<I> {
     //Returns true if it merged a value that can be returned to the user of the iterator
     fn merge_entry_values(&mut self) -> bool {
         if self.options.storage_value_merger.is_none() || self.entries_to_return.len() <= 1 {
-            return self.check_some_keys_in_entries_to_return_readble();
+            return self.check_some_keys_in_entries_to_return_readable();
         }
 
         let mut prev_merged_value: Option<(Key, Bytes)> = None;
@@ -152,10 +134,10 @@ impl<I: StorageIterator> StorageEngineIterator<I> {
 
         let (final_key, final_value) = prev_merged_value.take().unwrap();
         self.entries_to_return.push_front((final_key, final_value));
-        self.check_some_keys_in_entries_to_return_readble()
+        self.check_some_keys_in_entries_to_return_readable()
     }
 
-    fn check_some_keys_in_entries_to_return_readble(&self) -> bool {
+    fn check_some_keys_in_entries_to_return_readable(&self) -> bool {
         for ((key, value)) in &self.entries_to_return {
             if !value.eq(&TOMBSTONE) {
                 return true;
@@ -183,24 +165,7 @@ impl<I: StorageIterator> StorageEngineIterator<I> {
 
 impl<I: StorageIterator> StorageIterator for StorageEngineIterator<I> {
     fn next(&mut self) -> bool {
-        while self.do_do_next() {
-            if let Some(seeked_key) = self.seeked_key.as_ref() {
-                let is_inbound = if self.is_seeked_key_inclusive {
-                    self.key().as_bytes().ge(seeked_key)
-                } else {
-                    self.key().as_bytes().gt(seeked_key)
-                };
-
-                if is_inbound {
-                    self.seeked_key.take();
-                    return true;
-                }
-            } else {
-                return true;
-            }
-        }
-
-        false
+        self.do_do_next()
     }
 
     fn has_next(&self) -> bool {
@@ -213,6 +178,13 @@ impl<I: StorageIterator> StorageIterator for StorageEngineIterator<I> {
 
     fn value(&self) -> &[u8] {
         self.current_value.as_ref().unwrap()
+    }
+}
+
+impl<I: StorageIterator + SeekIterator> SeekIterator for StorageEngineIterator<I> {
+    fn seek(&mut self, key: &Bytes, inclusive: bool) -> bool {
+        self.inner_iterator.seek(key, inclusive);
+        self.do_do_next()
     }
 }
 

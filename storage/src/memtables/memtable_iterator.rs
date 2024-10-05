@@ -4,6 +4,7 @@ use crate::memtables::memtable::MemTable;
 use crate::transactions::transaction::Transaction;
 use crate::utils::storage_iterator::StorageIterator;
 use bytes::Bytes;
+use shared::seek_iterator::SeekIterator;
 use std::collections::Bound::Excluded;
 use std::ops::Bound::Included;
 use std::sync::Arc;
@@ -30,22 +31,6 @@ impl MemtableIterator {
             memtable: memtable.clone(),
             current_value: None,
             current_key: None,
-        }
-    }
-
-    //Expect next() call after seek_key(), in order to get the seeked valuae
-    pub fn seek_key(&mut self, key: &Bytes) {
-        let key = key::create(key.clone(), 0);
-        if let Some(prev_entry_to_key) = self.memtable.data.upper_bound(Excluded(&key)) {
-            self.current_value = Some(prev_entry_to_key.value().clone());
-            self.current_key = Some(prev_entry_to_key.key().clone());
-        } else {
-            //Key higher than max key of the map, the iterator should return false in has next
-            if self.is_higher(&key) && !self.memtable.data.is_empty() {
-                let max_entry = self.memtable.data.back().unwrap().clone();
-                self.current_value = Some(max_entry.value().clone());
-                self.current_key = Some(max_entry.key().clone());
-            }
         }
     }
 
@@ -126,6 +111,36 @@ impl StorageIterator for MemtableIterator {
     }
 }
 
+impl SeekIterator for MemtableIterator {
+    //Expect call to next() after seek(), in order to get the seeked value
+    fn seek(&mut self, key_bytes: &Bytes, inclusive: bool) -> bool {
+        let key = key::create(key_bytes.clone(), 0);
+        let bound = if inclusive { Included(&key) } else { Excluded(&key) };
+
+        if let Some(prev_entry_to_key) = self.memtable.data.upper_bound(bound) {
+            self.current_value = Some(prev_entry_to_key.value().clone());
+            self.current_key = Some(prev_entry_to_key.key().clone());
+        } else {
+            //Key higher than max key of the map, the iterator should return false in has next
+            if self.is_higher(&key) && !self.memtable.data.is_empty() {
+                let max_entry = self.memtable.data.back().unwrap().clone();
+                self.current_value = Some(max_entry.value().clone());
+                self.current_key = Some(max_entry.key().clone());
+            }
+        }
+
+        //Return true if the key has been seeked successfully
+        if self.current_key.is_none() {
+            return false;
+        }
+        if inclusive {
+            self.current_key.as_ref().unwrap().bytes_eq_bytes(key_bytes)
+        } else {
+            true
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::key;
@@ -136,9 +151,10 @@ mod test {
     use crate::utils::storage_iterator::StorageIterator;
     use bytes::Bytes;
     use std::sync::Arc;
+    use shared::seek_iterator::SeekIterator;
 
     #[test]
-    fn iterators_seekkey() {
+    fn iterators_seek() {
         let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0).unwrap());
         memtable.set_active();
         let value: Vec<u8> = vec![10, 12];
@@ -150,30 +166,30 @@ mod test {
         memtable.set(&transaction(6), Bytes::from("F"), &value);
         memtable.set(&transaction(7), Bytes::from("F"), &value);
 
-        // Start from the beggining [B, D, F] Seek: A
+        // Start from the beginning [B, D, F] Seek: A
         let mut iterator_ = MemtableIterator::create(&memtable, &Transaction::none());
-        iterator_.seek_key(&Bytes::from("A"));
+        iterator_.seek(&Bytes::from("A"), true);
         assert!(iterator_.has_next());
         iterator_.next();
         assert!(iterator_.key().eq(&key::create_from_str("B", 1)));
 
         // Start from D [B, D, F] Seek: D
         let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
-        iterator.seek_key(&Bytes::from("D"));
+        iterator.seek(&Bytes::from("D"), true);
         assert!(iterator.has_next());
         iterator.next();
         assert!(iterator.key().eq(&key::create_from_str("D", 4)));
 
         // Start from D [B, D, F] Seek: C
         let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
-        iterator.seek_key(&Bytes::from("D"));
+        iterator.seek(&Bytes::from("D"), true);
         assert!(iterator.has_next());
         iterator.next();
         assert!(iterator.key().eq(&key::create_from_str("D", 4)));
 
         // Out of bounds [B, D, F] Seek: G
         let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
-        iterator.seek_key(&Bytes::from("G"));
+        iterator.seek(&Bytes::from("G"), true);
         assert!(!iterator.has_next());
     }
 

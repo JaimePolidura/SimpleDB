@@ -10,7 +10,7 @@ use crate::table::table_iterator::TableIterator;
 use crate::value::{Type, Value};
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
-use shared::SimpleDbError::{ColumnNameAlreadyDefined, IndexAlreadyExists, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
+use shared::SimpleDbError::{ColumnNameAlreadyDefined, ColumnNotFound, IndexAlreadyExists, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
 use shared::{ColumnId, FlagMethods, KeyspaceId, SimpleDbError, SimpleDbFileWrapper};
 use std::cell::UnsafeCell;
 use std::collections::{HashMap, HashSet};
@@ -18,7 +18,9 @@ use std::hash::Hasher;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{fence, AtomicUsize, Ordering};
 use std::sync::Arc;
+use storage::SimpleDbStorageIterator;
 use storage::transactions::transaction::Transaction;
+use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 
 pub struct Table {
     pub(crate) storage_keyspace_id: KeyspaceId,
@@ -176,6 +178,18 @@ impl Table {
             selection,
             self.clone()
         ))
+    }
+
+    pub fn scan_all_secondary_index(
+        self: &Arc<Self>,
+        transaction: &Transaction,
+        column_name: &str
+    ) -> Result<SecondaryIndexIterator<SimpleDbStorageIterator>, SimpleDbError> {
+        let column_id = self.columns_by_name.get(column_name)
+            .ok_or(ColumnNotFound(self.storage_keyspace_id, column_name.to_string()))?
+            .value()
+            .clone();
+        self.secondary_indexes.scan_all(transaction, column_id)
     }
 
     pub fn create_secondary_index(

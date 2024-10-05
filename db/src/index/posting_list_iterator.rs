@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use storage::transactions::transaction::Transaction;
 use crate::index::posting_list::{PostingList, PostingListEntry};
 

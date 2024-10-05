@@ -1,5 +1,7 @@
 use crate::key::Key;
 use crate::utils::storage_iterator::StorageIterator;
+use bytes::Bytes;
+use shared::seek_iterator::SeekIterator;
 
 pub struct TwoMergeIterator<A: StorageIterator, B: StorageIterator> {
     a: A,
@@ -82,16 +84,27 @@ impl<A: StorageIterator, B: StorageIterator> StorageIterator for TwoMergeIterato
     }
 }
 
+impl<A: StorageIterator + SeekIterator, B: StorageIterator + SeekIterator> SeekIterator for TwoMergeIterator<A, B> {
+    //Expect call after creation
+    fn seek(&mut self, key: &Bytes, inclusive: bool) -> bool {
+        let result = self.a.seek(key, inclusive) || self.b.seek(key, inclusive);
+        let choose_a = Self::choose_a(&self.a, &self.b);
+        self.current_value_a = choose_a;
+        self.choose_a = choose_a;
+        result
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-    use bytes::Bytes;
     use crate::key;
-    use crate::memtables::memtable::{MemTable};
+    use crate::memtables::memtable::MemTable;
     use crate::memtables::memtable_iterator::MemtableIterator;
     use crate::transactions::transaction::Transaction;
     use crate::utils::storage_iterator::StorageIterator;
     use crate::utils::two_merge_iterators::TwoMergeIterator;
+    use bytes::Bytes;
+    use std::sync::Arc;
 
     #[test]
     fn two_merge_iterator() {

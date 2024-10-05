@@ -12,6 +12,7 @@ use bytes::Bytes;
 use std::fs;
 use std::sync::Arc;
 use shared::Flag;
+use shared::seek_iterator::SeekIterator;
 use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::utils::storage_engine_iterator::StorageEngineIterator;
 
@@ -71,16 +72,16 @@ impl Keyspace {
         key: &Bytes,
         inclusive: bool,
     ) -> SimpleDbStorageIterator {
-        StorageEngineIterator::create_seeked_key(
+        let mut iterator = StorageEngineIterator::create(
+            self.descriptor.flags,
             &self.options,
             TwoMergeIterator::create(
                 self.memtables.scan_from_key(&transaction, key),
                 self.sstables.scan_from_key(&transaction, key),
             ),
-            key.clone(),
-            inclusive,
-            self.descriptor.flags
-        )
+        );
+        iterator.seek(key, inclusive);
+        iterator
     }
 
     pub fn scan_all_with_transaction(

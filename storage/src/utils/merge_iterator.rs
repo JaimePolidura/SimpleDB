@@ -1,3 +1,5 @@
+use bytes::Bytes;
+use shared::seek_iterator::SeekIterator;
 use crate::key::Key;
 use crate::utils::storage_iterator::StorageIterator;
 
@@ -135,6 +137,20 @@ impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
             .as_ref()
             .expect("Illegal merge iterator state")
             .value()
+    }
+}
+
+impl<I: StorageIterator + SeekIterator> SeekIterator for MergeIterator<I> {
+    //Expect call after creation()
+    fn seek(&mut self, key: &Bytes, inclusive: bool) -> bool {
+        for iterator in &mut self.iterators {
+            if iterator.is_some() {
+                let iterator = iterator.as_mut().unwrap();
+                iterator.seek(key, inclusive);
+            }
+        }
+
+        true
     }
 }
 

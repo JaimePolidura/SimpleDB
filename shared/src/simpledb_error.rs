@@ -1,4 +1,4 @@
-use crate::{types, KeyspaceId};
+use crate::{types, ColumnId, KeyspaceId};
 use bytes::Bytes;
 use std::fmt::{Debug, Formatter};
 use std::string::FromUtf8Error;
@@ -39,6 +39,7 @@ pub enum SimpleDbError {
 
     //DB Layer errors
     IndexAlreadyExists(KeyspaceId, String),
+    IndexNotFound(ColumnId),
     IllegalToken(TokenLocation, String),
     MalformedQuery(String),
     FullScanNotAllowed(),
@@ -289,6 +290,9 @@ impl Debug for SimpleDbError {
             SimpleDbError::IndexAlreadyExists(keyspace_id, column_name) => {
                 write!(f, "Index with name: {} already exists. Keyspace ID: {}", column_name, keyspace_id)
             }
+            SimpleDbError::IndexNotFound(column_id) => {
+                write!(f, "Index not found on column ID: {}", column_id)
+            }
         }
     }
 }
@@ -356,7 +360,8 @@ impl SimpleDbError {
             SimpleDbError::CannotCreateKeyspaceDescriptorFile(_, _) => 59,
             SimpleDbError::CannotReadKeyspaceDescriptorFile(_, _) => 60,
             SimpleDbError::CannotOpenKeyspaceDescriptorFile(_, _) => 61,
-            SimpleDbError::IndexAlreadyExists(_, _) => 62
+            SimpleDbError::IndexAlreadyExists(_, _) => 62,
+            SimpleDbError::IndexNotFound(_) => 63,
         }
     }
 }

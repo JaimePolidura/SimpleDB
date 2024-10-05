@@ -9,6 +9,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
 use bytes::Bytes;
+use shared::seek_iterator::SeekIterator;
 use crate::key::Key;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
@@ -106,7 +107,7 @@ impl SSTables {
     pub fn scan_from_key(&self, transaction: &Transaction, key: &Bytes) -> MergeIterator<SSTableIterator> {
         let mut iterators = self.create_iterators(transaction);
         for iterator in &mut iterators {
-            iterator.seek_key(key);
+            iterator.seek(key, true);
         }
         MergeIterator::create(iterators)
     }

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use bytes::Bytes;
+use shared::seek_iterator::SeekIterator;
 use crate::key;
 use crate::sst::block::block::Block;
 use crate::sst::block::block_iterator::BlockIterator;
@@ -34,20 +35,6 @@ impl SSTableIterator {
             current_block_metadata: None,
             current_block_id: -1,
             sstable,
-        }
-    }
-
-    pub fn seek_key(&mut self, key: &Bytes) {
-        let key = key::create(key.clone(), 0);
-
-        if self.sstable.is_key_higher(&key) {
-            self.pending_blocks.clear();
-            self.current_block_metadata = None;
-            self.current_block_iterator = None;
-            return;
-        }
-        if self.sstable.is_key_lower(&key) {
-            return;
         }
     }
 
@@ -136,6 +123,26 @@ impl StorageIterator for SSTableIterator {
             .as_ref()
             .expect("Illegal iterator state")
             .value()
+    }
+}
+
+impl SeekIterator for SSTableIterator {
+    fn seek(&mut self, key: &Bytes, inclusive: bool) -> bool {
+        // let key = key::create(key.clone(), 0);
+        //
+        // if self.sstable.is_key_higher(&key) {
+        //     self.pending_blocks.clear();
+        //     self.current_block_metadata = None;
+        //     self.current_block_iterator = None;
+        //     return false;
+        // }
+        // if self.sstable.is_key_lower(&key) {
+        //     return false;
+        // }
+        //
+        // true
+
+        todo!()
     }
 }
 

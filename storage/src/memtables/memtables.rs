@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use bytes::Bytes;
 use shared::Flag;
+use shared::seek_iterator::SeekIterator;
 use crate::memtables::memtable::{MemTable};
 use crate::memtables::memtable_iterator::MemtableIterator;
 use crate::memtables::wal::Wal;
@@ -57,7 +58,7 @@ impl Memtables {
     pub fn scan_from_key(&self, transaction: &Transaction, key: &Bytes) -> MergeIterator<MemtableIterator> {
         let mut iterators = self.create_iterators(transaction);
         for iterator in &mut iterators {
-            iterator.seek_key(key);
+            iterator.seek(key, true);
         }
         MergeIterator::create(iterators)
     }

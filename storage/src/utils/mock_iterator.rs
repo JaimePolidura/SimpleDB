@@ -1,8 +1,10 @@
 use std::collections::VecDeque;
 use bytes::Bytes;
+use shared::seek_iterator::SeekIterator;
 use shared::TxnId;
 use crate::key;
 use crate::key::Key;
+use crate::utils::storage_engine_iterator::StorageEngineIterator;
 use crate::utils::storage_iterator::StorageIterator;
 
 pub struct MockIterator {
@@ -48,5 +50,27 @@ impl StorageIterator for MockIterator {
 
     fn value(&self) -> &[u8] {
         self.current_value.as_ref().unwrap()
+    }
+}
+
+impl SeekIterator for MockIterator {
+    fn seek(&mut self, to_seek: &Bytes, inclusive: bool) -> bool {
+        while let Some((current_key, current_value)) = self.entries.pop_front() {
+            if inclusive && current_key.bytes_eq_bytes(to_seek) {
+                self.current_value = Some(current_value);
+                self.current_key = Some(current_key);
+                return true;
+            } else if !inclusive && current_key.bytes_eq_bytes(to_seek) {
+                if let Some((next_key, next_value)) = self.entries.pop_front() {
+                    self.current_value = Some(next_value);
+                    self.current_key = Some(next_key);
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+        }
+
+        false
     }
 }

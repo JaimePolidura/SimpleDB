@@ -6,8 +6,11 @@ use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
 use shared::{ColumnId, KeyspaceId, SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
+use crossbeam_skiplist::map::Entry;
+use shared::SimpleDbError::IndexNotFound;
 use storage::transactions::transaction::Transaction;
-use storage::Storage;
+use storage::{SimpleDbStorageIterator, Storage};
+use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 
 pub struct SecondaryIndexes {
     secondary_index_by_column_id: SkipMap<ColumnId, Arc<SecondaryIndex>>,
@@ -66,6 +69,17 @@ impl SecondaryIndexes {
         )));
 
         Ok(keyspace_id)
+    }
+
+    pub fn scan_all(
+        &self,
+        transaction: &Transaction,
+        column_id: ColumnId
+    ) -> Result<SecondaryIndexIterator<SimpleDbStorageIterator>, SimpleDbError> {
+        match self.secondary_index_by_column_id.get(&column_id) {
+            Some(entry) => entry.value().scan_all(transaction),
+            None => Err(IndexNotFound(column_id)),
+        }
     }
 
     pub fn update_all(
