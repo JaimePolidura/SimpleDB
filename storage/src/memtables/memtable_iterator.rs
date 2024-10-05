@@ -113,7 +113,7 @@ impl StorageIterator for MemtableIterator {
 
 impl SeekIterator for MemtableIterator {
     //Expect call to next() after seek(), in order to get the seeked value
-    fn seek(&mut self, key_bytes: &Bytes, inclusive: bool) -> bool {
+    fn seek(&mut self, key_bytes: &Bytes, inclusive: bool) {
         let key = key::create(key_bytes.clone(), 0);
         let bound = if inclusive { Included(&key) } else { Excluded(&key) };
 
@@ -127,16 +127,6 @@ impl SeekIterator for MemtableIterator {
                 self.current_value = Some(max_entry.value().clone());
                 self.current_key = Some(max_entry.key().clone());
             }
-        }
-
-        //Return true if the key has been seeked successfully
-        if self.current_key.is_none() {
-            return false;
-        }
-        if inclusive {
-            self.current_key.as_ref().unwrap().bytes_eq_bytes(key_bytes)
-        } else {
-            true
         }
     }
 }

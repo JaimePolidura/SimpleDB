@@ -182,9 +182,8 @@ impl<I: StorageIterator> StorageIterator for StorageEngineIterator<I> {
 }
 
 impl<I: StorageIterator + SeekIterator> SeekIterator for StorageEngineIterator<I> {
-    fn seek(&mut self, key: &Bytes, inclusive: bool) -> bool {
+    fn seek(&mut self, key: &Bytes, inclusive: bool) {
         self.inner_iterator.seek(key, inclusive);
-        self.do_do_next()
     }
 }
 

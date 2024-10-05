@@ -142,15 +142,13 @@ impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
 
 impl<I: StorageIterator + SeekIterator> SeekIterator for MergeIterator<I> {
     //Expect call after creation()
-    fn seek(&mut self, key: &Bytes, inclusive: bool) -> bool {
+    fn seek(&mut self, key: &Bytes, inclusive: bool) {
         for iterator in &mut self.iterators {
             if iterator.is_some() {
                 let iterator = iterator.as_mut().unwrap();
                 iterator.seek(key, inclusive);
             }
         }
-
-        true
     }
 }
 

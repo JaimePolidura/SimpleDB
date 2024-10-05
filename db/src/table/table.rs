@@ -18,6 +18,7 @@ use std::hash::Hasher;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{fence, AtomicUsize, Ordering};
 use std::sync::Arc;
+use shared::seek_iterator::SeekIterator;
 use storage::SimpleDbStorageIterator;
 use storage::transactions::transaction::Transaction;
 use crate::index::secondary_index_iterator::SecondaryIndexIterator;
@@ -178,6 +179,21 @@ impl Table {
             selection,
             self.clone()
         ))
+    }
+
+    pub fn scan_from_key_secondary_index(
+        self: &Arc<Self>,
+        key: &Bytes,
+        transaction: &Transaction,
+        column_name: &str
+    ) -> Result<SecondaryIndexIterator<SimpleDbStorageIterator>, SimpleDbError> {
+        let column_id = self.columns_by_name.get(column_name)
+            .ok_or(ColumnNotFound(self.storage_keyspace_id, column_name.to_string()))?
+            .value()
+            .clone();
+        let mut iterator = self.secondary_indexes.scan_all(transaction, column_id)?;
+        iterator.seek(key, true);
+        Ok(iterator)
     }
 
     pub fn scan_all_secondary_index(

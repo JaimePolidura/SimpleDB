@@ -28,10 +28,12 @@ impl Block {
         decode_block(encoded, options)
     }
 
-    pub fn contains_key(&self, key: &Key) -> bool {
+    pub fn contains_key(&self, key: &Key, inclusive: bool) -> bool {
         let max_key = self.get_key_by_index(self.offsets.len() - 1);
         let min_key = self.get_key_by_index(0);
-        min_key.le(key) && max_key.ge(key)
+
+        (inclusive && min_key.le(key) && max_key.ge(key)) ||
+            (inclusive && min_key.lt(key) && max_key.gt(key))
     }
 
     pub fn get_value(&self, key_lookup: &Bytes, transaction: &Transaction) -> Option<Bytes> {

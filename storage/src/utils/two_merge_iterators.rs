@@ -86,12 +86,13 @@ impl<A: StorageIterator, B: StorageIterator> StorageIterator for TwoMergeIterato
 
 impl<A: StorageIterator + SeekIterator, B: StorageIterator + SeekIterator> SeekIterator for TwoMergeIterator<A, B> {
     //Expect call after creation
-    fn seek(&mut self, key: &Bytes, inclusive: bool) -> bool {
-        let result = self.a.seek(key, inclusive) || self.b.seek(key, inclusive);
+    fn seek(&mut self, key: &Bytes, inclusive: bool) {
+        self.a.seek(key, inclusive);
+        self.b.seek(key, inclusive);
+
         let choose_a = Self::choose_a(&self.a, &self.b);
         self.current_value_a = choose_a;
         self.choose_a = choose_a;
-        result
     }
 }
 

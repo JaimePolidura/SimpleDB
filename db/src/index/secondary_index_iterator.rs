@@ -98,20 +98,8 @@ impl<I: StorageIterator> SecondaryIndexIterator<I> {
 
 impl<I: StorageIterator + SeekIterator> SeekIterator for SecondaryIndexIterator<I> {
     //Expect to be called after creation.
-    fn seek(&mut self, key: &Bytes, inclusive: bool) -> bool {
-        if self.storage_iterator.seek(key, inclusive) {
-            self.deleted_entries.clear();
-            let mut posting_list_value_bytes = self.storage_iterator.value();
-            let posting_list = PostingList::deserialize(&mut posting_list_value_bytes);
-            self.posting_list_iterator = Some(PostingListIterator::create(
-                &self.transaction,
-                posting_list
-            ));
-
-            true
-        } else {
-            false
-        }
+    fn seek(&mut self, key: &Bytes, inclusive: bool) {
+        self.storage_iterator.seek(key, inclusive);
     }
 }
 
@@ -126,7 +114,7 @@ mod test  {
     use storage::transactions::transaction::Transaction;
     use storage::utils::storage_engine_iterator::StorageEngineIterator;
     use storage::{key, MockIterator};
-    
+
     /**
     primary key -> [ ( key, txnid, is_present ) ]
     1 -> [ (Jaime, 1, true), (Molon, 2, true), (Wili, 3, false) ]

@@ -153,12 +153,20 @@ impl SSTable {
         block_metadata.get(0).unwrap().first_key.clone()
     }
 
-    pub fn is_key_higher(&self, key: &Key) -> bool {
+    pub fn key_greater(&self, key: &Key) -> bool {
         self.last_key.lt(key)
     }
 
-    pub fn is_key_lower(&self, key: &Key) -> bool {
+    pub fn key_greater_equal(&self, key: &Key) -> bool {
+        self.last_key.lt(key)
+    }
+
+    pub fn key_is_less(&self, key: &Key) -> bool {
         self.first_key.gt(key)
+    }
+
+    pub fn key_is_less_equal(&self, key: &Key) -> bool {
+        self.first_key.ge(key)
     }
 
     pub fn delete(&self) -> Result<(), shared::SimpleDbError> {

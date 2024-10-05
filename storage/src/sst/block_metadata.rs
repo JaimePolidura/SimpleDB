@@ -95,7 +95,7 @@ impl BlockMetadata {
 
     pub fn contains(&self, key: &Bytes, transaction: &Transaction) -> bool {
         let key_to_be_checked = key::create(key.clone(), transaction.txn_id);
-        self.first_key.le(&key_to_be_checked) && self.last_key.gt(&key_to_be_checked)
+        self.first_key.le(&key_to_be_checked) && self.last_key.ge(&key_to_be_checked)
     }
 }
 

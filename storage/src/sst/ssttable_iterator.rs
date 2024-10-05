@@ -1,14 +1,14 @@
-use std::sync::Arc;
-use bytes::Bytes;
-use shared::seek_iterator::SeekIterator;
-use crate::key;
+use crate::key::Key;
 use crate::sst::block::block::Block;
 use crate::sst::block::block_iterator::BlockIterator;
-use crate::key::Key;
 use crate::sst::block_metadata::BlockMetadata;
 use crate::sst::sstable::SSTable;
 use crate::transactions::transaction::Transaction;
 use crate::utils::storage_iterator::StorageIterator;
+use bytes::Bytes;
+use shared::seek_iterator::SeekIterator;
+use std::sync::Arc;
+use crate::key;
 
 //This iterators fulfills:
 // - The returned keys are readble/visible by the current transaction.
@@ -127,33 +127,45 @@ impl StorageIterator for SSTableIterator {
 }
 
 impl SeekIterator for SSTableIterator {
-    fn seek(&mut self, key: &Bytes, inclusive: bool) -> bool {
-        // let key = key::create(key.clone(), 0);
-        //
-        // if self.sstable.is_key_higher(&key) {
-        //     self.pending_blocks.clear();
-        //     self.current_block_metadata = None;
-        //     self.current_block_iterator = None;
-        //     return false;
-        // }
-        // if self.sstable.is_key_lower(&key) {
-        //     return false;
-        // }
-        //
-        // true
+    //Expect call after creation
+    fn seek(&mut self, key_bytes: &Bytes, inclusive: bool) {
+        let key = key::create(key_bytes.clone(), 0);
 
-        todo!()
+        if (inclusive && self.sstable.key_greater(&key)) ||
+            (!inclusive && self.sstable.key_greater_equal(&key)) {
+            self.pending_blocks.clear();
+            self.current_block_metadata = None;
+            self.current_block_iterator = None;
+            return;
+        }
+        if self.sstable.key_is_less_equal(&key) {
+            return;
+        }
+
+        while !self.pending_blocks.is_empty() {
+            let current_block_metadata = self.pending_blocks.remove(0);
+            self.current_block_id += 1;
+
+            if current_block_metadata.contains(key_bytes, &self.transaction) {
+                let current_block = self.load_block(self.current_block_id as usize);
+                let mut current_block_iterator = BlockIterator::create(current_block);
+
+                current_block_iterator.seek(
+                    &key::create(key_bytes.clone(), self.transaction.txn_id),
+                    inclusive
+                );
+
+                self.current_block_metadata = Some(current_block_metadata);
+                self.current_block_iterator = Some(current_block_iterator);
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::sync::{Arc, Mutex};
-    use std::sync::atomic::AtomicU8;
-    use bytes::Bytes;
-    use crossbeam_skiplist::SkipSet;
-    use crate::sst::block::block_builder::BlockBuilder;
     use crate::key;
+    use crate::sst::block::block_builder::BlockBuilder;
     use crate::sst::block_cache::BlockCache;
     use crate::sst::block_metadata::BlockMetadata;
     use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
@@ -161,6 +173,10 @@ mod test {
     use crate::transactions::transaction::Transaction;
     use crate::utils::bloom_filter::BloomFilter;
     use crate::utils::storage_iterator::StorageIterator;
+    use bytes::Bytes;
+    use crossbeam_skiplist::SkipSet;
+    use std::sync::atomic::AtomicU8;
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn next_has_next() {

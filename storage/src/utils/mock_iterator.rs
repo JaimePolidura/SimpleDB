@@ -54,23 +54,19 @@ impl StorageIterator for MockIterator {
 }
 
 impl SeekIterator for MockIterator {
-    fn seek(&mut self, to_seek: &Bytes, inclusive: bool) -> bool {
+    fn seek(&mut self, to_seek: &Bytes, inclusive: bool) {
         while let Some((current_key, current_value)) = self.entries.pop_front() {
             if inclusive && current_key.bytes_eq_bytes(to_seek) {
                 self.current_value = Some(current_value);
                 self.current_key = Some(current_key);
-                return true;
+                return;
             } else if !inclusive && current_key.bytes_eq_bytes(to_seek) {
                 if let Some((next_key, next_value)) = self.entries.pop_front() {
                     self.current_value = Some(next_value);
                     self.current_key = Some(next_key);
-                    return true;
-                } else {
-                    return false;
                 }
+                return;
             }
         }
-
-        false
     }
 }
