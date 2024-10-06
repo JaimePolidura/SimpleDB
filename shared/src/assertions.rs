@@ -13,7 +13,7 @@ where
 }
 
 pub fn assert_iterator_str_seq<I>(
-    mut iterator: I,
+    iterator: I,
     mut expected_strs: Vec<&str>
 )
 where

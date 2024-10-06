@@ -1,87 +1,102 @@
+use std::collections::HashSet;
 use crate::iterators::storage_iterator::StorageIterator;
 use crate::key::Key;
 use bytes::Bytes;
 
 pub struct MergeIterator<I: StorageIterator> {
+    //We use Option so that when an iterator has not next, we can remove it by placing None
     iterators: Vec<Option<Box<I>>>,
 
-    current_iterator: Option<Box<I>>,
     current_iterator_index: usize,
     last_key_iterated: Option<Key>,
+    finished_iterators_indexes: HashSet<usize>,
+
+    first_iteration: bool,
 }
 
 impl<I: StorageIterator> MergeIterator<I> {
     pub fn create(mut iterators: Vec<Box<I>>) -> MergeIterator<I> {
-        call_next_on_every_iterator(&mut iterators);
-
-        let mut iterators_options: Vec<Option<Box<I>>> = Vec::new();
-        for iterator in iterators {
-            iterators_options.push(Some(iterator));
+        let mut iterators_options = Vec::new();
+        while !iterators.is_empty() {
+            let iterator = iterators.remove(0);
+            if iterator.has_next() {
+                iterators_options.push(Some(iterator));
+            }
         }
 
         MergeIterator {
+            finished_iterators_indexes: HashSet::new(),
+            iterators: iterators_options,
             current_iterator_index: 0,
             last_key_iterated: None,
-            current_iterator: None,
-            iterators: iterators_options,
+            first_iteration: true,
         }
     }
 
     fn advance_iterators(
         &mut self,
-        min_key_seen: &Option<Key>
+        min_key_seen: &Key
     ) {
-        let mut current_index: i32 = -1;
-        let mut iterator_indexes_to_clear: Vec<usize> = Vec::new();
+        let mut finished_iterators = Vec::new();
 
-        for iterator in &mut self.iterators {
-            current_index = current_index + 1;
-            if iterator.is_some() && !is_iterator_up_to_date(iterator.as_ref().unwrap(), &min_key_seen) {
+        for current_index in 0..self.iterators.len() {
+            if self.finished_iterators_indexes.contains(&current_index) {
+                continue;
+            }
+
+            let iterator = &mut self.iterators[current_index];
+
+            if iterator.is_some() {
                 let iterator = iterator.as_mut().unwrap();
-
                 while !is_iterator_up_to_date(&iterator, &min_key_seen) {
-                    let has_advanced: bool = iterator.next();
-                    let not_up_to_date_after_next = !is_iterator_up_to_date(&iterator, &min_key_seen);
-
-                    if !has_advanced || not_up_to_date_after_next {
-                        iterator_indexes_to_clear.push(current_index as usize);
-                        break
+                    if !iterator.next() { //Has not advanced
+                        finished_iterators.push(current_index);
+                        break;
                     }
                 }
             }
         }
 
-        //Place None
-        for iterator_index_to_clear in iterator_indexes_to_clear {
-            self.iterators[iterator_index_to_clear].take();
+        self.remove_finished_iterators(finished_iterators);
+    }
+
+    fn remove_finished_iterators(&mut self, finished_iterators_index: Vec<usize>) {
+        for finished_iterator_index in finished_iterators_index {
+            self.finished_iterators_indexes.insert(finished_iterator_index);
         }
     }
-}
 
-fn call_next_on_every_iterator<I: StorageIterator>(iterators: &mut Vec<Box<I>>) {
-    for iterator in iterators {
-        iterator.next();
+    fn call_next_on_every_iterator(&mut self) {
+        let mut current_index = 0;
+
+        for iterator in &mut self.iterators {
+            let iterator = iterator.as_mut().unwrap();
+            //Has not advanced
+            if !iterator.next() {
+                self.finished_iterators_indexes.insert(current_index);
+            }
+
+            current_index += 1;
+        }
     }
 }
 
 impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
     fn next(&mut self) -> bool {
-        if self.current_iterator.is_some() {
-            //has_advanced
-            if self.current_iterator.as_mut().unwrap().next() {
-                self.iterators[self.current_iterator_index] = Some(self.current_iterator.take().unwrap());
-            }
+        if self.first_iteration {
+            self.call_next_on_every_iterator();
+            self.first_iteration = false;
         }
 
         let mut min_key_seen: Option<Key> = None;
-        let mut min_key_seen_index: usize = 0;
-        let mut current_index: i32 = -1;
-        for current_iterator in &self.iterators {
-            current_index = current_index + 1;
+        let mut min_key_seen_iterator_index: usize = 0;
 
-            if current_iterator.is_some() {
-                let current_iterator = current_iterator.as_ref().unwrap();
+        for (current_index, current_iterator) in &mut self.iterators.iter().enumerate() {
+            if self.finished_iterators_indexes.contains(&current_index) {
+                continue;
+            }
 
+            if let Some(current_iterator) = current_iterator {
                 let current_key = current_iterator.key();
 
                 let key_smaller_than_prev_iteration: bool = self.last_key_iterated.is_some() &&
@@ -90,7 +105,7 @@ impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
                     current_key >= min_key_seen.as_ref().unwrap();
 
                 if !key_smaller_than_prev_iteration && !key_larger_than_min {
-                    min_key_seen_index = current_index as usize;
+                    min_key_seen_iterator_index = current_index;
 
                     match min_key_seen {
                         Some(_) => if current_key.le(min_key_seen.as_ref().unwrap()) {
@@ -104,9 +119,9 @@ impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
 
         let some_key_found = min_key_seen.is_some();
         if some_key_found {
-            self.current_iterator = std::mem::replace(&mut self.iterators[min_key_seen_index], None);
-            self.current_iterator_index = min_key_seen_index;
-            self.advance_iterators(&min_key_seen);
+            self.advance_iterators(min_key_seen.as_ref().unwrap());
+
+            self.current_iterator_index = min_key_seen_iterator_index;
             self.last_key_iterated = min_key_seen;
         }
 
@@ -114,15 +129,7 @@ impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
     }
 
     fn has_next(&self) -> bool {
-        let some_remaining_iterator = self.iterators.iter()
-            .filter(|it| it.is_some())
-            .count() > 0;
-        let current_iterator_has_next = self.current_iterator.is_some() && self.current_iterator
-            .as_ref()
-            .unwrap()
-            .has_next();
-
-        current_iterator_has_next || some_remaining_iterator
+        self.finished_iterators_indexes.len() < self.iterators.len()
     }
 
     fn key(&self) -> &Key {
@@ -132,33 +139,33 @@ impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
     }
 
     fn value(&self) -> &[u8] {
-        self.current_iterator
+        self.iterators.get(self.current_iterator_index)
+            .unwrap()
             .as_ref()
-            .expect("Illegal merge iterator state")
+            .unwrap()
             .value()
     }
 
     fn seek(&mut self, key: &Bytes, inclusive: bool) {
-        if let Some(current_iterator) = self.current_iterator.take() {
-            self.iterators[self.current_iterator_index] = Some(current_iterator);
-        }
-
         for iterator in &mut self.iterators {
             if iterator.is_some() {
                 let iterator = iterator.as_mut().unwrap();
                 iterator.seek(key, inclusive);
             }
         }
+
+        self.first_iteration = true;
     }
 }
 
-fn is_iterator_up_to_date<I: StorageIterator>(it: &Box<I>, last_key: &Option<Key>) -> bool {
-    last_key.is_some() && it.key() > last_key.as_ref().unwrap()
+fn is_iterator_up_to_date<I: StorageIterator>(it: &Box<I>, last_key: &Key) -> bool {
+    it.key() > last_key
 }
 
 #[cfg(test)]
 mod test {
     use bytes::Bytes;
+    use crate::assertions;
     use crate::assertions::assert_iterator_str_seq;
     use crate::iterators::merge_iterator::MergeIterator;
     use crate::iterators::mock_iterator::MockIterator;
@@ -170,7 +177,36 @@ mod test {
     C -> D -> E
     */
     #[test]
-    fn seek_exclusive_contained() {
+    fn seek4() {
+        let mut iterator = create_merge_iterator();
+        iterator.seek(&Bytes::from("e"), false);
+        iterator.next();
+        assertions::assert_empty_iterator(iterator);
+    }
+
+    /**
+    A -> B -> D
+    B -> E
+    C -> D -> E
+    */
+    #[test]
+    fn seek3() {
+        let mut iterator = create_merge_iterator();
+        iterator.seek(&Bytes::from("e"), true);
+
+        assert_iterator_str_seq(
+            iterator,
+            vec!["e"]
+        );
+    }
+
+    /**
+    A -> B -> D
+    B -> E
+    C -> D -> E
+    */
+    #[test]
+    fn seek2() {
         let mut iterator = create_merge_iterator();
         iterator.seek(&Bytes::from("b"), false);
 
@@ -186,7 +222,7 @@ mod test {
     C -> D -> E
     */
     #[test]
-    fn seek_inclusive_contained() {
+    fn seek1() {
         let mut iterator = create_merge_iterator();
         iterator.seek(&Bytes::from("b"), true);
 

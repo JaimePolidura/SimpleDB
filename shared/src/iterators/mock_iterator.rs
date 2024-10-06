@@ -34,7 +34,7 @@ impl MockIterator {
 
 impl StorageIterator for MockIterator {
     fn next(&mut self) -> bool {
-        if self.next_index <= self.entries.len() {
+        if self.next_index < self.entries.len() {
             self.next_index += 1;
             true
         } else {
@@ -43,7 +43,7 @@ impl StorageIterator for MockIterator {
     }
 
     fn has_next(&self) -> bool {
-        self.next_index <= self.entries.len()
+        self.next_index < self.entries.len()
     }
 
     fn key(&self) -> &Key {
