@@ -3,6 +3,8 @@ use bytes::Bytes;
 use crate::sst::block::block::Block;
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::key::Key;
+use shared::MAX_TXN_ID;
+use crate::transactions::transaction::Transaction;
 
 pub struct BlockIterator {
     block: Arc<Block>,
@@ -22,22 +24,6 @@ impl BlockIterator {
             current_index: 0,
             current_items_iterated: 0,
         }
-    }
-
-    //Returns true if the key is contained in the block
-    //Returns false if the key is out of bounds the block
-    //Expect next() call after seek_key(), in order to get the seeked valuae
-    pub fn seek_key(&mut self, key: &Key, inclusve: bool) -> bool {
-        if !self.block.contains_key(key, inclusve) {
-            self.finish_iterator();
-            return false;
-        }
-
-        let index = self.block.get_key_iterator_index(key.as_bytes());
-        self.current_items_iterated = index + 1;
-        self.current_index = index;
-
-        true
     }
 
     fn finish_iterator(&mut self) {
@@ -78,8 +64,23 @@ impl StorageIterator for BlockIterator {
             .expect("Illegal iterator state")
     }
 
-    fn seek(&mut self, key: &Bytes, inclusive: bool) {
-        unimplemented!("Call to seek_key()")
+    //Expect call before seek(), to make sure that the key is included in the block
+    fn seek(&mut self, key_bytes: &Bytes, inclusive: bool) {
+        let txn_id = if inclusive { MAX_TXN_ID } else { 0 };
+        let key = &Key::create(key_bytes.clone(), txn_id);
+
+        if self.block.is_key_higher(key, inclusive) {
+            self.finish_iterator();
+        } else if self.block.is_key_lower(key, inclusive) { //Start from beginning
+            return;
+        } else {
+            let index = self.block.get_index(
+                key_bytes,
+                inclusive
+            );
+            self.current_items_iterated = index;
+            self.current_index = index;
+        }
     }
 }
 
@@ -87,6 +88,7 @@ impl StorageIterator for BlockIterator {
 mod test {
     use std::sync::Arc;
     use bytes::Bytes;
+    use shared::assertions;
     use crate::sst::block::block_builder::BlockBuilder;
     use crate::sst::block::block_iterator::BlockIterator;
     use shared::iterators::storage_iterator::StorageIterator;
@@ -100,51 +102,54 @@ mod test {
         block_builder.add_entry(Key::create_from_str("E", 1), Bytes::from(vec![4, 5, 6]));
         let block = Arc::new(block_builder.build());
 
-        // Start from the beggining [B, D, E] Seek: A
+        //[B, D, E] Seek: A, Inclusive
         let mut iterator = BlockIterator::create(block.clone());
-        iterator.seek_key(&Key::create_from_str("A", 1), true);
-        assert!(!iterator.has_next());
+        iterator.seek(&Bytes::from("A"), true);
+        assert!(iterator.has_next());
+        iterator.next();
+        assert!(iterator.key().eq(&Key::create_from_str("B", 1)));
 
-        // Out of bounds [B, D, E] Seek: A
+        //[B, D, E] Seek: F, Inclusive
         let mut iterator = BlockIterator::create(block.clone());
-        iterator.seek_key(&Key::create_from_str("F", 1), true);
-        assert!(!iterator.has_next());
+        iterator.seek(&Bytes::from("F"), true);
+        assertions::assert_empty_iterator(iterator);
 
-        // Start from D [B, D, E] Seek: D
+        //[B, D, E] Seek: D, Inclusive
         let mut iterator = BlockIterator::create(block.clone());
-        iterator.seek_key(&Key::create_from_str("D", 1), true);
+        iterator.seek(&Bytes::from("D"), true);
         iterator.next();
         assert!(iterator.key().eq(&Key::create_from_str("D", 1)));
 
-        // Start from D [B, D, E] Seek: C
+        //[B, D, E] Seek: D, Exclusive
         let mut iterator = BlockIterator::create(block.clone());
-        iterator.seek_key(&Key::create_from_str("C", 1), true);
+        iterator.seek(&Bytes::from("D"), false);
+        iterator.next();
+        assert_eq!(*iterator.key(), Key::create_from_str("E", 1));
+
+        //[B, D, E] Seek: C, Inclusive
+        let mut iterator = BlockIterator::create(block.clone());
+        iterator.seek(&Bytes::from("C"), true);
         iterator.next();
         assert!(iterator.key().eq(&Key::create_from_str("D", 1)));
+
+        //[B, D, E] Seek: E, Exclusive
+        let mut iterator = BlockIterator::create(block.clone());
+        iterator.seek(&Bytes::from("E"), false);
+        assertions::assert_empty_iterator(iterator);
     }
 
     #[test]
     fn next_has_next() {
         let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
-        block_builder.add_entry(Key::create_from_str("Jaime", 1), Bytes::from(vec![1, 2, 3]));
-        block_builder.add_entry(Key::create_from_str("Pedro", 1), Bytes::from(vec![4, 5, 6]));
-        let block = Arc::new(block_builder.build());
+        block_builder.add_entry(Key::create_from_str("A", 0), Bytes::from(vec![1]));
+        block_builder.add_entry(Key::create_from_str("B", 0), Bytes::from(vec![1]));
+        block_builder.add_entry(Key::create_from_str("C", 0), Bytes::from(vec![1]));
+        block_builder.add_entry(Key::create_from_str("D", 0), Bytes::from(vec![1]));
+        block_builder.add_entry(Key::create_from_str("E", 0), Bytes::from(vec![1]));
 
-        let mut block_iterator = BlockIterator::create(block);
-
-        assert!(block_iterator.has_next());
-        block_iterator.next();
-
-        assert!(block_iterator.key().eq(&Key::create_from_str("Jaime", 1)));
-        assert!(block_iterator.value().eq(&vec![1, 2, 3]));
-
-        assert!(block_iterator.has_next());
-        block_iterator.next();
-
-        assert!(block_iterator.key().eq(&Key::create_from_str("Pedro", 1)));
-        assert!(block_iterator.value().eq(&vec![4, 5, 6]));
-
-        assert!(!block_iterator.has_next());
-        assert!(!block_iterator.next());
+        assertions::assert_iterator_str_seq(
+            BlockIterator::create(Arc::new(block_builder.build())),
+            vec!["A", "B", "C", "D", "E"]
+        );
     }
 }

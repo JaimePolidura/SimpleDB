@@ -164,7 +164,7 @@ impl SSTableBuilder {
         }
 
         let encoded_block: Vec<u8> = self.current_block_builder.build()
-            .encode(&self.options);
+            .serialize(&self.options);
         self.current_block_builder = BlockBuilder::create(self.options.clone());
 
         self.builded_block_metadata.push(BlockMetadata {

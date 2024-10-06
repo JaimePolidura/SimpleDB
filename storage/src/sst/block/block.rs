@@ -1,3 +1,4 @@
+use std::cmp::max;
 use crate::sst::block::block_decoder::decode_block;
 use crate::sst::block::block_encoder::encode_block;
 use crate::transactions::transaction::Transaction;
@@ -19,46 +20,69 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn encode(&self, options: &Arc<shared::SimpleDbOptions>) -> Vec<u8> {
+    pub fn serialize(&self, options: &Arc<shared::SimpleDbOptions>) -> Vec<u8> {
         encode_block(&self, options)
     }
 
-    pub fn decode(encoded: &Vec<u8>, options: &Arc<shared::SimpleDbOptions>) -> Result<Block, shared::DecodeErrorType> {
+    pub fn deserialize(
+        encoded: &Vec<u8>,
+        options: &Arc<shared::SimpleDbOptions>
+    ) -> Result<Block, shared::DecodeErrorType> {
         decode_block(encoded, options)
     }
 
-    pub fn contains_key(&self, key: &Key, inclusive: bool) -> bool {
+    pub fn is_key_higher(&self, key: &Key, inclusive: bool) -> bool {
         let max_key = self.get_key_by_index(self.offsets.len() - 1);
-        let min_key = self.get_key_by_index(0);
+        (inclusive && key.gt(&max_key)) || (!inclusive && key.ge(&max_key))
+    }
 
-        (inclusive && min_key.le(key) && max_key.ge(key)) ||
-            (inclusive && min_key.lt(key) && max_key.gt(key))
+    pub fn is_key_lower(&self, key: &Key, inclusive: bool) -> bool {
+        let min_key = self.get_key_by_index(0);
+        (inclusive && key.lt(&min_key)) || (inclusive && key.le(&min_key))
     }
 
     pub fn get_value(&self, key_lookup: &Bytes, transaction: &Transaction) -> Option<Bytes> {
-        let (value, _) = self.binary_search_by_key(key_lookup, transaction);
+        let (value, _) = self.binary_search_by_key_bytes(key_lookup, transaction);
         value
     }
 
-    //Only used by block_iterator
-    // [A, B, D], key_lookup = B, returned = 0
-    // [A, B, D], key_lookup = C, returned = 1
-    pub(crate) fn get_key_iterator_index(&self, key_lookup: &Bytes) -> usize {
-        let (value_found, index) = self.binary_search_by_key(key_lookup, &Transaction::none());
-        match value_found {
+    pub(crate) fn get_index(
+        &self,
+        bytes_lookup: &Bytes,
+        inclusive: bool,
+    ) -> usize {
+        let (found, index) = self.binary_search_by_key_bytes(bytes_lookup, &Transaction::none());
+        match found {
             Some(_) => {
-                if index == 0 {
-                    index
-                } else {
-                    index - 1
+                let mut current_index = index;
+
+                if inclusive {
+                    return current_index;
                 }
-            },
-            None => index,
+
+                while current_index < self.offsets.len() {
+                    let current_key = self.get_key_by_index(current_index);
+                    if !current_key.bytes_eq_bytes(bytes_lookup) {
+                        return current_index;
+                    }
+
+                    current_index += 1;
+                }
+
+                current_index
+            }
+            None => index
         }
     }
 
-    //Optinoal of value bytes, index of last search
-    fn binary_search_by_key(&self, key_lookup: &Bytes, transaction: &Transaction) -> (Option<(Bytes)>, usize) {
+    //Does a binary search in the block to find an entry that has the same key and is readable by the transaction.
+    //Returns the value of the entry and the index in the block.
+    //The returned value is guaranteed to be readable by the transaction.
+    pub(crate) fn binary_search_by_key_bytes(
+        &self,
+        key_lookup: &Bytes,
+        transaction: &Transaction
+    ) -> (Option<(Bytes)>, usize) {
         let mut right = self.offsets.len();
         let mut left = 0;
 
@@ -83,39 +107,47 @@ impl Block {
         (None, left)
     }
 
-    //Different versions exists for the same key
+    //When doing a binary search we might find multiple versions exists for the same key,
+    //so we need to return the first one that is readable by the transaction.
+    //Returns the value found as an Option, and the index in the block
     fn get_value_in_multiple_key_versions(
         &self,
         transaction: &Transaction,
         key: &Bytes,
         index: usize
-    ) -> (Option<(Bytes)>, usize) { //Byte values, index of alst search
+    ) -> (Option<(Bytes)>, usize) {
+        //We make current_index to point to the first version of a given key bytes. Example:
+        //[(A, 1), (B, 1), (B, 2), (B, 3)], given key = B, index: 3, this would make current_index to
+        //have value 1 (first entry of B)
         let mut current_index = index;
         while current_index > 0 && self.get_key_by_index(current_index - 1).bytes_eq_bytes(key) {
             current_index = current_index - 1;
         }
 
+        //Now we search the first readable value by the transaction
         while current_index < self.entries.len() {
             let current_key = self.get_key_by_index(current_index);
-            if current_key.bytes_eq_bytes(key) {
+            if !current_key.bytes_eq_bytes(key) {
                 return (None, index);
             }
             if transaction.can_read(&current_key) {
                 return (Some(self.get_value_by_index(current_index)), current_index);
             }
+
+            current_index += 1;
         }
 
         (None, index)
     }
 
-    //Expect n_entry_index to be an index to block::offsets aray
+    //Expect n_entry_index to be an index to block::offsets array
     pub fn get_key_by_index(&self, n_entry_index: usize) -> Key {
         let entry_index = self.offsets[n_entry_index] as usize;
         let key_ptr = &mut &self.entries[entry_index..];
         Key::deserialize(key_ptr)
     }
 
-    //Expect n_entry_index to be an index to block::offsets aray
+    //Expect n_entry_index to be an index to block::offsets array
     pub fn get_value_by_index(&self, n_entry_index: usize) -> Bytes {
         let entry_index = self.offsets[n_entry_index];
         let key_ptr = &mut &self.entries[entry_index as usize..];
@@ -136,7 +168,7 @@ mod test {
     use shared::key::Key;
 
     #[test]
-    fn encode_and_decode() {
+    fn serialize_deserialize() {
         let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
         block_builder.add_entry(Key::create_from_str("Jaime", 1), Bytes::from(vec![1]));
         block_builder.add_entry(Key::create_from_str("Javier", 1), Bytes::from(vec![2]));
@@ -147,9 +179,9 @@ mod test {
         block_builder.add_entry(Key::create_from_str("Kia", 1), Bytes::from(vec![7]));
         let block = block_builder.build();
 
-        let encoded = block.encode(&Arc::new(shared::SimpleDbOptions::default()));
+        let encoded = block.serialize(&Arc::new(shared::SimpleDbOptions::default()));
 
-        let decoded_block_to_test = Block::decode(&encoded, &Arc::new(shared::SimpleDbOptions::default()))
+        let decoded_block_to_test = Block::deserialize(&encoded, &Arc::new(shared::SimpleDbOptions::default()))
             .unwrap();
 
         assert_eq!(decoded_block_to_test.get_key_by_index(0).to_string(), String::from("Jaime"));

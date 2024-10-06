@@ -194,7 +194,7 @@ impl SSTable {
         let encoded_block = self.file.read(metadata.offset, self.options.block_size_bytes)
             .map_err(|e| shared::SimpleDbError::CannotReadSSTableFile(self.keyspace_id, self.sstable_id, e))?;
 
-        let block = Block::decode(&encoded_block, &self.options)
+        let block = Block::deserialize(&encoded_block, &self.options)
             .map_err(|error_type| shared::SimpleDbError::CannotDecodeSSTable(
                 self.keyspace_id,
                 self.sstable_id,

@@ -9,10 +9,10 @@ use std::sync::Arc;
 use shared::key::Key;
 
 //This iterators fulfills:
-// - The returned keys are readble/visible by the current transaction.
+// - The returned keys are readable/visible by the current transaction.
 // - The returned key's bytes might be returned multiple times.
 //
-//   For example (byess, txn_id): (A, 1), (A, 2), (A, 3) with iterator txn_id = 2,
+//   For example (bytes, txn_id): (A, 1), (A, 2), (A, 3) with iterator txn_id = 2,
 //   the iterator will return: (A, 1) and (A, 2)
 pub struct SSTableIterator {
     transaction: Transaction,
@@ -145,10 +145,10 @@ impl StorageIterator for SSTableIterator {
                 let current_block = self.load_block(self.current_block_id as usize);
                 let mut current_block_iterator = BlockIterator::create(current_block);
 
-                current_block_iterator.seek_key(
-                    &Key::create(key_bytes.clone(), self.transaction.txn_id),
-                    inclusive
-                );
+                // current_block_iterator.seek_key(
+                //     &Key::create(key_bytes.clone(), self.transaction.txn_id),
+                //     inclusive
+                // );
 
                 self.current_block_metadata = Some(current_block_metadata);
                 self.current_block_iterator = Some(current_block_iterator);
