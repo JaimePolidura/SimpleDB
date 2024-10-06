@@ -1,10 +1,9 @@
-use std::sync::Arc;
-use bytes::Bytes;
 use crate::sst::block::block::Block;
+use bytes::Bytes;
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::key::Key;
 use shared::MAX_TXN_ID;
-use crate::transactions::transaction::Transaction;
+use std::sync::Arc;
 
 pub struct BlockIterator {
     block: Arc<Block>,
@@ -86,13 +85,13 @@ impl StorageIterator for BlockIterator {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-    use bytes::Bytes;
-    use shared::assertions;
     use crate::sst::block::block_builder::BlockBuilder;
     use crate::sst::block::block_iterator::BlockIterator;
+    use bytes::Bytes;
+    use shared::assertions;
     use shared::iterators::storage_iterator::StorageIterator;
     use shared::key::Key;
+    use std::sync::Arc;
 
     #[test]
     fn seek_key() {

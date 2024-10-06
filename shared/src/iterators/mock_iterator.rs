@@ -15,7 +15,7 @@ impl MockIterator {
     ) -> MockIterator {
         let mut iterator = Self::create();
         for entry in entries {
-            iterator.add_entry(entry, 1, Bytes::from(vec![0]));
+            iterator.add_entry(entry, 0, Bytes::from(vec![0]));
         }
         iterator
     }
@@ -83,7 +83,7 @@ impl StorageIterator for MockIterator {
             match last_key.take() {
                 Some(last_key_from_optional) => {
                     if last_key_from_optional.bytes_lt_bytes(to_seek) && current_key.bytes_gt_bytes(to_seek) {
-                        self.next_index += 1; //[1, 3, 4] Seek = 2, iterator will point to 3
+                        self.next_index = current_index; //[1, 3, 4] Seek = 2, iterator will point to 3
                         return;
                     } else {
                         last_key = Some(current_key.clone());
@@ -110,6 +110,16 @@ mod test {
     use crate::iterators::storage_iterator::StorageIterator;
 
     #[test]
+    fn seek_not_contained() {
+        let mut mock_iterator = MockIterator::create_from(vec!["a", "c", "d", "f"]);
+        mock_iterator.seek(&Bytes::from("b"), true);
+        assertions::assert_iterator_str_seq(
+            mock_iterator,
+            vec!["c", "d", "f"]
+        );
+    }
+
+    #[test]
     fn seek_higherbound_inclusive() {
         let mut mock_iterator = MockIterator::create_from(vec!["b", "c"]);
         mock_iterator.seek(&Bytes::from("c"), true);
@@ -133,16 +143,6 @@ mod test {
         assertions::assert_iterator_str_seq(
             mock_iterator,
             vec!["b", "c"]
-        );
-    }
-
-    #[test]
-    fn seek_not_contained() {
-        let mut mock_iterator = MockIterator::create_from(vec!["a", "c", "d", "f"]);
-        mock_iterator.seek(&Bytes::from("b"), true);
-        assertions::assert_iterator_str_seq(
-            mock_iterator,
-            vec!["c", "d", "f"]
         );
     }
 
