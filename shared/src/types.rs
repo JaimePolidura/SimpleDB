@@ -17,3 +17,5 @@ impl FlagMethods for Flag {
         self & other == other
     }
 }
+
+pub const MAX_TXN_ID: TxnId = usize::MAX as TxnId;

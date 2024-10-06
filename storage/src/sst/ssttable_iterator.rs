@@ -5,7 +5,6 @@ use crate::sst::sstable::SSTable;
 use crate::transactions::transaction::Transaction;
 use shared::iterators::storage_iterator::StorageIterator;
 use bytes::Bytes;
-use shared::iterators::seek_iterator::SeekIterator;
 use std::sync::Arc;
 use shared::key::Key;
 
@@ -123,10 +122,7 @@ impl StorageIterator for SSTableIterator {
             .expect("Illegal iterator state")
             .value()
     }
-}
 
-impl SeekIterator for SSTableIterator {
-    //Expect call after creation
     fn seek(&mut self, key_bytes: &Bytes, inclusive: bool) {
         let key = Key::create(key_bytes.clone(), 0);
 
@@ -149,7 +145,7 @@ impl SeekIterator for SSTableIterator {
                 let current_block = self.load_block(self.current_block_id as usize);
                 let mut current_block_iterator = BlockIterator::create(current_block);
 
-                current_block_iterator.seek(
+                current_block_iterator.seek_key(
                     &Key::create(key_bytes.clone(), self.transaction.txn_id),
                     inclusive
                 );

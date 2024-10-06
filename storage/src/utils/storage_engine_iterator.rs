@@ -2,7 +2,6 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use bytes::Bytes;
 use shared::{Flag, StorageValueMergeResult};
-use shared::iterators::seek_iterator::SeekIterator;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::TransactionManager;
 use shared::iterators::storage_iterator::StorageIterator;
@@ -179,9 +178,7 @@ impl<I: StorageIterator> StorageIterator for StorageEngineIterator<I> {
     fn value(&self) -> &[u8] {
         self.current_value.as_ref().unwrap()
     }
-}
 
-impl<I: StorageIterator + SeekIterator> SeekIterator for StorageEngineIterator<I> {
     fn seek(&mut self, key: &Bytes, inclusive: bool) {
         self.inner_iterator.seek(key, inclusive);
     }

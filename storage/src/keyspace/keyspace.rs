@@ -1,4 +1,5 @@
 use crate::compaction::compaction::{Compaction, CompactionTask};
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::memtables::memtable::MemTable;
 use crate::memtables::memtables::Memtables;
@@ -6,16 +7,14 @@ use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
-use shared::iterators::two_merge_iterators::TwoMergeIterator;
+use crate::utils::storage_engine_iterator::StorageEngineIterator;
 use crate::SimpleDbStorageIterator;
 use bytes::Bytes;
+use shared::iterators::two_merge_iterators::TwoMergeIterator;
+use shared::Flag;
 use std::fs;
 use std::sync::Arc;
-use shared::Flag;
-use shared::iterators::seek_iterator::SeekIterator;
-use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
-use shared::iterators::merge_iterator::MergeIterator;
-use crate::utils::storage_engine_iterator::StorageEngineIterator;
+use shared::iterators::storage_iterator::StorageIterator;
 
 pub struct Keyspace {
     keyspace_id: shared::KeyspaceId,

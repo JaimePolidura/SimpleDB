@@ -1,4 +1,3 @@
-use crate::iterators::seek_iterator::SeekIterator;
 use crate::iterators::storage_iterator::StorageIterator;
 use bytes::Bytes;
 use crate::key::Key;
@@ -84,9 +83,7 @@ impl<A: StorageIterator, B: StorageIterator> StorageIterator for TwoMergeIterato
             self.b.value()
         }
     }
-}
 
-impl<A: StorageIterator + SeekIterator, B: StorageIterator + SeekIterator> SeekIterator for TwoMergeIterator<A, B> {
     //Expect call after creation
     fn seek(&mut self, key: &Bytes, inclusive: bool) {
         self.a.seek(key, inclusive);

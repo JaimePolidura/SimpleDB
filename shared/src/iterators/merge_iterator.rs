@@ -1,4 +1,3 @@
-use crate::iterators::seek_iterator::SeekIterator;
 use crate::iterators::storage_iterator::StorageIterator;
 use crate::key::Key;
 use bytes::Bytes;
@@ -138,9 +137,7 @@ impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
             .expect("Illegal merge iterator state")
             .value()
     }
-}
 
-impl<I: StorageIterator + SeekIterator> SeekIterator for MergeIterator<I> {
     fn seek(&mut self, key: &Bytes, inclusive: bool) {
         if let Some(current_iterator) = self.current_iterator.take() {
             self.iterators[self.current_iterator_index] = Some(current_iterator);
@@ -162,10 +159,10 @@ fn is_iterator_up_to_date<I: StorageIterator>(it: &Box<I>, last_key: &Option<Key
 #[cfg(test)]
 mod test {
     use bytes::Bytes;
-    use crate::assertions::assert_iterator_key_seq;
+    use crate::assertions::assert_iterator_str_seq;
     use crate::iterators::merge_iterator::MergeIterator;
     use crate::iterators::mock_iterator::MockIterator;
-    use crate::iterators::seek_iterator::SeekIterator;
+    use crate::iterators::storage_iterator::StorageIterator;
 
     /**
     A -> B -> D
@@ -177,7 +174,7 @@ mod test {
         let mut iterator = create_merge_iterator();
         iterator.seek(&Bytes::from("b"), false);
 
-        assert_iterator_key_seq(
+        assert_iterator_str_seq(
             iterator,
             vec!["c", "d", "e"]
         );
@@ -193,7 +190,7 @@ mod test {
         let mut iterator = create_merge_iterator();
         iterator.seek(&Bytes::from("b"), true);
 
-        assert_iterator_key_seq(
+        assert_iterator_str_seq(
             iterator,
             vec!["b", "c", "d", "e"]
         );
@@ -206,7 +203,7 @@ mod test {
     */
     #[test]
     fn iterator() {
-        assert_iterator_key_seq(
+        assert_iterator_str_seq(
             create_merge_iterator(),
             vec!["a", "b", "c", "d", "e"]
         );
@@ -228,8 +225,8 @@ mod test {
         iterator3.add_entry("e", 0, Bytes::from(vec![3]));
 
         MergeIterator::create(vec![
-            Box::new(iterator3),
-            Box::new(iterator3),
+            Box::new(iterator1),
+            Box::new(iterator2),
             Box::new(iterator3)
         ])
     }

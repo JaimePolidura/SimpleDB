@@ -1,12 +1,12 @@
 use crate::memtables::memtable::MemTable;
 use crate::transactions::transaction::Transaction;
-use shared::iterators::storage_iterator::StorageIterator;
 use bytes::Bytes;
-use shared::iterators::seek_iterator::SeekIterator;
+use shared::iterators::storage_iterator::StorageIterator;
+use shared::key::Key;
 use std::collections::Bound::Excluded;
 use std::ops::Bound::Included;
 use std::sync::Arc;
-use shared::key::Key;
+use shared::{TxnId, MAX_TXN_ID};
 
 //This iterators fulfills:
 // - The returned keys are readble/visible by the current transaction.
@@ -108,17 +108,22 @@ impl StorageIterator for MemtableIterator {
             .as_ref()
             .expect("Illegal iterator state")
     }
-}
 
-impl SeekIterator for MemtableIterator {
-    //Expect call to next() after seek(), in order to get the seeked value
     fn seek(&mut self, key_bytes: &Bytes, inclusive: bool) {
-        let key = Key::create(key_bytes.clone(), 0);
+        let key_txn_id = if inclusive { 0 } else { MAX_TXN_ID };
+        let key = Key::create(key_bytes.clone(), key_txn_id);
         let bound = if inclusive { Included(&key) } else { Excluded(&key) };
 
-        if let Some(prev_entry_to_key) = self.memtable.data.upper_bound(bound) {
-            self.current_value = Some(prev_entry_to_key.value().clone());
-            self.current_key = Some(prev_entry_to_key.key().clone());
+        if let Some(seeked_entry) = self.memtable.data.lower_bound(bound) {
+            //Set current key to point to the previous key before entry_from_bound.key(), so that
+            //we will need to call next() after seek() to get the seeked value
+            if let Some(prev_entry_to_seeked) = self.memtable.data.upper_bound(Excluded(seeked_entry.key())) {
+                self.current_value = Some(prev_entry_to_seeked.value().clone());
+                self.current_key = Some(prev_entry_to_seeked.key().clone());
+            } else {
+                self.current_value = None;
+                self.current_key = None;
+            }
         } else {
             //Key higher than max key of the map, the iterator should return false in has next
             if self.is_higher(&key) && !self.memtable.data.is_empty() {
@@ -136,11 +141,11 @@ mod test {
     use crate::memtables::memtable_iterator::MemtableIterator;
     use crate::transactions::transaction::Transaction;
     use crate::transactions::transaction_manager::IsolationLevel;
-    use shared::iterators::storage_iterator::StorageIterator;
     use bytes::Bytes;
-    use std::sync::Arc;
-    use shared::iterators::seek_iterator::SeekIterator;
+    use shared::assertions::assert_iterator_key_seq;
+    use shared::iterators::storage_iterator::StorageIterator;
     use shared::key::Key;
+    use std::sync::Arc;
 
     #[test]
     fn iterators_seek() {
@@ -155,35 +160,40 @@ mod test {
         memtable.set(&transaction(6), Bytes::from("F"), &value);
         memtable.set(&transaction(7), Bytes::from("F"), &value);
 
-        // Start from the beginning [B, D, F] Seek: A
+        // Start from the beginning [B, D, F] Seek: A, Inclusive
         let mut iterator_ = MemtableIterator::create(&memtable, &Transaction::none());
         iterator_.seek(&Bytes::from("A"), true);
         assert!(iterator_.has_next());
         iterator_.next();
         assert!(iterator_.key().eq(&Key::create_from_str("B", 1)));
 
-        // Start from D [B, D, F] Seek: D
+        // Start from D [B, D, F] Seek: D, Inclusive
         let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
         iterator.seek(&Bytes::from("D"), true);
         assert!(iterator.has_next());
         iterator.next();
         assert!(iterator.key().eq(&Key::create_from_str("D", 4)));
 
-        // Start from D [B, D, F] Seek: C
+        // Start from D [B, D, F] Seek: D, Exclusive
         let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
-        iterator.seek(&Bytes::from("D"), true);
+        iterator.seek(&Bytes::from("D"), false);
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&Key::create_from_str("D", 4)));
+        assert_eq!(iterator.key().clone(), Key::create_from_str("F", 6));
 
-        // Out of bounds [B, D, F] Seek: G
+        // Out of bounds [B, D, F] Seek: G, Inclusive
         let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
         iterator.seek(&Bytes::from("G"), true);
+        assert!(!iterator.has_next());
+
+        // Out of bounds [B, D, F] Seek: F, Exclusive
+        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
+        iterator.seek(&Bytes::from("F"), false);
         assert!(!iterator.has_next());
     }
 
     #[test]
-    fn iterators_readuncommited() {
+    fn iterators_read_uncommited() {
         let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
             .unwrap());
         memtable.set_active();
@@ -198,39 +208,22 @@ mod test {
 
         let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
 
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&Key::create_from_str("alberto", 1)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&Key::create_from_str("alberto", 2)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&Key::create_from_str("alberto", 3)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&Key::create_from_str("gonchi", 1)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&Key::create_from_str("jaime", 1)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&Key::create_from_str("jaime", 5)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&Key::create_from_str("wili", 0)));
-
-        assert!(!iterator.has_next());
+        assert_iterator_key_seq(
+            iterator,
+            vec![
+                Key::create_from_str("alberto", 1),
+                Key::create_from_str("alberto", 2),
+                Key::create_from_str("alberto", 3),
+                Key::create_from_str("gonchi", 1),
+                Key::create_from_str("jaime", 1),
+                Key::create_from_str("jaime", 5),
+                Key::create_from_str("wili", 0)
+            ]
+        );
     }
 
     #[test]
-    fn iterators_snapshotisolation() {
+    fn iterators_snapshot_isolation() {
         let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
             .unwrap());
         memtable.set_active();
@@ -247,25 +240,16 @@ mod test {
 
         let mut iterator = MemtableIterator::create(&memtable, &transaction_with_iso(3, IsolationLevel::SnapshotIsolation));
 
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&Key::create_from_str("alberto", 1)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&Key::create_from_str("alberto", 2)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&Key::create_from_str("gonchi", 1)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&Key::create_from_str("jaime", 1)));
-
-        assert!(iterator.has_next());
-        iterator.next();
-        assert!(iterator.key().eq(&Key::create_from_str("wili", 0)));
+        assert_iterator_key_seq(
+            iterator,
+            vec![
+                Key::create_from_str("alberto", 1),
+                Key::create_from_str("alberto", 2),
+                Key::create_from_str("gonchi", 1),
+                Key::create_from_str("jaime", 1),
+                Key::create_from_str("wili", 0)
+            ]
+        );
     }
 
     fn transaction(txn_id: shared::TxnId) -> Transaction {

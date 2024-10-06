@@ -53,6 +53,10 @@ impl Key {
         self.bytes.lt(other)
     }
 
+    pub fn bytes_le_bytes(&self, other: &Bytes) -> bool {
+        self.bytes.le(other)
+    }
+
     pub fn bytes_eq(&self, other: &Key) -> bool {
         self.bytes == other.bytes
     }

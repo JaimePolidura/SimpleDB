@@ -9,7 +9,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
 use bytes::Bytes;
-use shared::iterators::seek_iterator::SeekIterator;
+use shared::iterators::storage_iterator::StorageIterator;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
 use crate::transactions::transaction::Transaction;

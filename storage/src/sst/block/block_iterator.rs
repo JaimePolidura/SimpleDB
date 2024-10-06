@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use bytes::Bytes;
-use shared::iterators::seek_iterator::SeekIterator;
 use crate::sst::block::block::Block;
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::key::Key;
@@ -28,7 +27,7 @@ impl BlockIterator {
     //Returns true if the key is contained in the block
     //Returns false if the key is out of bounds the block
     //Expect next() call after seek_key(), in order to get the seeked valuae
-    pub fn seek(&mut self, key: &Key, inclusve: bool) -> bool {
+    pub fn seek_key(&mut self, key: &Key, inclusve: bool) -> bool {
         if !self.block.contains_key(key, inclusve) {
             self.finish_iterator();
             return false;
@@ -78,6 +77,10 @@ impl StorageIterator for BlockIterator {
             .as_ref()
             .expect("Illegal iterator state")
     }
+
+    fn seek(&mut self, key: &Bytes, inclusive: bool) {
+        unimplemented!("Call to seek_key()")
+    }
 }
 
 #[cfg(test)]
@@ -99,23 +102,23 @@ mod test {
 
         // Start from the beggining [B, D, E] Seek: A
         let mut iterator = BlockIterator::create(block.clone());
-        iterator.seek(&Key::create_from_str("A", 1), true);
+        iterator.seek_key(&Key::create_from_str("A", 1), true);
         assert!(!iterator.has_next());
 
         // Out of bounds [B, D, E] Seek: A
         let mut iterator = BlockIterator::create(block.clone());
-        iterator.seek(&Key::create_from_str("F", 1), true);
+        iterator.seek_key(&Key::create_from_str("F", 1), true);
         assert!(!iterator.has_next());
 
         // Start from D [B, D, E] Seek: D
         let mut iterator = BlockIterator::create(block.clone());
-        iterator.seek(&Key::create_from_str("D", 1), true);
+        iterator.seek_key(&Key::create_from_str("D", 1), true);
         iterator.next();
         assert!(iterator.key().eq(&Key::create_from_str("D", 1)));
 
         // Start from D [B, D, E] Seek: C
         let mut iterator = BlockIterator::create(block.clone());
-        iterator.seek(&Key::create_from_str("C", 1), true);
+        iterator.seek_key(&Key::create_from_str("C", 1), true);
         iterator.next();
         assert!(iterator.key().eq(&Key::create_from_str("D", 1)));
     }
