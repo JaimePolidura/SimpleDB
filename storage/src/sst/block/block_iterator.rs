@@ -69,9 +69,9 @@ impl StorageIterator for BlockIterator {
         let txn_id = if inclusive { MAX_TXN_ID } else { 0 };
         let key = &Key::create(key_bytes.clone(), txn_id);
 
-        if self.block.is_key_higher(key, inclusive) {
+        if self.block.is_key_bytes_higher(key, inclusive) {
             self.finish_iterator();
-        } else if self.block.is_key_lower(key, inclusive) { //Start from beginning
+        } else if self.block.is_key_bytes_lower(key, inclusive) { //Start from beginning
             return;
         } else {
             let index = self.block.get_index(

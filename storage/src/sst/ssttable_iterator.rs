@@ -89,6 +89,12 @@ impl SSTableIterator {
         self.sstable.load_block(block_id)
             .expect("Cannot load block")
     }
+
+    fn finish_iterator(&mut self) {
+        self.pending_blocks.clear();
+        self.current_block_metadata = None;
+        self.current_block_iterator = None;
+    }
 }
 
 impl StorageIterator for SSTableIterator {
@@ -125,7 +131,6 @@ impl StorageIterator for SSTableIterator {
 
     fn seek(&mut self, key_bytes: &Bytes, inclusive: bool) {
         let key = Key::create(key_bytes.clone(), 0);
-
         if (inclusive && self.sstable.key_greater(&key)) ||
             (!inclusive && self.sstable.key_greater_equal(&key)) {
             self.pending_blocks.clear();
@@ -137,6 +142,8 @@ impl StorageIterator for SSTableIterator {
             return;
         }
 
+        let mut some_block_seeked = false;
+
         while !self.pending_blocks.is_empty() {
             let current_block_metadata = self.pending_blocks.remove(0);
             self.current_block_id += 1;
@@ -145,14 +152,17 @@ impl StorageIterator for SSTableIterator {
                 let current_block = self.load_block(self.current_block_id as usize);
                 let mut current_block_iterator = BlockIterator::create(current_block);
 
-                // current_block_iterator.seek_key(
-                //     &Key::create(key_bytes.clone(), self.transaction.txn_id),
-                //     inclusive
-                // );
+                current_block_iterator.seek(key_bytes, inclusive);
 
                 self.current_block_metadata = Some(current_block_metadata);
                 self.current_block_iterator = Some(current_block_iterator);
+                some_block_seeked = true;
+                break;
             }
+        }
+
+        if !some_block_seeked {
+            self.finish_iterator();
         }
     }
 }
@@ -171,59 +181,109 @@ mod test {
     use crossbeam_skiplist::SkipSet;
     use std::sync::atomic::AtomicU8;
     use std::sync::{Arc, Mutex};
+    use shared::assertions;
     use shared::key::Key;
 
+    //SSTable:
+    //Block1: [Alberto, Berto]
+    //Block2: [Cigu, De]
+    //Block3: [Estonia, Gibraltar, Zi]
+    #[test]
+    fn seek_start() {
+        let mut iterator = build_sstable_iterator();
+        iterator.seek(&Bytes::from("AAA"), true);
+
+        assertions::assert_iterator_str_seq(
+            iterator,
+            vec![
+                "Alberto",
+                "Berto",
+                "Cigu",
+                "De",
+                "Estonia",
+                "Gibraltar",
+                "Zi"
+            ]
+        );
+    }
+
+    //SSTable:
+    //Block1: [Alberto, Berto]
+    //Block2: [Cigu, De]
+    //Block3: [Estonia, Gibraltar, Zi]
+    #[test]
+    fn seek_inclusive_contained() {
+        let mut iterator = build_sstable_iterator();
+        iterator.seek(&Bytes::from("Berto"), true);
+
+        assertions::assert_iterator_str_seq(
+            iterator,
+            vec![
+                "Berto",
+                "Cigu",
+                "De",
+                "Estonia",
+                "Gibraltar",
+                "Zi"
+            ]
+        );
+    }
+
+    //SSTable:
+    //Block1: [Alberto, Berto]
+    //Block2: [Cigu, De]
+    //Block3: [Estonia, Gibraltar, Zi]
+    #[test]
+    fn seek_exclusive_contained() {
+        let mut iterator = build_sstable_iterator();
+        iterator.seek(&Bytes::from("Cigu"), false);
+
+        assertions::assert_iterator_str_seq(
+            iterator,
+            vec![
+                "De",
+                "Estonia",
+                "Gibraltar",
+                "Zi"
+            ]
+        );
+    }
+
+    //SSTable:
+    //Block1: [Alberto, Berto]
+    //Block2: [Cigu, De]
+    //Block3: [Estonia, Gibraltar, Zi]
     #[test]
     fn next_has_next() {
-        let mut sstable_iteator: SSTableIterator = build_sstable_iterator();
-
-        assert!(sstable_iteator.has_next());
-        sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&Key::create_from_str("Alberto", 1)));
-
-        assert!(sstable_iteator.has_next());
-        sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&Key::create_from_str("Berto", 1)));
-
-        assert!(sstable_iteator.has_next());
-        sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&Key::create_from_str("Cigu", 1)));
-
-        assert!(sstable_iteator.has_next());
-        sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&Key::create_from_str("De", 1)));
-
-        assert!(sstable_iteator.has_next());
-        sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&Key::create_from_str("Estonia", 1)));
-
-        assert!(sstable_iteator.has_next());
-        sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&Key::create_from_str("Gibraltar", 1)));
-
-        assert!(sstable_iteator.has_next());
-        sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&Key::create_from_str("Zi", 1)));
-
-        assert!(!sstable_iteator.next());
-        assert!(!sstable_iteator.has_next());
+        assertions::assert_iterator_str_seq(
+            build_sstable_iterator(),
+            vec![
+                "Alberto",
+                "Berto",
+                "Cigu",
+                "De",
+                "Estonia",
+                "Gibraltar",
+                "Zi"
+            ]
+        );
     }
 
     fn build_sstable_iterator() -> SSTableIterator {
         let mut block1 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
-        block1.add_entry(Key::create_from_str("Alberto", 1), Bytes::from(vec![1]));
-        block1.add_entry(Key::create_from_str("Berto", 1), Bytes::from(vec![1]));
+        block1.add_entry(Key::create_from_str("Alberto", 0), Bytes::from(vec![1]));
+        block1.add_entry(Key::create_from_str("Berto", 0), Bytes::from(vec![1]));
         let block1 = Arc::new(block1.build());
 
         let mut block2 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
-        block2.add_entry(Key::create_from_str("Cigu", 1), Bytes::from(vec![1]));
-        block2.add_entry(Key::create_from_str("De", 1), Bytes::from(vec![1]));
+        block2.add_entry(Key::create_from_str("Cigu", 0), Bytes::from(vec![1]));
+        block2.add_entry(Key::create_from_str("De", 0), Bytes::from(vec![1]));
         let block2 = Arc::new(block2.build());
 
         let mut block3 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
-        block3.add_entry(Key::create_from_str("Estonia", 1), Bytes::from(vec![1]));
-        block3.add_entry(Key::create_from_str("Gibraltar", 1), Bytes::from(vec![1]));
-        block3.add_entry(Key::create_from_str("Zi", 1), Bytes::from(vec![1]));
+        block3.add_entry(Key::create_from_str("Estonia", 0), Bytes::from(vec![1]));
+        block3.add_entry(Key::create_from_str("Gibraltar", 0), Bytes::from(vec![1]));
+        block3.add_entry(Key::create_from_str("Zi", 0), Bytes::from(vec![1]));
         let block3 = Arc::new(block3.build());
 
         let mut block_cache = BlockCache::create(Arc::new(shared::SimpleDbOptions::default()));
@@ -239,9 +299,9 @@ mod test {
             file: shared::SimpleDbFile::mock(),
             block_cache: Mutex::new(block_cache),
             block_metadata: vec![
-                BlockMetadata{offset: 0, first_key: Key::create_from_str("Alberto", 1), last_key: Key::create_from_str("Berto", 1)},
-                BlockMetadata{offset: 8, first_key: Key::create_from_str("Cigu", 1), last_key: Key::create_from_str("De", 1)},
-                BlockMetadata{offset: 16, first_key: Key::create_from_str("Estonia", 1), last_key: Key::create_from_str("Zi", 1)},
+                BlockMetadata{offset: 0, first_key: Key::create_from_str("Alberto", 0), last_key: Key::create_from_str("Berto", 0)},
+                BlockMetadata{offset: 8, first_key: Key::create_from_str("Cigu", 0), last_key: Key::create_from_str("De", 0)},
+                BlockMetadata{offset: 16, first_key: Key::create_from_str("Estonia", 0), last_key: Key::create_from_str("Zi", 0)},
             ],
             options: Arc::new(shared::SimpleDbOptions::default()),
             level: 0,

@@ -1,10 +1,9 @@
-use std::cmp::max;
 use crate::sst::block::block_decoder::decode_block;
 use crate::sst::block::block_encoder::encode_block;
 use crate::transactions::transaction::Transaction;
 use bytes::{Buf, Bytes};
-use std::sync::Arc;
 use shared::key::Key;
+use std::sync::Arc;
 
 pub const PREFIX_COMPRESSED: u64 = 0x01;
 pub const NOT_COMPRESSED: u64 = 0x00;
@@ -31,12 +30,12 @@ impl Block {
         decode_block(encoded, options)
     }
 
-    pub fn is_key_higher(&self, key: &Key, inclusive: bool) -> bool {
+    pub fn is_key_bytes_higher(&self, key: &Key, inclusive: bool) -> bool {
         let max_key = self.get_key_by_index(self.offsets.len() - 1);
-        (inclusive && key.gt(&max_key)) || (!inclusive && key.ge(&max_key))
+        (inclusive && key.bytes_gt_bytes(max_key.as_bytes())) || (!inclusive && key.bytes_ge_bytes(max_key.as_bytes()))
     }
 
-    pub fn is_key_lower(&self, key: &Key, inclusive: bool) -> bool {
+    pub fn is_key_bytes_lower(&self, key: &Key, inclusive: bool) -> bool {
         let min_key = self.get_key_by_index(0);
         (inclusive && key.lt(&min_key)) || (inclusive && key.le(&min_key))
     }
@@ -164,8 +163,8 @@ mod test {
     use crate::sst::block::block::Block;
     use crate::sst::block::block_builder::BlockBuilder;
     use bytes::Bytes;
-    use std::sync::Arc;
     use shared::key::Key;
+    use std::sync::Arc;
 
     #[test]
     fn serialize_deserialize() {

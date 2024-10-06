@@ -181,6 +181,13 @@ mod test {
         iterator.next();
         assert_eq!(iterator.key().clone(), Key::create_from_str("F", 6));
 
+        //[B, D, F] Seek: D, Exclusive
+        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
+        iterator.seek(&Bytes::from("F"), true);
+        assert!(iterator.has_next());
+        iterator.next();
+        assert_eq!(iterator.key().clone(), Key::create_from_str("F", 6));
+
         //[B, D, F] Seek: G, Inclusive
         let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
         iterator.seek(&Bytes::from("G"), true);

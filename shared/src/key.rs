@@ -49,6 +49,10 @@ impl Key {
         self.bytes.gt(other)
     }
 
+    pub fn bytes_ge_bytes(&self, other: &Bytes) -> bool {
+        self.bytes.ge(other)
+    }
+
     pub fn bytes_lt_bytes(&self, other: &Bytes) -> bool {
         self.bytes.lt(other)
     }

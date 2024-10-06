@@ -8,7 +8,6 @@ pub struct TwoMergeIterator<A: StorageIterator, B: StorageIterator> {
     choose_a: bool,
     current_value_a: bool,
     first_iteration: bool,
-
 }
 
 impl<A: StorageIterator, B: StorageIterator> TwoMergeIterator<A, B> {
@@ -114,14 +113,14 @@ mod test {
         iterator2.add_entry("c", 0, Bytes::from(vec![3]));
         iterator2.add_entry("d", 0, Bytes::from(vec![4]));
         iterator2.add_entry("f", 0, Bytes::from(vec![5]));
-
-        assertions::assert_iterator_key_value_seq(
+        
+        assertions::assert_iterator_str_seq(
             TwoMergeIterator::create(iterator1, iterator2),
             vec![
-                ("a", vec![1]),
-                ("b", vec![2]),
-                ("c", vec![3]),
-                ("d", vec![4]),
+                "a",
+                "b",
+                "c",
+                "d",
             ]
         );
     }
