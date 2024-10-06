@@ -1,13 +1,12 @@
-use crate::key;
-use crate::key::Key;
 use crate::memtables::memtable::MemTable;
 use crate::transactions::transaction::Transaction;
-use crate::utils::storage_iterator::StorageIterator;
+use shared::iterators::storage_iterator::StorageIterator;
 use bytes::Bytes;
-use shared::seek_iterator::SeekIterator;
+use shared::iterators::seek_iterator::SeekIterator;
 use std::collections::Bound::Excluded;
 use std::ops::Bound::Included;
 use std::sync::Arc;
+use shared::key::Key;
 
 //This iterators fulfills:
 // - The returned keys are readble/visible by the current transaction.
@@ -114,7 +113,7 @@ impl StorageIterator for MemtableIterator {
 impl SeekIterator for MemtableIterator {
     //Expect call to next() after seek(), in order to get the seeked value
     fn seek(&mut self, key_bytes: &Bytes, inclusive: bool) {
-        let key = key::create(key_bytes.clone(), 0);
+        let key = Key::create(key_bytes.clone(), 0);
         let bound = if inclusive { Included(&key) } else { Excluded(&key) };
 
         if let Some(prev_entry_to_key) = self.memtable.data.upper_bound(bound) {
@@ -133,15 +132,15 @@ impl SeekIterator for MemtableIterator {
 
 #[cfg(test)]
 mod test {
-    use crate::key;
     use crate::memtables::memtable::MemTable;
     use crate::memtables::memtable_iterator::MemtableIterator;
     use crate::transactions::transaction::Transaction;
     use crate::transactions::transaction_manager::IsolationLevel;
-    use crate::utils::storage_iterator::StorageIterator;
+    use shared::iterators::storage_iterator::StorageIterator;
     use bytes::Bytes;
     use std::sync::Arc;
-    use shared::seek_iterator::SeekIterator;
+    use shared::iterators::seek_iterator::SeekIterator;
+    use shared::key::Key;
 
     #[test]
     fn iterators_seek() {
@@ -161,21 +160,21 @@ mod test {
         iterator_.seek(&Bytes::from("A"), true);
         assert!(iterator_.has_next());
         iterator_.next();
-        assert!(iterator_.key().eq(&key::create_from_str("B", 1)));
+        assert!(iterator_.key().eq(&Key::create_from_str("B", 1)));
 
         // Start from D [B, D, F] Seek: D
         let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
         iterator.seek(&Bytes::from("D"), true);
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("D", 4)));
+        assert!(iterator.key().eq(&Key::create_from_str("D", 4)));
 
         // Start from D [B, D, F] Seek: C
         let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
         iterator.seek(&Bytes::from("D"), true);
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("D", 4)));
+        assert!(iterator.key().eq(&Key::create_from_str("D", 4)));
 
         // Out of bounds [B, D, F] Seek: G
         let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
@@ -201,31 +200,31 @@ mod test {
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("alberto", 1)));
+        assert!(iterator.key().eq(&Key::create_from_str("alberto", 1)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("alberto", 2)));
+        assert!(iterator.key().eq(&Key::create_from_str("alberto", 2)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("alberto", 3)));
+        assert!(iterator.key().eq(&Key::create_from_str("alberto", 3)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("gonchi", 1)));
+        assert!(iterator.key().eq(&Key::create_from_str("gonchi", 1)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("jaime", 1)));
+        assert!(iterator.key().eq(&Key::create_from_str("jaime", 1)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("jaime", 5)));
+        assert!(iterator.key().eq(&Key::create_from_str("jaime", 5)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("wili", 0)));
+        assert!(iterator.key().eq(&Key::create_from_str("wili", 0)));
 
         assert!(!iterator.has_next());
     }
@@ -250,23 +249,23 @@ mod test {
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("alberto", 1)));
+        assert!(iterator.key().eq(&Key::create_from_str("alberto", 1)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("alberto", 2)));
+        assert!(iterator.key().eq(&Key::create_from_str("alberto", 2)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("gonchi", 1)));
+        assert!(iterator.key().eq(&Key::create_from_str("gonchi", 1)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("jaime", 1)));
+        assert!(iterator.key().eq(&Key::create_from_str("jaime", 1)));
 
         assert!(iterator.has_next());
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("wili", 0)));
+        assert!(iterator.key().eq(&Key::create_from_str("wili", 0)));
     }
 
     fn transaction(txn_id: shared::TxnId) -> Transaction {

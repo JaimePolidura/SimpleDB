@@ -1,7 +1,6 @@
 use bytes::{Buf, BufMut, Bytes};
+use shared::key::Key;
 use shared::TxnId;
-use storage::key;
-use storage::key::Key;
 use storage::transactions::transaction::Transaction;
 
 #[derive(Clone, Debug, PartialOrd, PartialEq)]
@@ -26,7 +25,7 @@ impl PostingList {
     ) -> PostingList {
         PostingList {
             entries: vec![PostingListEntry{
-                primary_key: key::create(id, transaction.id()),
+                primary_key: Key::create(id, transaction.id()),
                 is_present: true,
             }]
         }
@@ -38,7 +37,7 @@ impl PostingList {
     ) -> PostingList {
         PostingList {
             entries: vec![PostingListEntry{
-                primary_key: key::create(id, transaction.id()),
+                primary_key: Key::create(id, transaction.id()),
                 is_present: false,
             }]
         }
@@ -51,7 +50,7 @@ impl PostingList {
         let mut entries = Vec::new();
         for value in values {
             entries.push(PostingListEntry{
-                primary_key: key::create(Bytes::copy_from_slice(value.0.as_bytes()), value.1),
+                primary_key: Key::create(Bytes::copy_from_slice(value.0.as_bytes()), value.1),
                 is_present: value.2
             });
         }
@@ -126,7 +125,7 @@ impl PostingList {
 
 #[cfg(test)]
 mod test {
-    use storage::key;
+    use shared::key::Key;
     use crate::index::posting_list::{PostingList, PostingListEntry};
 
     #[test]
@@ -141,9 +140,9 @@ mod test {
         let deserialized = PostingList::deserialize(&mut serialized.as_slice());
 
         assert_eq!(deserialized, PostingList{entries: vec![
-            PostingListEntry{ primary_key: key::create_from_str("Jaime", 1), is_present: true },
-            PostingListEntry{ primary_key: key::create_from_str("Juan", 2), is_present: false },
-            PostingListEntry{ primary_key: key::create_from_str("Walo", 1), is_present: true },
+            PostingListEntry{ primary_key: Key::create_from_str("Jaime", 1), is_present: true },
+            PostingListEntry{ primary_key: Key::create_from_str("Juan", 2), is_present: false },
+            PostingListEntry{ primary_key: Key::create_from_str("Walo", 1), is_present: true },
         ]});
     }
 
@@ -162,10 +161,10 @@ mod test {
         let merge_result = PostingList::merge(&posting_list_a, &posting_list_b);
 
         assert_eq!(merge_result, PostingList{entries: vec![
-            PostingListEntry{ primary_key: key::create_from_str("Jaime", 1), is_present: true },
-            PostingListEntry{ primary_key: key::create_from_str("Walo", 1), is_present: true },
-            PostingListEntry{ primary_key: key::create_from_str("Juan", 3), is_present: true },
-            PostingListEntry{ primary_key: key::create_from_str("Pedro", 1), is_present: true },
+            PostingListEntry{ primary_key: Key::create_from_str("Jaime", 1), is_present: true },
+            PostingListEntry{ primary_key: Key::create_from_str("Walo", 1), is_present: true },
+            PostingListEntry{ primary_key: Key::create_from_str("Juan", 3), is_present: true },
+            PostingListEntry{ primary_key: Key::create_from_str("Pedro", 1), is_present: true },
         ]});
     }
 }

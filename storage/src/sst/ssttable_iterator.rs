@@ -1,14 +1,13 @@
-use crate::key::Key;
 use crate::sst::block::block::Block;
 use crate::sst::block::block_iterator::BlockIterator;
 use crate::sst::block_metadata::BlockMetadata;
 use crate::sst::sstable::SSTable;
 use crate::transactions::transaction::Transaction;
-use crate::utils::storage_iterator::StorageIterator;
+use shared::iterators::storage_iterator::StorageIterator;
 use bytes::Bytes;
-use shared::seek_iterator::SeekIterator;
+use shared::iterators::seek_iterator::SeekIterator;
 use std::sync::Arc;
-use crate::key;
+use shared::key::Key;
 
 //This iterators fulfills:
 // - The returned keys are readble/visible by the current transaction.
@@ -129,7 +128,7 @@ impl StorageIterator for SSTableIterator {
 impl SeekIterator for SSTableIterator {
     //Expect call after creation
     fn seek(&mut self, key_bytes: &Bytes, inclusive: bool) {
-        let key = key::create(key_bytes.clone(), 0);
+        let key = Key::create(key_bytes.clone(), 0);
 
         if (inclusive && self.sstable.key_greater(&key)) ||
             (!inclusive && self.sstable.key_greater_equal(&key)) {
@@ -151,7 +150,7 @@ impl SeekIterator for SSTableIterator {
                 let mut current_block_iterator = BlockIterator::create(current_block);
 
                 current_block_iterator.seek(
-                    &key::create(key_bytes.clone(), self.transaction.txn_id),
+                    &Key::create(key_bytes.clone(), self.transaction.txn_id),
                     inclusive
                 );
 
@@ -164,7 +163,6 @@ impl SeekIterator for SSTableIterator {
 
 #[cfg(test)]
 mod test {
-    use crate::key;
     use crate::sst::block::block_builder::BlockBuilder;
     use crate::sst::block_cache::BlockCache;
     use crate::sst::block_metadata::BlockMetadata;
@@ -172,11 +170,12 @@ mod test {
     use crate::sst::ssttable_iterator::SSTableIterator;
     use crate::transactions::transaction::Transaction;
     use crate::utils::bloom_filter::BloomFilter;
-    use crate::utils::storage_iterator::StorageIterator;
+    use shared::iterators::storage_iterator::StorageIterator;
     use bytes::Bytes;
     use crossbeam_skiplist::SkipSet;
     use std::sync::atomic::AtomicU8;
     use std::sync::{Arc, Mutex};
+    use shared::key::Key;
 
     #[test]
     fn next_has_next() {
@@ -184,31 +183,31 @@ mod test {
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::create_from_str("Alberto", 1)));
+        assert!(sstable_iteator.key().eq(&Key::create_from_str("Alberto", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::create_from_str("Berto", 1)));
+        assert!(sstable_iteator.key().eq(&Key::create_from_str("Berto", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::create_from_str("Cigu", 1)));
+        assert!(sstable_iteator.key().eq(&Key::create_from_str("Cigu", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::create_from_str("De", 1)));
+        assert!(sstable_iteator.key().eq(&Key::create_from_str("De", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::create_from_str("Estonia", 1)));
+        assert!(sstable_iteator.key().eq(&Key::create_from_str("Estonia", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::create_from_str("Gibraltar", 1)));
+        assert!(sstable_iteator.key().eq(&Key::create_from_str("Gibraltar", 1)));
 
         assert!(sstable_iteator.has_next());
         sstable_iteator.next();
-        assert!(sstable_iteator.key().eq(&key::create_from_str("Zi", 1)));
+        assert!(sstable_iteator.key().eq(&Key::create_from_str("Zi", 1)));
 
         assert!(!sstable_iteator.next());
         assert!(!sstable_iteator.has_next());
@@ -216,19 +215,19 @@ mod test {
 
     fn build_sstable_iterator() -> SSTableIterator {
         let mut block1 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
-        block1.add_entry(key::create_from_str("Alberto", 1), Bytes::from(vec![1]));
-        block1.add_entry(key::create_from_str("Berto", 1), Bytes::from(vec![1]));
+        block1.add_entry(Key::create_from_str("Alberto", 1), Bytes::from(vec![1]));
+        block1.add_entry(Key::create_from_str("Berto", 1), Bytes::from(vec![1]));
         let block1 = Arc::new(block1.build());
 
         let mut block2 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
-        block2.add_entry(key::create_from_str("Cigu", 1), Bytes::from(vec![1]));
-        block2.add_entry(key::create_from_str("De", 1), Bytes::from(vec![1]));
+        block2.add_entry(Key::create_from_str("Cigu", 1), Bytes::from(vec![1]));
+        block2.add_entry(Key::create_from_str("De", 1), Bytes::from(vec![1]));
         let block2 = Arc::new(block2.build());
 
         let mut block3 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
-        block3.add_entry(key::create_from_str("Estonia", 1), Bytes::from(vec![1]));
-        block3.add_entry(key::create_from_str("Gibraltar", 1), Bytes::from(vec![1]));
-        block3.add_entry(key::create_from_str("Zi", 1), Bytes::from(vec![1]));
+        block3.add_entry(Key::create_from_str("Estonia", 1), Bytes::from(vec![1]));
+        block3.add_entry(Key::create_from_str("Gibraltar", 1), Bytes::from(vec![1]));
+        block3.add_entry(Key::create_from_str("Zi", 1), Bytes::from(vec![1]));
         let block3 = Arc::new(block3.build());
 
         let mut block_cache = BlockCache::create(Arc::new(shared::SimpleDbOptions::default()));
@@ -244,15 +243,15 @@ mod test {
             file: shared::SimpleDbFile::mock(),
             block_cache: Mutex::new(block_cache),
             block_metadata: vec![
-                BlockMetadata{offset: 0, first_key: key::create_from_str("Alberto", 1), last_key: key::create_from_str("Berto", 1)},
-                BlockMetadata{offset: 8, first_key: key::create_from_str("Cigu", 1), last_key: key::create_from_str("De", 1)},
-                BlockMetadata{offset: 16, first_key: key::create_from_str("Estonia", 1), last_key: key::create_from_str("Zi", 1)},
+                BlockMetadata{offset: 0, first_key: Key::create_from_str("Alberto", 1), last_key: Key::create_from_str("Berto", 1)},
+                BlockMetadata{offset: 8, first_key: Key::create_from_str("Cigu", 1), last_key: Key::create_from_str("De", 1)},
+                BlockMetadata{offset: 16, first_key: Key::create_from_str("Estonia", 1), last_key: Key::create_from_str("Zi", 1)},
             ],
             options: Arc::new(shared::SimpleDbOptions::default()),
             level: 0,
             state: AtomicU8::new(SSTABLE_ACTIVE),
-            first_key: key::create_from_str("Alberto", 1),
-            last_key: key::create_from_str("Zi", 1),
+            first_key: Key::create_from_str("Alberto", 1),
+            last_key: Key::create_from_str("Zi", 1),
         });
 
         SSTableIterator::create(sstable, &Transaction::none())

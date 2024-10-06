@@ -24,7 +24,7 @@ impl SimpleDbServer {
 
     pub fn send_request(&mut self, request: Request) -> Response {
         let serialized = request.serialize();
-        self.connection.write(serialized).expect("Cannto write to server");
+        self.connection.write(serialized).expect("Cannot write to server");
         Response::deserialize_from_connection(&mut self.connection)
     }
 }

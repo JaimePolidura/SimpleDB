@@ -1,7 +1,7 @@
-use bytes::Bytes;
-use shared::seek_iterator::SeekIterator;
+use crate::iterators::seek_iterator::SeekIterator;
+use crate::iterators::storage_iterator::StorageIterator;
 use crate::key::Key;
-use crate::utils::storage_iterator::StorageIterator;
+use bytes::Bytes;
 
 pub struct MergeIterator<I: StorageIterator> {
     iterators: Vec<Option<Box<I>>>,
@@ -141,8 +141,11 @@ impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
 }
 
 impl<I: StorageIterator + SeekIterator> SeekIterator for MergeIterator<I> {
-    //Expect call after creation()
     fn seek(&mut self, key: &Bytes, inclusive: bool) {
+        if let Some(current_iterator) = self.current_iterator.take() {
+            self.iterators[self.current_iterator_index] = Some(current_iterator);
+        }
+
         for iterator in &mut self.iterators {
             if iterator.is_some() {
                 let iterator = iterator.as_mut().unwrap();
@@ -158,66 +161,76 @@ fn is_iterator_up_to_date<I: StorageIterator>(it: &Box<I>, last_key: &Option<Key
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
     use bytes::Bytes;
-    use crate::key;
-    use crate::memtables::memtable::{MemTable};
-    use crate::memtables::memtable_iterator::MemtableIterator;
-    use crate::transactions::transaction::Transaction;
-    use crate::utils::merge_iterator::MergeIterator;
-    use crate::utils::storage_iterator::StorageIterator;
+    use crate::assertions::assert_iterator_key_seq;
+    use crate::iterators::merge_iterator::MergeIterator;
+    use crate::iterators::mock_iterator::MockIterator;
+    use crate::iterators::seek_iterator::SeekIterator;
 
+    /**
+    A -> B -> D
+    B -> E
+    C -> D -> E
+    */
+    #[test]
+    fn seek_exclusive_contained() {
+        let mut iterator = create_merge_iterator();
+        iterator.seek(&Bytes::from("b"), false);
+
+        assert_iterator_key_seq(
+            iterator,
+            vec!["c", "d", "e"]
+        );
+    }
+
+    /**
+    A -> B -> D
+    B -> E
+    C -> D -> E
+    */
+    #[test]
+    fn seek_inclusive_contained() {
+        let mut iterator = create_merge_iterator();
+        iterator.seek(&Bytes::from("b"), true);
+
+        assert_iterator_key_seq(
+            iterator,
+            vec!["b", "c", "d", "e"]
+        );
+    }
+
+    /**
+    A -> B -> D
+    B -> E
+    C -> D -> E
+    */
     #[test]
     fn iterator() {
-        let memtable1 = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0).unwrap());
-        memtable1.set_active();
-        memtable1.set(&Transaction::none(), Bytes::from("a"), &vec![1]);
-        memtable1.set(&Transaction::none(), Bytes::from("b"), &vec![1]);
-        memtable1.set(&Transaction::none(), Bytes::from("d"), &vec![1]);
+        assert_iterator_key_seq(
+            create_merge_iterator(),
+            vec!["a", "b", "c", "d", "e"]
+        );
+    }
 
-        let memtable2 = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0).unwrap());
-        memtable2.set_active();
-        memtable2.set(&Transaction::none(), Bytes::from("b"), &vec![2]);
-        memtable2.set(&Transaction::none(), Bytes::from("e"), &vec![2]);
+    fn create_merge_iterator() -> MergeIterator<MockIterator> {
+        let mut iterator1 = MockIterator::create();
+        iterator1.add_entry("a", 0, Bytes::from(vec![1]));
+        iterator1.add_entry("b", 0, Bytes::from(vec![1]));
+        iterator1.add_entry("d", 0, Bytes::from(vec![1]));
 
-        let memtable3 = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0).unwrap());
-        memtable3.set_active();
-        memtable3.set(&Transaction::none(), Bytes::from("c"), &vec![3]);
-        memtable3.set(&Transaction::none(), Bytes::from("d"), &vec![3]);
-        memtable3.set(&Transaction::none(), Bytes::from("e"), &vec![3]);
+        let mut iterator2 = MockIterator::create();
+        iterator2.add_entry("b", 0, Bytes::from(vec![2]));
+        iterator2.add_entry("e", 0, Bytes::from(vec![2]));
 
-        let mut merge_iterator: MergeIterator<MemtableIterator> = MergeIterator::create(vec![
-            Box::new(MemtableIterator::create(&memtable1, &Transaction::none())),
-            Box::new(MemtableIterator::create(&memtable2, &Transaction::none())),
-            Box::new(MemtableIterator::create(&memtable3, &Transaction::none()))
-        ]);
+        let mut iterator3 = MockIterator::create();
+        iterator3.add_entry("c", 0, Bytes::from(vec![3]));
+        iterator3.add_entry("d", 0, Bytes::from(vec![3]));
+        iterator3.add_entry("e", 0, Bytes::from(vec![3]));
 
-        assert!(merge_iterator.has_next());
-        merge_iterator.next();
-
-        assert!(merge_iterator.key().eq(&key::create_from_str("a", 0)));
-        assert!(merge_iterator.value().eq(&vec![1]));
-
-        assert!(merge_iterator.has_next());
-        merge_iterator.next();
-        assert!(merge_iterator.key().eq(&key::create_from_str("b", 0)));
-        assert!(merge_iterator.value().eq(&vec![1]));
-
-        assert!(merge_iterator.has_next());
-        merge_iterator.next();
-        assert!(merge_iterator.key().eq(&key::create_from_str("c", 0)));
-        assert!(merge_iterator.value().eq(&vec![3]));
-
-        assert!(merge_iterator.has_next());
-        merge_iterator.next();
-        assert!(merge_iterator.key().eq(&key::create_from_str("d", 0)));
-        assert!(merge_iterator.value().eq(&vec![1]));
-
-        assert!(merge_iterator.has_next());
-        merge_iterator.next();
-        assert!(merge_iterator.key().eq(&key::create_from_str("e", 0)));
-        assert!(merge_iterator.value().eq(&vec![2]));
-
-        assert!(!merge_iterator.has_next());
+        MergeIterator::create(vec![
+            Box::new(iterator3),
+            Box::new(iterator3),
+            Box::new(iterator3)
+        ])
     }
 }

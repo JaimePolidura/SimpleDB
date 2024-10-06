@@ -20,7 +20,7 @@ pub struct TableDescriptor {
     pub(crate) primary_column_id: ColumnId,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialOrd, PartialEq)]
 pub struct ColumnDescriptor {
     pub(crate) column_id: ColumnId,
     pub(crate) column_type: Type,
@@ -170,9 +170,10 @@ impl ColumnDescriptor {
             }))?;
         let is_primary = current_ptr.get_u8() != 0;
         let secondary_index_keyspace_id = Self::get_secondary_index_keyspace_id(current_ptr.get_u64_le());
-        let name_bytes_length = current_ptr.get_u32_le() as usize;
-        let column_name = decode_string(current_ptr, keyspace_id, n_column)?;
-        current_ptr.advance(name_bytes_length);
+        let column_name_bytes_length = current_ptr.get_u32_le() as usize;
+        let column_bytes = &current_ptr[..column_name_bytes_length];
+        let column_name = decode_string(column_bytes, keyspace_id, n_column)?;
+        current_ptr.advance(column_name_bytes_length);
 
         Ok(ColumnDescriptor{
             secondary_index_keyspace_id,

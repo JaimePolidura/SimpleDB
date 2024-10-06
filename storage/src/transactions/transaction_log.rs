@@ -10,6 +10,7 @@ const WRITE_BINARY_CODE: u8 = 0x03;
 const START_ROLLBACK_BINARY_CODE: u8 = 0x04;
 const ROLLEDBACK_WRITE_BINARY_CODE: u8 = 0x05;
 
+#[derive(Clone, Debug, PartialOrd, PartialEq)]
 pub enum TransactionLogEntry {
     Start(TxnId),
     Write(TxnId),
@@ -113,7 +114,8 @@ impl TransactionLogEntry {
         };
 
         let expected_crc = current_ptr.get_u32_le();
-        let actual_crc = crc32fast::hash(&start_entry_ptr[..entry.serialized_size()]);
+        //1 -> entry type byte, 8 transaction id
+        let actual_crc = crc32fast::hash(&start_entry_ptr[..(1 + 8)]);
 
         if expected_crc != actual_crc {
             return Err(SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
@@ -124,11 +126,6 @@ impl TransactionLogEntry {
         }
 
         Ok(entry)
-    }
-
-    pub fn serialized_size(&self) -> usize {
-        //1 -> entry type byte, 8 transaction id, 4 -> crc32
-        1 + 8 + 4
     }
 
     pub fn txn_id(&self) -> shared::TxnId {
@@ -164,4 +161,20 @@ fn to_transaction_log_file_path(options: &Arc<shared::SimpleDbOptions>) -> PathB
     let mut path = PathBuf::from(&options.base_path);
     path.push("transaction-log");
     path
+}
+
+#[cfg(test)]
+mod test {
+    use crate::transactions::transaction_log::TransactionLogEntry;
+
+    #[test]
+    fn entry_serialize_deserialize() {
+        let entry = TransactionLogEntry::RolledbackWrite(1);
+        let serialized = entry.serialize();
+        let deserialized = TransactionLogEntry::deserialize(
+            &mut serialized.as_slice(), 0
+        ).unwrap();
+
+        assert_eq!(deserialized, TransactionLogEntry::RolledbackWrite(1));
+    }
 }

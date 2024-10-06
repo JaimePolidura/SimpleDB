@@ -1,10 +1,9 @@
-use crate::key;
-use crate::key::Key;
 use crate::sst::block::block_decoder::decode_block;
 use crate::sst::block::block_encoder::encode_block;
 use crate::transactions::transaction::Transaction;
 use bytes::{Buf, Bytes};
 use std::sync::Arc;
+use shared::key::Key;
 
 pub const PREFIX_COMPRESSED: u64 = 0x01;
 pub const NOT_COMPRESSED: u64 = 0x00;
@@ -130,22 +129,22 @@ impl Block {
 
 #[cfg(test)]
 mod test {
-    use crate::key;
     use crate::sst::block::block::Block;
     use crate::sst::block::block_builder::BlockBuilder;
     use bytes::Bytes;
     use std::sync::Arc;
+    use shared::key::Key;
 
     #[test]
     fn encode_and_decode() {
         let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
-        block_builder.add_entry(key::create_from_str("Jaime", 1), Bytes::from(vec![1]));
-        block_builder.add_entry(key::create_from_str("Javier", 1), Bytes::from(vec![2]));
-        block_builder.add_entry(key::create_from_str("Jose", 1), Bytes::from(vec![3]));
-        block_builder.add_entry(key::create_from_str("Juan", 1), Bytes::from(vec![4]));
-        block_builder.add_entry(key::create_from_str("Justo", 1), Bytes::from(vec![5]));
-        block_builder.add_entry(key::create_from_str("Justoo", 1), Bytes::from(vec![6]));
-        block_builder.add_entry(key::create_from_str("Kia", 1), Bytes::from(vec![7]));
+        block_builder.add_entry(Key::create_from_str("Jaime", 1), Bytes::from(vec![1]));
+        block_builder.add_entry(Key::create_from_str("Javier", 1), Bytes::from(vec![2]));
+        block_builder.add_entry(Key::create_from_str("Jose", 1), Bytes::from(vec![3]));
+        block_builder.add_entry(Key::create_from_str("Juan", 1), Bytes::from(vec![4]));
+        block_builder.add_entry(Key::create_from_str("Justo", 1), Bytes::from(vec![5]));
+        block_builder.add_entry(Key::create_from_str("Justoo", 1), Bytes::from(vec![6]));
+        block_builder.add_entry(Key::create_from_str("Kia", 1), Bytes::from(vec![7]));
         let block = block_builder.build();
 
         let encoded = block.encode(&Arc::new(shared::SimpleDbOptions::default()));

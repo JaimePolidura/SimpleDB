@@ -1,10 +1,7 @@
 use crate::transactions::transaction_manager::IsolationLevel;
-use std::sync::atomic::Ordering::Relaxed;
-use std::sync::atomic::AtomicUsize;
-use std::collections::HashSet;
-use crossbeam_skiplist::{SkipList, SkipSet};
 use shared::TxnId;
-use crate::key::Key;
+use std::collections::HashSet;
+use shared::key::Key;
 
 pub struct Transaction {
     pub(crate) active_transactions: HashSet<TxnId>,

@@ -1,9 +1,9 @@
 use std::sync::Arc;
 use bytes::Bytes;
-use shared::seek_iterator::SeekIterator;
+use shared::iterators::seek_iterator::SeekIterator;
 use crate::sst::block::block::Block;
-use crate::key::Key;
-use crate::utils::storage_iterator::StorageIterator;
+use shared::iterators::storage_iterator::StorageIterator;
+use shared::key::Key;
 
 pub struct BlockIterator {
     block: Arc<Block>,
@@ -86,45 +86,45 @@ mod test {
     use bytes::Bytes;
     use crate::sst::block::block_builder::BlockBuilder;
     use crate::sst::block::block_iterator::BlockIterator;
-    use crate::key;
-    use crate::utils::storage_iterator::StorageIterator;
+    use shared::iterators::storage_iterator::StorageIterator;
+    use shared::key::Key;
 
     #[test]
     fn seek_key() {
         let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
-        block_builder.add_entry(key::create_from_str("B", 1), Bytes::from(vec![1, 2, 3]));
-        block_builder.add_entry(key::create_from_str("D", 1), Bytes::from(vec![4, 5, 6]));
-        block_builder.add_entry(key::create_from_str("E", 1), Bytes::from(vec![4, 5, 6]));
+        block_builder.add_entry(Key::create_from_str("B", 1), Bytes::from(vec![1, 2, 3]));
+        block_builder.add_entry(Key::create_from_str("D", 1), Bytes::from(vec![4, 5, 6]));
+        block_builder.add_entry(Key::create_from_str("E", 1), Bytes::from(vec![4, 5, 6]));
         let block = Arc::new(block_builder.build());
 
         // Start from the beggining [B, D, E] Seek: A
         let mut iterator = BlockIterator::create(block.clone());
-        iterator.seek(&key::create_from_str("A", 1), true);
+        iterator.seek(&Key::create_from_str("A", 1), true);
         assert!(!iterator.has_next());
 
         // Out of bounds [B, D, E] Seek: A
         let mut iterator = BlockIterator::create(block.clone());
-        iterator.seek(&key::create_from_str("F", 1), true);
+        iterator.seek(&Key::create_from_str("F", 1), true);
         assert!(!iterator.has_next());
 
         // Start from D [B, D, E] Seek: D
         let mut iterator = BlockIterator::create(block.clone());
-        iterator.seek(&key::create_from_str("D", 1), true);
+        iterator.seek(&Key::create_from_str("D", 1), true);
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("D", 1)));
+        assert!(iterator.key().eq(&Key::create_from_str("D", 1)));
 
         // Start from D [B, D, E] Seek: C
         let mut iterator = BlockIterator::create(block.clone());
-        iterator.seek(&key::create_from_str("C", 1), true);
+        iterator.seek(&Key::create_from_str("C", 1), true);
         iterator.next();
-        assert!(iterator.key().eq(&key::create_from_str("D", 1)));
+        assert!(iterator.key().eq(&Key::create_from_str("D", 1)));
     }
 
     #[test]
     fn next_has_next() {
         let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
-        block_builder.add_entry(key::create_from_str("Jaime", 1), Bytes::from(vec![1, 2, 3]));
-        block_builder.add_entry(key::create_from_str("Pedro", 1), Bytes::from(vec![4, 5, 6]));
+        block_builder.add_entry(Key::create_from_str("Jaime", 1), Bytes::from(vec![1, 2, 3]));
+        block_builder.add_entry(Key::create_from_str("Pedro", 1), Bytes::from(vec![4, 5, 6]));
         let block = Arc::new(block_builder.build());
 
         let mut block_iterator = BlockIterator::create(block);
@@ -132,13 +132,13 @@ mod test {
         assert!(block_iterator.has_next());
         block_iterator.next();
 
-        assert!(block_iterator.key().eq(&key::create_from_str("Jaime", 1)));
+        assert!(block_iterator.key().eq(&Key::create_from_str("Jaime", 1)));
         assert!(block_iterator.value().eq(&vec![1, 2, 3]));
 
         assert!(block_iterator.has_next());
         block_iterator.next();
 
-        assert!(block_iterator.key().eq(&key::create_from_str("Pedro", 1)));
+        assert!(block_iterator.key().eq(&Key::create_from_str("Pedro", 1)));
         assert!(block_iterator.value().eq(&vec![4, 5, 6]));
 
         assert!(!block_iterator.has_next());

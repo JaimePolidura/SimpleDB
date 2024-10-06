@@ -1,16 +1,15 @@
 use crate::index::secondary_index::{SecondaryIndex, SecondaryIndexState};
+use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 use crate::table::record::Record;
 use crate::table::table_descriptor::TableDescriptor;
 use crate::table::table_flags::KEYSPACE_TABLE_INDEX;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
+use shared::SimpleDbError::IndexNotFound;
 use shared::{ColumnId, KeyspaceId, SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
-use crossbeam_skiplist::map::Entry;
-use shared::SimpleDbError::IndexNotFound;
 use storage::transactions::transaction::Transaction;
 use storage::{SimpleDbStorageIterator, Storage};
-use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 
 pub struct SecondaryIndexes {
     secondary_index_by_column_id: SkipMap<ColumnId, Arc<SecondaryIndex>>,

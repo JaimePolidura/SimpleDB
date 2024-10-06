@@ -3,7 +3,7 @@ use crate::table::row::Row;
 use bytes::Bytes;
 use shared::ColumnId;
 use std::sync::Arc;
-use storage::utils::storage_iterator::StorageIterator;
+use shared::iterators::storage_iterator::StorageIterator;
 use storage::SimpleDbStorageIterator;
 use crate::table::table::Table;
 
@@ -58,9 +58,9 @@ impl TableIterator {
             return false;
         }
 
-        let row_in_reeassembling = self.rows_reassembling.remove(0);
-        let key_bytes = row_in_reeassembling.key.clone();
-        let row_record_reassembled = row_in_reeassembling.build();
+        let row_in_reassembling = self.rows_reassembling.remove(0);
+        let key_bytes = row_in_reassembling.key.clone();
+        let row_record_reassembled = row_in_reassembling.build();
         self.current_row = Some(Row::create(row_record_reassembled, &self.selection, &self.table, key_bytes));
 
         true

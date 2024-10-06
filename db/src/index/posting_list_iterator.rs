@@ -50,7 +50,7 @@ impl PostingListIterator {
 
 #[cfg(test)]
 mod test {
-    use storage::key;
+    use shared::key::Key;
     use storage::transactions::transaction::Transaction;
     use crate::index::posting_list::{PostingList, PostingListEntry};
     use crate::index::posting_list_iterator::PostingListIterator;
@@ -58,27 +58,27 @@ mod test {
     #[test]
     fn iterator() {
         let mut posting_list = PostingList::create_empty();
-        posting_list.entries.push(PostingListEntry{ is_present: true, primary_key: key::create_from_str("a", 1) });
-        posting_list.entries.push(PostingListEntry{ is_present: true, primary_key: key::create_from_str("b", 2) });
-        posting_list.entries.push(PostingListEntry{ is_present: true, primary_key: key::create_from_str("c", 3) });
-        posting_list.entries.push(PostingListEntry{ is_present: false, primary_key: key::create_from_str("d", 8) });
-        posting_list.entries.push(PostingListEntry{ is_present: true, primary_key: key::create_from_str("f", 2) });
-        posting_list.entries.push(PostingListEntry{ is_present: true, primary_key: key::create_from_str("g", 8) });
+        posting_list.entries.push(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("a", 1) });
+        posting_list.entries.push(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("b", 2) });
+        posting_list.entries.push(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("c", 3) });
+        posting_list.entries.push(PostingListEntry{ is_present: false, primary_key: Key::create_from_str("d", 8) });
+        posting_list.entries.push(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("f", 2) });
+        posting_list.entries.push(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("g", 8) });
 
 
         let mut iterator = PostingListIterator::create(&Transaction::create(4), posting_list);
         assert!(iterator.has_next());
 
-        assert_eq!(iterator.next(), Some(PostingListEntry{ is_present: true, primary_key: key::create_from_str("a", 1) }));
+        assert_eq!(iterator.next(), Some(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("a", 1) }));
         assert!(iterator.has_next());
 
-        assert_eq!(iterator.next(), Some(PostingListEntry{ is_present: true, primary_key: key::create_from_str("b", 2) }));
+        assert_eq!(iterator.next(), Some(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("b", 2) }));
         assert!(iterator.has_next());
 
-        assert_eq!(iterator.next(), Some(PostingListEntry{ is_present: true, primary_key: key::create_from_str("c", 3) }));
+        assert_eq!(iterator.next(), Some(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("c", 3) }));
         assert!(iterator.has_next());
 
-        assert_eq!(iterator.next(), Some(PostingListEntry{ is_present: true, primary_key: key::create_from_str("f", 2) }));
+        assert_eq!(iterator.next(), Some(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("f", 2) }));
         assert!(!iterator.has_next());
     }
 }

@@ -1,6 +1,5 @@
-use crate::key;
+use crate::{key, TxnId};
 use bytes::{Buf, BufMut, Bytes};
-use shared::TxnId;
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::Formatter;
@@ -11,21 +10,21 @@ pub struct Key {
     txn_id: TxnId,
 }
 
-pub fn create_from_str(string: &str, txn_id: TxnId) -> Key {
-    Key {
-        bytes: Bytes::from(string.to_string()),
-        txn_id
-    }
-}
-
-pub fn create(bytes: Bytes, txn_id: TxnId) -> Key {
-    Key {
-        bytes,
-        txn_id
-    }
-}
-
 impl Key {
+    pub fn create_from_str(string: &str, txn_id: TxnId) -> Key {
+        Key {
+            bytes: Bytes::from(string.to_string()),
+            txn_id
+        }
+    }
+
+    pub fn create(bytes: Bytes, txn_id: TxnId) -> Key {
+        Key {
+            bytes,
+            txn_id
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.bytes.len()
     }
@@ -112,10 +111,10 @@ impl Key {
     //"Juan".split(2) -> ("Ju", "an")
     pub fn split(&self, index: usize) -> (Key, Key) {
         let (h1, h2) = self.bytes.split_at(index);
-        (key::create(Bytes::from(h1.to_vec()), self.txn_id), key::create(Bytes::from(h2.to_vec()), self.txn_id))
+        (Key::create(Bytes::from(h1.to_vec()), self.txn_id), Key::create(Bytes::from(h2.to_vec()), self.txn_id))
     }
 
-    pub fn merge(a: &Key, b: &Key, txn_id: shared::TxnId) -> Key {
+    pub fn merge(a: &Key, b: &Key, txn_id: TxnId) -> Key {
         let mut result = Vec::from(a.bytes.as_ref());
         result.extend(b.bytes.as_ref());
         Key { bytes: Bytes::from(result), txn_id }
@@ -172,14 +171,14 @@ impl Ord for Key {
 
 #[cfg(test)]
 mod test {
-    use crate::key::{create_from_str, Key};
+    use crate::key::Key;
 
     #[test]
     fn serialize_deserialize() {
-        let key = create_from_str("Jaime", 1);
+        let key = Key::create_from_str("Jaime", 1);
         let serialized = key.serialize();
         let deserialized = Key::deserialize(&mut serialized.as_slice());
 
-        assert_eq!(deserialized, create_from_str("Jaime", 1));
+        assert_eq!(deserialized, Key::create_from_str("Jaime", 1));
     }
 }

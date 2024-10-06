@@ -2,7 +2,7 @@ use bytes::Bytes;
 use shared::SimpleDbError::MalformedQuery;
 use shared::{utils, SimpleDbError};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Type {
     I8,
     U8,

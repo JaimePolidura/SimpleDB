@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use bytes::{BufMut, Bytes};
+use shared::key::Key;
 use crate::sst::block::block::{Block, BLOCK_FOOTER_LENGTH};
-use crate::key::Key;
 
 pub struct BlockBuilder {
     entries: Vec<Entry>,
@@ -72,13 +72,13 @@ mod test {
     use std::sync::Arc;
     use crate::sst::block::block_builder::BlockBuilder;
     use bytes::Bytes;
-    use crate::key;
+    use shared::key::Key;
 
     #[test]
     fn build() {
         let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
-        block_builder.add_entry(key::create_from_str("Jaime", 1), Bytes::from(vec![1, 2, 3]));
-        block_builder.add_entry(key::create_from_str("Pedro", 1), Bytes::from(vec![4, 5, 6]));
+        block_builder.add_entry(Key::create_from_str("Jaime", 1), Bytes::from(vec![1, 2, 3]));
+        block_builder.add_entry(Key::create_from_str("Pedro", 1), Bytes::from(vec![4, 5, 6]));
         let block = block_builder.build();
 
         assert_eq!(block.get_value_by_index(0), vec![1, 2, 3]);

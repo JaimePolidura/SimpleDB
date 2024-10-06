@@ -1,11 +1,9 @@
 use std::collections::VecDeque;
 use bytes::Bytes;
-use shared::seek_iterator::SeekIterator;
-use shared::TxnId;
-use crate::key;
+use crate::iterators::seek_iterator::SeekIterator;
+use crate::iterators::storage_iterator::StorageIterator;
 use crate::key::Key;
-use crate::utils::storage_engine_iterator::StorageEngineIterator;
-use crate::utils::storage_iterator::StorageIterator;
+use crate::{key, TxnId};
 
 pub struct MockIterator {
     entries: VecDeque<(Key, Bytes)>,
@@ -24,7 +22,7 @@ impl MockIterator {
     }
 
     pub fn add_entry(&mut self, key: &str, txn_id: TxnId, value: Bytes) {
-        self.entries.push_back((key::create_from_str(key, txn_id), value));
+        self.entries.push_back((Key::create_from_str(key, txn_id), value));
     }
 }
 

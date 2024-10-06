@@ -6,7 +6,7 @@ use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
 use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_engine_iterator::StorageEngineIterator;
-use crate::utils::storage_iterator::StorageIterator;
+use shared::iterators::storage_iterator::StorageIterator;
 use crate::utils::tombstone::TOMBSTONE;
 
 #[derive(Serialize, Deserialize, Copy, Clone)]

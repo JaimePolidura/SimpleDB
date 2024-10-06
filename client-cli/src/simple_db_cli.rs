@@ -110,10 +110,11 @@ impl SimpleDbCli {
     }
 
     fn print_table_describe(&self, columns_desc: &Vec<ColumnDescriptor>) {
-        let mut table = TablePrint::create(3);
+        let mut table = TablePrint::create(4);
         table.add_header("Field");
         table.add_header("Type");
         table.add_header("Primary");
+        table.add_header("Indexed");
 
         for column_desc in columns_desc {
             table.add_column_value(column_desc.column_name.clone());
@@ -122,6 +123,14 @@ impl SimpleDbCli {
             if column_desc.is_primary {
                 table.add_column_value("True".to_string());
             } else {
+                table.add_column_value("False".to_string());
+            }
+
+            if !column_desc.is_primary && column_desc.is_indexed {
+                table.add_column_value("True".to_string());
+            } else if column_desc.is_primary {
+                table.add_column_value("True (Primary key)".to_string());
+            } else if !column_desc.is_indexed {
                 table.add_column_value("False".to_string());
             }
         }

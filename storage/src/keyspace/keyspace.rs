@@ -6,14 +6,15 @@ use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::{IsolationLevel, TransactionManager};
-use crate::utils::two_merge_iterators::TwoMergeIterator;
+use shared::iterators::two_merge_iterators::TwoMergeIterator;
 use crate::SimpleDbStorageIterator;
 use bytes::Bytes;
 use std::fs;
 use std::sync::Arc;
 use shared::Flag;
-use shared::seek_iterator::SeekIterator;
+use shared::iterators::seek_iterator::SeekIterator;
 use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
+use shared::iterators::merge_iterator::MergeIterator;
 use crate::utils::storage_engine_iterator::StorageEngineIterator;
 
 pub struct Keyspace {
@@ -76,8 +77,8 @@ impl Keyspace {
             self.descriptor.flags,
             &self.options,
             TwoMergeIterator::create(
-                self.memtables.scan_from_key(&transaction, key),
-                self.sstables.scan_from_key(&transaction, key),
+                self.memtables.scan_all(&transaction),
+                self.sstables.scan_all(&transaction),
             ),
         );
         iterator.seek(key, inclusive);

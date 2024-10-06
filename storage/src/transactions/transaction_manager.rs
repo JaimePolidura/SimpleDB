@@ -1,14 +1,13 @@
-use crate::key::Key;
-use crate::transactions::transaction::{Transaction};
+use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_log::{TransactionLog, TransactionLogEntry};
-use crossbeam_skiplist::{SkipMap, SkipSet};
+use crossbeam_skiplist::SkipMap;
+use shared::{SimpleDbError, TxnId};
 use std::cmp::max;
 use std::collections::HashSet;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::sync::Arc;
-use crossbeam_skiplist::map::Entry;
-use shared::{SimpleDbError, TxnId};
+use shared::key::Key;
 
 #[derive(Clone)]
 pub enum IsolationLevel {

@@ -1,12 +1,10 @@
-use crate::key;
-use crate::key::Key;
 use crate::memtables::memtable::MemtableState::{Active, Flushed, Flushing, Inactive, RecoveringFromWal};
 use crate::memtables::memtable_iterator::MemtableIterator;
 use crate::memtables::wal::Wal;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::TransactionManager;
-use crate::utils::storage_iterator::StorageIterator;
+use shared::iterators::storage_iterator::StorageIterator;
 use crate::utils::tombstone::TOMBSTONE;
 use bytes::{Buf, Bytes};
 use crossbeam_skiplist::{SkipMap, SkipSet};
@@ -17,6 +15,7 @@ use std::ops::Shl;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
+use shared::key::Key;
 
 pub struct MemTable {
     pub(crate) data: Arc<SkipMap<Key, Bytes>>,
@@ -137,7 +136,7 @@ impl MemTable {
     }
 
     pub fn get(&self, key_lookup: &Bytes, transaction: &Transaction) -> Option<Bytes> {
-        let mut current_key = key::create(key_lookup.clone(), transaction.txn_id + 1);
+        let mut current_key = Key::create(key_lookup.clone(), transaction.txn_id + 1);
 
         loop {
             if let Some(entry) = self.data.upper_bound(Excluded(&current_key)) {
@@ -157,7 +156,7 @@ impl MemTable {
 
     pub fn set(&self, transaction: &Transaction, key: Bytes, value: &[u8]) -> Result<(), shared::SimpleDbError> {
         self.write(
-            &key::create(key, transaction.txn_id),
+            &Key::create(key, transaction.txn_id),
             Bytes::copy_from_slice(value),
             transaction.txn_id
         )
@@ -165,7 +164,7 @@ impl MemTable {
 
     pub fn delete(&self, transaction: &Transaction, key: Bytes) -> Result<(), shared::SimpleDbError> {
         self.write(
-            &key::create(key, transaction.txn_id),
+            &Key::create(key, transaction.txn_id),
             TOMBSTONE,
             transaction.txn_id
         )

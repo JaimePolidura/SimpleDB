@@ -18,7 +18,7 @@ use std::hash::Hasher;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{fence, AtomicUsize, Ordering};
 use std::sync::Arc;
-use shared::seek_iterator::SeekIterator;
+use shared::iterators::seek_iterator::SeekIterator;
 use storage::SimpleDbStorageIterator;
 use storage::transactions::transaction::Transaction;
 use crate::index::secondary_index_iterator::SecondaryIndexIterator;

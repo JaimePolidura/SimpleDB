@@ -31,6 +31,7 @@ pub struct ColumnDescriptor {
     pub column_type: ColumnType,
     pub column_name: String,
     pub is_primary: bool,
+    pub is_indexed: bool,
 }
 
 pub enum ColumnType {
@@ -77,6 +78,7 @@ impl Response {
             let column_id = connection.read_u16().expect("Cannot read columns ID");
             let column_type = connection.read_u8().expect("Cannot read column type");
             let is_primary = connection.read_u8().expect("Cannot read is primary") != 0;
+            let is_indexed = connection.read_u64().expect("Cannot read is indexed") != 0xFFFFFFFFFFFFFFFF;
             let column_name_length = connection.read_u32().expect("Cannot read column value length");
             let column_name_bytes = connection.read_n(column_name_length as usize).expect("Cannot read column value bytes");
             let column_name_string = String::from_utf8(column_name_bytes)
@@ -85,8 +87,9 @@ impl Response {
             vec.push(ColumnDescriptor {
                 column_type: ColumnType::deserialize(column_type),
                 column_name: column_name_string,
+                is_indexed,
+                is_primary,
                 column_id,
-                is_primary
             });
         }
 

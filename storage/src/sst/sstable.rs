@@ -1,5 +1,3 @@
-use crate::key;
-use crate::key::Key;
 use crate::sst::block::block::Block;
 use crate::sst::block_cache::BlockCache;
 use crate::sst::block_metadata::BlockMetadata;
@@ -11,6 +9,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering::Release;
 use std::sync::{Arc, Mutex};
+use shared::key::Key;
 
 pub const SSTABLE_DELETED: u8 = 2;
 pub const SSTABLE_ACTIVE: u8 = 1;
@@ -237,7 +236,7 @@ impl SSTable {
     }
 
     fn get_blocks_metadata(&self, key: &Bytes, transaction: &Transaction) -> Option<usize> {
-        let lookup_key = key::create(key.clone(), transaction.txn_id);
+        let lookup_key = Key::create(key.clone(), transaction.txn_id);
         let mut right = self.block_metadata.len() - 1;
         let mut left = 0;
 

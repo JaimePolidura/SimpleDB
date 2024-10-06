@@ -8,7 +8,9 @@ mod types;
 pub mod connection;
 pub mod utils;
 pub mod logger;
-pub mod seek_iterator;
+pub mod assertions;
+pub mod iterators;
+pub mod key;
 
 pub use simpledb_file::*;
 pub use utils::*;

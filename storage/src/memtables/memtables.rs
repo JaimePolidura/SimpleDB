@@ -3,12 +3,12 @@ use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use bytes::Bytes;
 use shared::Flag;
-use shared::seek_iterator::SeekIterator;
+use shared::iterators::seek_iterator::SeekIterator;
 use crate::memtables::memtable::{MemTable};
 use crate::memtables::memtable_iterator::MemtableIterator;
 use crate::memtables::wal::Wal;
 use crate::transactions::transaction::{Transaction};
-use crate::utils::merge_iterator::MergeIterator;
+use shared::iterators::merge_iterator::MergeIterator;
 
 pub struct Memtables {
     inactive_memtables: AtomicPtr<RwLock<Vec<Arc<MemTable>>>>,

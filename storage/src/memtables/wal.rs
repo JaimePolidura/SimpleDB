@@ -1,11 +1,10 @@
-use crate::key;
-use crate::key::Key;
 use bytes::{Buf, BufMut, Bytes};
 use std::cmp::max;
 use std::fs;
 use std::fs::DirEntry;
 use std::path::PathBuf;
 use std::sync::Arc;
+use shared::key::Key;
 
 pub struct Wal {
     keyspace_id: shared::KeyspaceId,
@@ -76,7 +75,7 @@ impl Wal {
             let key_bytes = &current_ptr[..key_len];
             current_ptr.advance(key_len);
             entry_bytes_size = entry_bytes_size + key_len;
-            let key = key::create(Bytes::from(key_bytes.to_vec()), key_timestmap);
+            let key = Key::create(Bytes::from(key_bytes.to_vec()), key_timestmap);
 
             let value_len = current_ptr.get_u32_le() as usize;
             entry_bytes_size = entry_bytes_size + 4;

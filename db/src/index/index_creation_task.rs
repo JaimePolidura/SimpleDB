@@ -3,7 +3,7 @@ use crate::table::table::Table;
 use shared::{ColumnId, KeyspaceId};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use storage::utils::storage_iterator::StorageIterator;
+use shared::iterators::storage_iterator::StorageIterator;
 use storage::Storage;
 use crate::database::database::Database;
 

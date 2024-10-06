@@ -2,11 +2,11 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use bytes::Bytes;
 use shared::{Flag, StorageValueMergeResult};
-use shared::seek_iterator::SeekIterator;
-use crate::key::Key;
+use shared::iterators::seek_iterator::SeekIterator;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::TransactionManager;
-use crate::utils::storage_iterator::StorageIterator;
+use shared::iterators::storage_iterator::StorageIterator;
+use shared::key::Key;
 use crate::utils::tombstone::TOMBSTONE;
 
 //TODO Refactor this code
@@ -200,12 +200,12 @@ mod test {
     use std::sync::Arc;
     use bytes::Bytes;
     use shared::StorageValueMergeResult;
-    use crate::key;
     use crate::memtables::memtable::{MemTable};
     use crate::memtables::memtable_iterator::MemtableIterator;
     use crate::transactions::transaction::Transaction;
     use crate::utils::storage_engine_iterator::StorageEngineIterator;
-    use crate::utils::storage_iterator::StorageIterator;
+    use shared::iterators::storage_iterator::StorageIterator;
+    use shared::key::Key;
 
     #[test]
     fn iterator_no_merger_fn() {
@@ -227,25 +227,25 @@ mod test {
         );
 
         assert!(iterator.next());
-        assert!(iterator.key().eq(&key::create_from_str("aa", 10)));
+        assert!(iterator.key().eq(&Key::create_from_str("aa", 10)));
 
         assert!(iterator.next());
-        assert!(iterator.key().eq(&key::create_from_str("alberto", 1)));
+        assert!(iterator.key().eq(&Key::create_from_str("alberto", 1)));
 
         assert!(iterator.next());
-        assert!(iterator.key().eq(&key::create_from_str("alberto", 3)));
+        assert!(iterator.key().eq(&Key::create_from_str("alberto", 3)));
 
         assert!(iterator.next());
-        assert!(iterator.key().eq(&key::create_from_str("gonchi", 1)));
+        assert!(iterator.key().eq(&Key::create_from_str("gonchi", 1)));
 
         assert!(iterator.next());
-        assert!(iterator.key().eq(&key::create_from_str("jaime", 5)));
+        assert!(iterator.key().eq(&Key::create_from_str("jaime", 5)));
 
         assert!(iterator.next());
-        assert!(iterator.key().eq(&key::create_from_str("javier", 5)));
+        assert!(iterator.key().eq(&Key::create_from_str("javier", 5)));
 
         assert!(iterator.next());
-        assert!(iterator.key().eq(&key::create_from_str("wili", 1)));
+        assert!(iterator.key().eq(&Key::create_from_str("wili", 1)));
 
         assert!(!iterator.next());
     }
@@ -288,23 +288,23 @@ mod test {
         );
 
         assert!(iterator.next());
-        assert!(iterator.key().eq(&key::create_from_str("aa", 10)));
+        assert!(iterator.key().eq(&Key::create_from_str("aa", 10)));
 
         assert!(iterator.next());
-        assert!(iterator.key().eq(&key::create_from_str("alberto", 4)));
+        assert!(iterator.key().eq(&Key::create_from_str("alberto", 4)));
         assert!(iterator.value().eq(&vec![3]));
 
         assert!(iterator.next());
-        assert!(iterator.key().eq(&key::create_from_str("gonchi", 1)));
+        assert!(iterator.key().eq(&Key::create_from_str("gonchi", 1)));
 
         assert!(iterator.next());
-        assert!(iterator.key().eq(&key::create_from_str("jaime", 5)));
+        assert!(iterator.key().eq(&Key::create_from_str("jaime", 5)));
 
         assert!(iterator.next());
-        assert!(iterator.key().eq(&key::create_from_str("javier", 5)));
+        assert!(iterator.key().eq(&Key::create_from_str("javier", 5)));
 
         assert!(iterator.next());
-        assert!(iterator.key().eq(&key::create_from_str("wili", 1)));
+        assert!(iterator.key().eq(&Key::create_from_str("wili", 1)));
         assert!(iterator.value().eq(&vec![2]));
 
         assert!(!iterator.next());

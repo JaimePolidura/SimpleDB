@@ -24,7 +24,7 @@ impl KeyspaceDescriptor {
         keyspace_path: PathBuf,
     )  -> Result<KeyspaceDescriptor, SimpleDbError> {
         let path = Self::to_keyspace_path(keyspace_path);
-        let keyspace_file = SimpleDbFile::open(path.as_path(), SimpleDbFileMode::ReadOnly)
+        let keyspace_file = SimpleDbFile::open(path.as_path(), SimpleDbFileMode::RandomWrites)
             .map_err(|e| CannotReadKeyspaceDescriptorFile(keyspace_id, e))?;
         let keyspace_desc_bytes = keyspace_file.read_all()
             .map_err(|e| CannotOpenKeyspaceDescriptorFile(keyspace_id, e))?;
