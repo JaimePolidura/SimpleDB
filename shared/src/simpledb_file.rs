@@ -53,9 +53,12 @@ impl SimpleDbFile {
     }
 
     pub fn open(path: &Path, mode: SimpleDbFileMode) -> Result<SimpleDbFile, std::io::Error> {
+        if !Self::is_backup_path(path) {
+            Self::recover_from_backup(path)?;
+        }
+
         let is_append_only = matches!(mode, SimpleDbFileMode::AppendOnly);
         let is_read_only = matches!(mode, SimpleDbFileMode::ReadOnly);
-        let is_backup = Self::is_backup_path(path);
         let file: File = OpenOptions::new()
             .create(true)
             .append(is_append_only)
@@ -65,31 +68,36 @@ impl SimpleDbFile {
             .open(path)?;
         let metadata = file.metadata()?;
 
-        let mut file = SimpleDbFile {
+        Ok(SimpleDbFile {
             size_bytes: metadata.len() as usize,
             path: Some(path.to_path_buf()),
             file: Some(file),
             mode,
-        };
-
-        if !is_backup {
-            Self::recover_from_backup(&mut file)?;
-        }
-
-        Ok(file)
+        })
     }
 
-    fn recover_from_backup(orignal_file: &mut SimpleDbFile) -> Result<(), std::io::Error> {
-        let backup_path = Self::create_file_backup_path(orignal_file.path().as_path());
+    fn recover_from_backup(original_file_path: &Path) -> Result<(), std::io::Error> {
+        let mut original_file = SimpleDbFile {
+            path: Some(original_file_path.to_path_buf()),
+            mode: SimpleDbFileMode::RandomWrites,
+            size_bytes: 0,
+            file: Some(OpenOptions::new()
+                .create(true)
+                .write(true)
+                .create(true) //Create file if it doest exist
+                .read(true)
+                .open(original_file_path)?),
+        };
+
+        let backup_path = Self::create_file_backup_path(original_file_path);
         let backup_path = backup_path.as_path();
 
         if backup_path.exists() {
-            let backup_file = SimpleDbFile::open(backup_path, SimpleDbFileMode::ReadOnly)?;
+            let mut backup_file = SimpleDbFile::open(backup_path, SimpleDbFileMode::RandomWrites)?;
             let backup_contents = backup_file.read_all()?;
 
-            orignal_file.clear()?;
-            orignal_file.write(&backup_contents)?;
-
+            original_file.clear()?;
+            original_file.write(&backup_contents)?;
             backup_file.delete()?;
         }
 
@@ -122,9 +130,10 @@ impl SimpleDbFile {
     }
 
     pub fn delete(&self)  -> Result<(), std::io::Error> {
+        //TODO, Take owner ship of file, make it to go out of scope so the fd gets removed, and then remove the path
         match self.mode {
             SimpleDbFileMode::Mock => Ok(()),
-            _ => std::fs::remove_file(self.path.as_ref().unwrap().as_path()),
+            _ => fs::remove_file(self.path.as_ref().unwrap().as_path()),
         }
     }
 
@@ -159,19 +168,14 @@ impl SimpleDbFile {
             .write_all(bytes)
     }
 
-    pub fn save_write(&mut self, bytes: &[u8]) -> Result<(), std::io::Error> {
-        match self.mode {
-            SimpleDbFileMode::RandomWrites => {
-                let file_path = self.path.as_ref().unwrap();
-                let backup_file = self.copy(Self::create_file_backup_path(file_path).as_path(), self.mode.clone())?;
-                self.clear()?;
-                self.write(bytes)?;
-                self.fsync()?;
-                backup_file.delete()?;
-                Ok(())
-            },
-            _ => self.write(bytes),
-        }
+    pub fn safe_replace(&mut self, bytes: &[u8]) -> Result<(), std::io::Error> {
+        let file_path = self.path.as_ref().unwrap();
+        let mut backup_file = self.copy(Self::create_file_backup_path(file_path).as_path(), self.mode.clone())?;
+        self.clear()?;
+        self.write(bytes)?;
+        self.fsync()?;
+        backup_file.delete()?;
+        Ok(())
     }
 
     pub fn copy(&self, new_path: &Path, mode: SimpleDbFileMode) -> Result<SimpleDbFile, std::io::Error> {

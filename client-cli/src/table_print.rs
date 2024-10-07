@@ -1,4 +1,6 @@
 use std::cmp::max;
+use std::time::Duration;
+use crate::utils::duration_to_string;
 
 pub struct TablePrint {
     header: Vec<String>,
@@ -56,7 +58,7 @@ impl TablePrint {
         self.columns_width[n_column_index] = max(self.columns_width[n_column_index], value_width);
     }
 
-    pub fn print(&self) {
+    pub fn print(&self, duration: Duration) {
         self.print_horizontal_line();
 
         self.print_header_row();
@@ -64,11 +66,11 @@ impl TablePrint {
 
         self.print_horizontal_line();
 
-        self.print_resume();
+        self.print_resume(duration);
     }
 
-    fn print_resume(&self) {
-        println!("{} rows in set", self.rows.len());
+    fn print_resume(&self, duration: Duration) {
+        println!("{} rows in set ({})", self.rows.len(), duration_to_string(duration));
     }
 
     fn print_rows(&self) {

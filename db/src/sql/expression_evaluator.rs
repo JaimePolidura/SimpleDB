@@ -131,7 +131,7 @@ mod test {
     use shared::{SimpleDbFile, SimpleDbFileWrapper, SimpleDbOptions};
     use std::cell::UnsafeCell;
     use std::sync::atomic::AtomicUsize;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use storage::Storage;
 
     //Where id == 10 OR dinero > 100
@@ -229,7 +229,7 @@ mod test {
         }
 
         let mut table = Table {
-            table_descriptor_file: SimpleDbFileWrapper{ file: UnsafeCell::new(SimpleDbFile::mock()) },
+            table_descriptor_file: Mutex::new(SimpleDbFile::mock()),
             storage: Arc::new(Storage::create_mock(&Arc::new(SimpleDbOptions::default()))),
             primary_column_name: String::from("id"),
             table_name: String::from("personas"),

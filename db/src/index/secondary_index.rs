@@ -1,11 +1,10 @@
 use crate::index::posting_list::PostingList;
+use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 use bytes::Bytes;
 use shared::{KeyspaceId, SimpleDbError};
 use std::sync::Arc;
-use storage::SimpleDbStorageIterator;
 use storage::transactions::transaction::Transaction;
-use storage::utils::storage_engine_iterator::StorageEngineIterator;
-use crate::index::secondary_index_iterator::SecondaryIndexIterator;
+use storage::SimpleDbStorageIterator;
 
 pub enum SecondaryIndexState {
     Creating,

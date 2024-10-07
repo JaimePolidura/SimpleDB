@@ -3,6 +3,11 @@ use shared::connection::Connection;
 use shared::{utils, ColumnId, ErrorTypeId};
 use std::collections::HashMap;
 
+pub enum IndexType {
+    Primary,
+    Secondary,
+}
+
 pub enum Response {
     Statement(StatementResponse),
     Error(ErrorTypeId), //Error number
@@ -14,7 +19,8 @@ pub enum StatementResponse {
     Data(QueryDataResponse),
     Databases(Vec<String>),
     Tables(Vec<String>),
-    Describe(Vec<ColumnDescriptor>)
+    Describe(Vec<ColumnDescriptor>),
+    Indexes(Vec<(String, IndexType)>),
 }
 
 pub struct QueryDataResponse {
@@ -61,6 +67,7 @@ impl Response {
                     3 => StatementResponse::Databases(Self::deserialize_string_vec(connection)),
                     4 => StatementResponse::Tables(Self::deserialize_string_vec(connection)),
                     5 => StatementResponse::Describe(Self::deserialize_column_dec(connection)),
+                    6 => StatementResponse::Indexes(Self::deserialize_indexes(connection)),
                     _ => panic!("Invalid statement response type Id")
                 })
             },
@@ -68,6 +75,28 @@ impl Response {
             3 => Response::Ok,
             _ => panic!("Invalid server response type Id")
         }
+    }
+
+    fn deserialize_indexes(connection: &mut Connection) -> Vec<(String, IndexType)> {
+        let n_indexes = connection.read_u32().expect("Cannot read Nº Indexes");
+        let mut indexes = Vec::new();
+
+        for _ in 0..n_indexes {
+            let column_name_length = connection.read_u32().expect("Cannot read column name length");
+            let column_name_bytes = connection.read_n(column_name_length as usize)
+                .expect("Cannot read column name bytes");
+            let column_name = String::from_utf8(column_name_bytes)
+                .expect("Cannot read column name as UTF-8 String");
+            let index_type = match connection.read_u8().expect("Cannot read index type") {
+                1 => IndexType::Primary,
+                2 => IndexType::Secondary,
+                other => panic!(format!("Unknown index type id {}", other))
+            };
+
+            indexes.push((column_name, index_type));
+        }
+
+        indexes
     }
 
     fn deserialize_column_dec(connection: &mut Connection) -> Vec<ColumnDescriptor> {

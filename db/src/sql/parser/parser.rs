@@ -377,8 +377,15 @@ impl Parser {
         match self.advance()? {
             Token::Databases => Ok(Statement::ShowDatabases),
             Token::Tables => Ok(Statement::ShowTables),
+            Token::Index => self.show_indexes(),
             _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Expact Databases or tables after show")))
         }
+    }
+
+    fn show_indexes(&mut self) -> Result<Statement, SimpleDbError> {
+        self.expect_token(Token::From);
+        let table_name = self.identifier()?;
+        Ok(Statement::ShowIndexes(table_name))
     }
 
     fn describe(&mut self) -> Result<Statement, SimpleDbError> {
@@ -709,6 +716,19 @@ mod test {
                 assert_eq!(createStatement.columns[2], (String::from("dinero"), Type::F64, false));
             },
             _ => panic!()
+        }
+    }
+
+    #[test]
+    fn show_indexes() {
+        let mut parser = Parser::create(String::from(
+            "SHOW INDEX FROM personas;"
+        ));
+        let statement = parser.next_statement().unwrap().unwrap();
+
+        match statement {
+            Statement::ShowIndexes(table_name) => assert_eq!(table_name, String::from("personas")),
+            _ => panic!(""),
         }
     }
 

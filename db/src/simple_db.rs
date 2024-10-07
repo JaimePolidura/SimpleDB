@@ -7,6 +7,7 @@ use crate::table::table_descriptor::ColumnDescriptor;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::index::index_type::IndexType;
 
 pub struct SimpleDb {
     statement_executor: StatementExecutor,
@@ -22,7 +23,8 @@ pub enum StatementResult {
     Ok(usize), //usize number of rows affected
     Databases(Vec<String>),
     Tables(Vec<String>),
-    Describe(Vec<ColumnDescriptor>)
+    Describe(Vec<ColumnDescriptor>),
+    Indexes(Vec<(String, IndexType)>)
 }
 
 pub fn create(

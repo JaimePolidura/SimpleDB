@@ -1,5 +1,6 @@
+use std::ops::Index;
 use bytes::BufMut;
-use db::{ColumnDescriptor, Row};
+use db::{ColumnDescriptor, IndexType, Row};
 use shared::{ErrorTypeId, SimpleDbError};
 
 pub enum Response {
@@ -13,6 +14,7 @@ pub enum StatementResponse {
     Data(QueryDataResponse),
     Databases(Vec<String>),
     Tables(Vec<String>),
+    Indexes(Vec<(String, IndexType)>),
     Describe(Vec<ColumnDescriptor>)
 }
 
@@ -74,10 +76,26 @@ impl StatementResponse {
         match self {
             StatementResponse::Describe(columns_desc) => serialized.extend(Self::serialize_columns_desc(columns_desc)),
             StatementResponse::Databases(databases) => serialized.extend(Self::serialize_string_vec(databases)),
-            StatementResponse::Tables(tables) => serialized.extend(Self::serialize_string_vec(tables)),
+            StatementResponse::Indexes(indexes) => serialized.extend(Self::serialize_show_indexes(indexes)),
             StatementResponse::Data(data) => serialized.extend(Self::serialize_query_data(data)),
+            StatementResponse::Tables(tables) => serialized.extend(Self::serialize_string_vec(tables)),
             StatementResponse::Ok(n_affected_rows) => serialized.put_u64_le(*n_affected_rows as u64),
         };
+
+        serialized
+    }
+
+    fn serialize_show_indexes(
+        indexes: &Vec<(String, IndexType)>
+    ) -> Vec<u8> {
+        let mut serialized: Vec<u8> = Vec::new();
+
+        serialized.put_u32_le(indexes.len() as u32);
+        for (indexed_column_name, index_type) in indexes {
+            serialized.put_u32_le(indexed_column_name.len() as u32);
+            serialized.extend(indexed_column_name.as_bytes());
+            serialized.put_u8(index_type.serialize());
+        }
 
         serialized
     }
@@ -129,6 +147,7 @@ impl StatementResponse {
             StatementResponse::Databases(_) => 3,
             StatementResponse::Tables(_) => 4,
             StatementResponse::Describe(_) => 5,
+            StatementResponse::Indexes(_) => 6,
         }
     }
 }

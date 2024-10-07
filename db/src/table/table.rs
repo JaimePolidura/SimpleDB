@@ -1,5 +1,6 @@
 use crate::database::database::Database;
 use crate::index::index_creation_task::IndexCreationTask;
+use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 use crate::index::secondary_indexes::SecondaryIndexes;
 use crate::selection::Selection;
 use crate::table::record::Record;
@@ -10,23 +11,22 @@ use crate::table::table_iterator::TableIterator;
 use crate::value::{Type, Value};
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
-use shared::SimpleDbError::{ColumnNameAlreadyDefined, ColumnNotFound, IndexAlreadyExists, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
-use shared::{ColumnId, FlagMethods, KeyspaceId, SimpleDbError, SimpleDbFile, SimpleDbFileWrapper, SimpleDbOptions};
-use std::cell::UnsafeCell;
+use shared::SimpleDbError::{CannotWriteTableDescriptor, ColumnNameAlreadyDefined, ColumnNotFound, IndexAlreadyExists, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
+use shared::{ColumnId, FlagMethods, KeyspaceId, SimpleDbError, SimpleDbFile, SimpleDbOptions};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hasher;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{fence, AtomicUsize, Ordering};
-use std::sync::Arc;
-use storage::{SimpleDbStorageIterator, Storage};
+use std::sync::{Arc, Mutex};
 use storage::transactions::transaction::Transaction;
-use crate::index::secondary_index_iterator::SecondaryIndexIterator;
+use storage::{SimpleDbStorageIterator, Storage};
+use crate::index::index_type::IndexType;
 
 pub struct Table {
     pub(crate) storage_keyspace_id: KeyspaceId,
     pub(crate) table_name: String,
 
-    pub(crate) table_descriptor_file: SimpleDbFileWrapper,
+    pub(crate) table_descriptor_file: Mutex<SimpleDbFile>,
 
     pub(crate) columns_by_id: SkipMap<ColumnId, ColumnDescriptor>,
     pub(crate) columns_by_name: SkipMap<String, ColumnId>,
@@ -58,7 +58,7 @@ impl Table {
         let max_column_id = table_descriptor.get_max_column_id();
 
         Ok(Arc::new(Table {
-            table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(table_descriptor_file)},
+            table_descriptor_file: Mutex::new(table_descriptor_file),
             next_column_id: AtomicUsize::new(max_column_id as usize + 1),
             secondary_indexes: SecondaryIndexes::create_empty(storage.clone()),
             columns_by_id: table_descriptor.columns,
@@ -85,10 +85,10 @@ impl Table {
                 let (descriptor, descriptor_file) = TableDescriptor::load_from_disk(options, keyspace_id)?;
                 tables.push(Arc::new(Table {
                     secondary_indexes: SecondaryIndexes::load_secondary_indexes(&descriptor, storage.clone()),
-                    table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(descriptor_file)},
                     next_column_id: AtomicUsize::new(descriptor.get_max_column_id() as usize + 1),
                     columns_by_name: Self::index_column_id_by_name(&descriptor.columns),
                     primary_column_name: descriptor.get_primary_column_name(),
+                    table_descriptor_file: Mutex::new(descriptor_file),
                     table_name: descriptor.table_name,
                     storage_keyspace_id: keyspace_id,
                     columns_by_id: descriptor.columns,
@@ -114,9 +114,9 @@ impl Table {
         }
 
         Arc::new(Table {
-            table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(SimpleDbFile::mock())},
             secondary_indexes: SecondaryIndexes::create_mock(options.clone()),
             columns_by_name: Self::index_column_id_by_name(&columns_by_id),
+            table_descriptor_file: Mutex::new(SimpleDbFile::mock()),
             storage: Arc::new(Storage::create_mock(&options)),
             database: Database::create_mock(&options),
             next_column_id: AtomicUsize::new(1),
@@ -263,6 +263,8 @@ impl Table {
             n_affected_rows = join_handle.join().unwrap();
         }
 
+        self.save_column_descriptor_as_indexed(column.column_id, secondary_index_keyspace_id);
+
         Ok(n_affected_rows)
     }
 
@@ -382,6 +384,19 @@ impl Table {
         Ok(())
     }
 
+    pub fn get_indexed_columns(&self) -> Vec<(String, IndexType)> {
+        let mut indexed_columns = Vec::new();
+        indexed_columns.push((self.primary_column_name.clone(), IndexType::Primary));
+        for entry in self.columns_by_id.iter() {
+            let column_desc = entry.value();
+            if !column_desc.is_primary && column_desc.is_secondary_indexed() {
+                indexed_columns.push((column_desc.column_name.clone(), IndexType::Secondary));
+            }
+        }
+
+        indexed_columns
+    }
+
     pub fn validate_selection(
         &self,
         selection: &Selection
@@ -485,7 +500,7 @@ impl Table {
             is_primary,
         };
 
-        let file = unsafe { &mut *self.table_descriptor_file.file.get() };
+        let mut file = self.table_descriptor_file.lock().unwrap();
         file.write(&column_descriptor.serialize())
             .map_err(|e| SimpleDbError::CannotWriteTableDescriptor(self.storage_keyspace_id, e))?;
 
@@ -588,5 +603,33 @@ impl Table {
         }
 
         Ok(old_data)
+    }
+
+    fn save_column_descriptor_as_indexed(
+        &self,
+        column_id_indexed: ColumnId,
+        keyspace_id: KeyspaceId
+    ) -> Result<(), SimpleDbError> {
+        let mut file_lock = self.table_descriptor_file.lock().unwrap();
+
+        let mut new_columns = Vec::new();
+        for current_entry in self.columns_by_id.iter() {
+            let current_column_id = *current_entry.key();
+            let current_column = current_entry.value().clone();
+            if current_column_id == column_id_indexed {
+                let mut current_column_to_update = current_column;
+                current_column_to_update.secondary_index_keyspace_id = Some(keyspace_id);
+                new_columns.push(current_column_to_update);
+            } else {
+                new_columns.push(current_column);
+            }
+        }
+
+        let serialized = TableDescriptor::serialize(new_columns, &self.primary_column_name);
+
+        file_lock.safe_replace(&serialized)
+            .map_err(|io_error| CannotWriteTableDescriptor(self.storage_keyspace_id, io_error))?;
+        Ok(())
+
     }
 }

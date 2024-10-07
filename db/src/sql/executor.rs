@@ -54,6 +54,7 @@ impl StatementExecutor {
             Statement::CreateDatabase(database_name) => self.create_database(database_name),
             Statement::Describe(table_name) => self.describe_table(&table_name, context),
             Statement::StartTransaction => self.start_transaction(context.database()),
+            Statement::ShowIndexes(table_name) => self.show_indexes(table_name, context),
             Statement::ShowTables => self.show_tables(&context),
             Statement::ShowDatabases => self.show_databases(),
         }
@@ -215,11 +216,17 @@ impl StatementExecutor {
     }
 
     fn show_tables(&self, context: &Context) -> Result<StatementResult, SimpleDbError> {
-        let databsae = self.databases.get_database_or_err(context.database())?;
-        let table_names = databsae.get_tables().iter()
+        let database = self.databases.get_database_or_err(context.database())?;
+        let table_names = database.get_tables().iter()
             .map(|table| table.name().clone())
             .collect();
         Ok(StatementResult::Tables(table_names))
+    }
+
+    fn show_indexes(&self, table_name: String, context: &Context) -> Result<StatementResult, SimpleDbError> {
+        let databases = self.databases.get_database_or_err(context.database())?;
+        let table = databases.get_table_or_err(&table_name)?;
+        Ok(StatementResult::Indexes(table.get_indexed_columns()))
     }
 
     fn describe_table(&self, table_name: &str, context: &Context) -> Result<StatementResult, SimpleDbError> {

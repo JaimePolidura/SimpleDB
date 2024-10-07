@@ -3,6 +3,7 @@ mod request;
 mod response;
 mod simple_db_cli;
 mod table_print;
+mod utils;
 
 use crate::simple_db_cli::SimpleDbCli;
 use std::env;

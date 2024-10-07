@@ -41,6 +41,7 @@ impl StatementValidator {
             Statement::Delete(statement) => self.validate_delete(context.database(), statement),
             Statement::Insert(statement) => self.validate_insert(context.database(), statement),
             Statement::CreateDatabase(database_name) => self.validate_create_database(database_name),
+            Statement::ShowIndexes(table_name) => self.validate_show_indexes(context.database(), table_name),
             Statement::Describe(table) => self.validate_describe(context, table),
             Statement::StartTransaction |
             Statement::ShowDatabases |
@@ -104,12 +105,22 @@ impl StatementValidator {
         Ok(())
     }
 
+    fn validate_show_indexes(
+        &self,
+        database_name: &str,
+        table_name: &str,
+    ) -> Result<(), SimpleDbError> {
+        let database = self.databases.get_database_or_err(database_name)?;
+        let table = database.get_table_or_err(table_name)?;
+        Ok(())
+    }
+
     fn validate_insert(
         &self,
-        database_namae: &String,
+        database_name: &String,
         statement: &InsertStatement
     ) -> Result<(), SimpleDbError> {
-        let database = self.databases.get_database_or_err(database_namae)?;
+        let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table_or_err(statement.table_name.as_str())?;
         table.validate_column_values(&statement.values)
     }

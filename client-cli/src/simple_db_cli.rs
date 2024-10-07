@@ -1,12 +1,14 @@
 use crate::request::Request;
-use crate::response::{ColumnDescriptor, QueryDataResponse, Response, StatementResponse};
+use crate::response::{ColumnDescriptor, IndexType, QueryDataResponse, Response, StatementResponse};
 use crate::simpledb_server::SimpleDbServer;
 use crate::table_print::TablePrint;
 use std::cmp::Ordering;
 use std::io;
 use std::io::{stdout, Write};
 use std::process::exit;
+use std::time::Duration;
 use shared::ErrorTypeId;
+use crate::utils::duration_to_string;
 
 pub struct SimpleDbCli {
     server: SimpleDbServer,
@@ -48,38 +50,54 @@ impl SimpleDbCli {
             self.is_standalone = false;
         }
 
-        let response = self.server.send_request(Request::Statement(
+        let (response, duration) = self.server.send_request(Request::Statement(
             self.password.clone(), self.is_standalone, statement.to_string()
         ));
-        self.print_response(response);
+        self.print_response(response, duration);
 
         if statement.starts_with("rollback") || statement.starts_with("commit") {
             self.is_standalone = true;
         }
     }
 
-    fn print_response(&mut self, response: Response) {
+    fn print_response(&mut self, response: Response, duration: Duration) {
         match response {
             Response::Statement(statement_result) => {
                 match statement_result {
-                    StatementResponse::Ok(n_rows_affected) => println!("{} rows affected!", n_rows_affected),
-                    StatementResponse::Data(data) => self.print_query_data(data),
-                    StatementResponse::Databases(databases) => self.print_vec_string_as_table("Databases", databases),
-                    StatementResponse::Tables(tables) => self.print_vec_string_as_table("Tables", tables),
-                    StatementResponse::Describe(desc) => self.print_table_describe(&desc)
+                    StatementResponse::Ok(n_rows_affected) => println!("{} rows affected! ({})", n_rows_affected, duration_to_string(duration)),
+                    StatementResponse::Data(data) => self.print_query_data(data, duration),
+                    StatementResponse::Databases(databases) => self.print_vec_string_as_table("Databases", databases, duration),
+                    StatementResponse::Tables(tables) => self.print_vec_string_as_table("Tables", tables, duration),
+                    StatementResponse::Describe(desc) => self.print_table_describe(&desc, duration),
+                    StatementResponse::Indexes(indexes) => self.print_show_indexes(indexes),
                 };
             }
             Response::Error(error_type_id) => {
                 Self::print_error(error_type_id);
             }
             Response::Ok => {
-                println!("Ok");
+                println!("Ok ({})", duration_to_string(duration));
             }
         };
+
         print!("\n");
     }
 
-    fn print_query_data(&self, query_data: QueryDataResponse) {
+    fn print_show_indexes(&self, mut indexes: Vec<(String, IndexType)>) {
+        let mut table = TablePrint::create(2);
+        table.add_header("Field");
+        table.add_header("Type");
+
+        for (index_column_name, index_type) in indexes {
+            table.add_column_value(index_column_name);
+            match index_type {
+                IndexType::Secondary => table.add_column_value("Secondary".to_string()),
+                IndexType::Primary => table.add_column_value("Primary".to_string())
+            };
+        }
+    }
+
+    fn print_query_data(&self, query_data: QueryDataResponse, duration: Duration) {
         let mut columns_desc = query_data.columns_desc;
         columns_desc.sort_by(|a, b| {
             if a.is_primary {
@@ -106,10 +124,14 @@ impl SimpleDbCli {
             }
         }
 
-        query_data_table.print();
+        query_data_table.print(duration);
     }
 
-    fn print_table_describe(&self, columns_desc: &Vec<ColumnDescriptor>) {
+    fn print_table_describe(
+        &self,
+        columns_desc: &Vec<ColumnDescriptor>,
+        duration: Duration
+    ) {
         let mut table = TablePrint::create(4);
         table.add_header("Field");
         table.add_header("Type");
@@ -135,16 +157,21 @@ impl SimpleDbCli {
             }
         }
 
-        table.print();
+        table.print(duration);
     }
 
-    fn print_vec_string_as_table(&self, table_header_name: &str, vec: Vec<String>) {
+    fn print_vec_string_as_table(
+        &self,
+        table_header_name: &str,
+        vec: Vec<String>,
+        duration: Duration
+    ) {
         let mut table = TablePrint::create(1);
         table.add_header(table_header_name);
         for item in vec {
             table.add_column_value(item);
         }
-        table.print();
+        table.print(duration);
     }
 
     fn exit_command(&mut self) {
@@ -166,10 +193,10 @@ impl SimpleDbCli {
     }
 
     fn connect_to_database(&mut self, database_name: String) {
-        let response = self.server.send_request(Request::UseDatabase(
+        let (response, duration) = self.server.send_request(Request::UseDatabase(
             self.password.clone(), database_name.clone()
         ));
-        self.print_response(response);
+        self.print_response(response, duration);
     }
 
     fn read_input_from_user(&self) -> String {
@@ -203,5 +230,4 @@ impl SimpleDbCli {
             _ => println!("Received error {} code from server", error_type_id)
         }
     }
-
 }

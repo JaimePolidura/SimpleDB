@@ -159,60 +159,6 @@ impl Server {
         }
     }
 
-    fn create_response(
-        statement_result: StatementResult,
-        connection_id: ConnectionId,
-        statement: String,
-    ) -> Result<StatementResponse, SimpleDbError> {
-        match statement_result {
-            StatementResult::Describe(describe) => {
-                logger().debug(&format!(
-                    "Executed describe request with connection ID: {} Entries to return {}",
-                    connection_id, describe.len())
-                );
-                Ok(StatementResponse::Describe(describe))
-            },
-            StatementResult::Databases(databases) => {
-                logger().debug(&format!(
-                    "Executed show databases request with connection ID: {} Entries to return {}",
-                    connection_id, databases.len())
-                );
-                Ok(StatementResponse::Databases(databases))
-            },
-            StatementResult::Tables(tables) => {
-                logger().debug(&format!(
-                    "Executed show tables request with connection ID: {} Entries to return {}",
-                    connection_id, tables.len())
-                );
-                Ok(StatementResponse::Tables(tables))
-            },
-            StatementResult::Ok(n) => {
-                logger().debug(&format!(
-                    "Executed statement request with connection ID: {} Rows affected {}. Statement: {}",
-                    connection_id, n, statement
-                ));
-                Ok(StatementResponse::Ok(n))
-            },
-            StatementResult::TransactionStarted(transaction) => {
-                logger().debug(&format!(
-                    "Executed start transaction request with connection ID: {} Transaction ID: {}",
-                    connection_id, transaction.id()
-                ));
-                Ok(StatementResponse::Ok(0))
-            },
-            StatementResult::Data(mut query_iterator) => {
-                let rows = query_iterator.all()?;
-                logger().debug(&format!(
-                    "Executed query request request with connection ID: {} Rows returned: {} Statement: {}",
-                    connection_id, rows.len(), statement
-                ));
-                Ok(StatementResponse::Data(QueryDataResponse::create(
-                    query_iterator.columns_descriptor_selection().clone(), rows
-                )))
-            }
-        }
-    }
-
     fn handle_use_database_connection_request(
         server: Arc<Server>,
         database_name: &String,
@@ -232,6 +178,67 @@ impl Server {
         };
 
         Ok(())
+    }
+
+    fn create_response(
+        statement_result: StatementResult,
+        connection_id: ConnectionId,
+        statement: String,
+    ) -> Result<StatementResponse, SimpleDbError> {
+        match statement_result {
+            StatementResult::Describe(describe) => {
+                logger().debug(&format!(
+                    "Executed describe request Connection ID: {} Entries to return {}",
+                    connection_id, describe.len())
+                );
+                Ok(StatementResponse::Describe(describe))
+            },
+            StatementResult::Databases(databases) => {
+                logger().debug(&format!(
+                    "Executed show databases request Connection ID: {} Entries to return {}",
+                    connection_id, databases.len())
+                );
+                Ok(StatementResponse::Databases(databases))
+            },
+            StatementResult::Indexes(indexes) => {
+                logger().debug(&format!(
+                    "Executed show indexes request Connection ID: {} Entries to return {}",
+                    connection_id, indexes.len())
+                );
+                Ok(StatementResponse::Indexes(indexes))
+            }
+            StatementResult::Tables(tables) => {
+                logger().debug(&format!(
+                    "Executed show tables request Connection ID: {} Entries to return {}",
+                    connection_id, tables.len())
+                );
+                Ok(StatementResponse::Tables(tables))
+            },
+            StatementResult::Ok(n) => {
+                logger().debug(&format!(
+                    "Executed statement request Connection ID: {} Rows affected {}. Statement: {}",
+                    connection_id, n, statement
+                ));
+                Ok(StatementResponse::Ok(n))
+            },
+            StatementResult::TransactionStarted(transaction) => {
+                logger().debug(&format!(
+                    "Executed start transaction request Connection ID: {} Transaction ID: {}",
+                    connection_id, transaction.id()
+                ));
+                Ok(StatementResponse::Ok(0))
+            },
+            StatementResult::Data(mut query_iterator) => {
+                let rows = query_iterator.all()?;
+                logger().debug(&format!(
+                    "Executed query request request Connection ID: {} Rows returned: {} Statement: {}",
+                    connection_id, rows.len(), statement
+                ));
+                Ok(StatementResponse::Data(QueryDataResponse::create(
+                    query_iterator.columns_descriptor_selection().clone(), rows
+                )))
+            }
+        }
     }
 
     fn handle_close_request(server: Arc<Server>, connection_id: ConnectionId) {

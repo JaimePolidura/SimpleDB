@@ -29,7 +29,7 @@ impl IndexCreationTask {
 
     pub fn start(&self) -> usize {
         let mut n_affected_rows = 0;
-        let iterator = self.storage.scan_all_with_transaction(
+        let mut iterator = self.storage.scan_all_with_transaction(
             &Transaction::none(),
             self.index_keyspace_id,
         ).unwrap();
@@ -37,7 +37,7 @@ impl IndexCreationTask {
         //This will get unlocked when it goes out of scope
         let guard = self.database.lock_rollbacks();
 
-        while iterator.has_next() {
+        while iterator.next() {
             let key = iterator.key();
             let value = iterator.value();
             let mut record = Record::deserialize(value.to_vec());

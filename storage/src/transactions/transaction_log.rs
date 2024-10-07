@@ -1,5 +1,5 @@
 use bytes::{Buf, BufMut};
-use shared::{SimpleDbError, TxnId};
+use shared::{SimpleDbError, SimpleDbFile, TxnId};
 use std::cell::UnsafeCell;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -28,11 +28,13 @@ pub struct TransactionLog {
 }
 
 impl TransactionLog {
-    pub fn create(options: Arc<shared::SimpleDbOptions>) -> Result<TransactionLog, shared::SimpleDbError> {
+    pub fn create(options: Arc<shared::SimpleDbOptions>) -> Result<TransactionLog, SimpleDbError> {
+        println!("HERE");
+
         Ok(TransactionLog {
             log_file: shared::SimpleDbFileWrapper {file: UnsafeCell::new(
-                shared::SimpleDbFile::open(to_transaction_log_file_path(&options).as_path(),
-                                           shared::SimpleDbFileMode::AppendOnly).map_err(|e| shared::SimpleDbError::CannotCreateTransactionLog(e))?) },
+                SimpleDbFile::open(to_transaction_log_file_path(&options).as_path(), shared::SimpleDbFileMode::AppendOnly)
+                    .map_err(|e| SimpleDbError::CannotCreateTransactionLog(e))?) },
             options
         })
     }
@@ -67,8 +69,8 @@ impl TransactionLog {
             .flatten()
             .collect();
 
-        log_file.save_write(&new_entries_encoded)
-            .map_err(|e| shared::SimpleDbError::CannotResetTransactionLog(e));
+        log_file.safe_replace(&new_entries_encoded)
+            .map_err(|e| SimpleDbError::CannotResetTransactionLog(e));
 
         Ok(())
     }

@@ -35,10 +35,7 @@ impl TableDescriptor {
         options: &Arc<shared::SimpleDbOptions>,
         table_name: &str,
     ) -> Result<(TableDescriptor, SimpleDbFile), SimpleDbError> {
-        let mut table_descriptor_file_bytes: Vec<u8> = Vec::new();
-        let table_name_bytes = table_name.bytes();
-        table_descriptor_file_bytes.put_u32_le(table_name_bytes.len() as u32);
-        table_descriptor_file_bytes.extend(table_name_bytes);
+        let table_descriptor_file_bytes: Vec<u8> = Self::serialize(Vec::new(), table_name);
 
         let table_descriptor_file = SimpleDbFile::create(
             Self::table_descriptor_file_path(options, keyspace_id).as_path(),
@@ -75,6 +72,21 @@ impl TableDescriptor {
             primary_column_id,
             table_name,
         }, table_descriptor_file))
+    }
+
+    pub fn serialize(
+        columns: Vec<ColumnDescriptor>,
+        table_name: &str
+    ) -> Vec<u8> {
+        let mut serialized: Vec<u8> = Vec::new();
+        let table_name_bytes = table_name.bytes();
+        serialized.put_u32_le(table_name_bytes.len() as u32);
+        serialized.extend(table_name_bytes);
+        for column in columns {
+            serialized.extend(column.serialize());
+        }
+
+        serialized
     }
 
     pub fn get_max_column_id(&self) -> ColumnId {

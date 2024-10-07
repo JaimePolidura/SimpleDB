@@ -14,6 +14,7 @@ pub enum Statement {
     StartTransaction,
     Rollback,
     Commit,
+    ShowIndexes(String), //Table name
     ShowDatabases,
     ShowTables,
 }
@@ -201,6 +202,12 @@ impl Statement {
                 database_req: Requirement::ObligatoryToHave
             },
             Statement::CreateIndex(_) => StatementDescriptor {
+                creates_transaction: false,
+                terminates_transaction: false,
+                transaction_req: Requirement::Optional,
+                database_req: Requirement::ObligatoryToHave
+            },
+            Statement::ShowIndexes(_) => StatementDescriptor {
                 creates_transaction: false,
                 terminates_transaction: false,
                 transaction_req: Requirement::Optional,
