@@ -6,6 +6,7 @@ use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::{CannotCreateDatabaseFolder, PrimaryColumnNotIncluded, TableAlreadyExists};
 use shared::{utils, SimpleDbError, SimpleDbOptions};
 use std::sync::{Arc, LockResult, Mutex, RwLock, RwLockWriteGuard};
+use storage::Storage;
 use storage::transactions::transaction::Transaction;
 
 pub struct Database {
@@ -31,7 +32,7 @@ impl Database {
 
         Ok(Arc::new(Database {
             database_descriptor: Mutex::new(DatabaseDescriptor::create(options, &database_name.to_string())?),
-            storage: Arc::new(storage::create(options.clone())?),
+            storage: Arc::new(Storage::create(options.clone())?),
             rollback_lock: RwLock::new(()),
             name: database_name.to_string(),
             options: options.clone(),
@@ -43,7 +44,7 @@ impl Database {
         database_options: &Arc<SimpleDbOptions>,
         database_name: &str
     ) -> Result<Arc<Database>, SimpleDbError> {
-        let storage = Arc::new(storage::create(database_options.clone())?);
+        let storage = Arc::new(Storage::create(database_options.clone())?);
         let database_descriptor = DatabaseDescriptor::load_database_descriptor(
             database_options,
             &String::from(database_name),
@@ -66,7 +67,7 @@ impl Database {
     pub(crate) fn create_mock(options: &Arc<SimpleDbOptions>) -> Arc<Database> {
         Arc::new(Database {
             database_descriptor: Mutex::new(DatabaseDescriptor::mock()),
-            storage: Arc::new(storage::mock(&options.clone())),
+            storage: Arc::new(Storage::create_mock(&options.clone())),
             rollback_lock: RwLock::new(()),
             name: String::from("mock"),
             tables: SkipMap::new(),

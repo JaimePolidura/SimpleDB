@@ -1,11 +1,10 @@
 use crate::table::record::{Record, RecordBuilder};
 use crate::table::row::Row;
+use crate::table::table::Table;
 use bytes::Bytes;
+use shared::iterators::storage_iterator::StorageIterator;
 use shared::ColumnId;
 use std::sync::Arc;
-use shared::iterators::storage_iterator::StorageIterator;
-use storage::SimpleDbStorageIterator;
-use crate::table::table::Table;
 
 //This is the iterator that will be exposed to users of the SimpleDB
 //As data is stored in LSM engine, which is "only" append only, update records of rows are stored as ID -> [updated column id, new column value]
@@ -19,8 +18,8 @@ struct RowReassemble {
     selection: Arc<Vec<ColumnId>>
 }
 
-pub struct TableIterator {
-    simple_db_storage_iterator: SimpleDbStorageIterator,
+pub struct TableIterator<I: StorageIterator> {
+    simple_db_storage_iterator: I,
     selection: Arc<Vec<ColumnId>>, //Columns ID to retrieve from storage engine
     rows_reassembling: Vec<RowReassemble>,
     current_row: Option<Row>,
@@ -28,12 +27,12 @@ pub struct TableIterator {
     table: Arc<Table>
 }
 
-impl TableIterator {
+impl<I: StorageIterator> TableIterator<I> {
     pub(crate) fn create(
-        simple_db_storage_iterator: SimpleDbStorageIterator,
+        simple_db_storage_iterator: I,
         selection: Vec<ColumnId>, //Columns ID to select
         table: Arc<Table>
-    ) -> TableIterator {
+    ) -> TableIterator<I> {
         TableIterator {
             selection: Arc::new(selection),
             rows_reassembling: Vec::new(),
@@ -125,5 +124,111 @@ impl RowReassemble {
 
     pub fn build(self) -> Record {
         self.record_builder.build()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::table::record::Record;
+    use crate::table::table::Table;
+    use crate::table::table_iterator::TableIterator;
+    use bytes::Bytes;
+    use shared::iterators::mock_iterator::MockIterator;
+    use shared::ColumnId;
+    use crate::ColumnDescriptor;
+    use crate::value::{Type, Value};
+    //Given records:
+    //1 -> (1, 100)
+    //1 -> (1, 90), (2, Pago)
+    //2 -> (1, 200), (3, 30/30/3000)
+    //2 -> (2, Cena)
+    //3 -> (1, 350)
+    //4 -> (2, Pepita), (3, 1999)
+    //Columns ID to get: [1, 2]
+
+    //The iterator should return:
+    // 1 -> (1, 100),  (2, Pago)
+    // 2 -> (1, 200),  (2, Cena)
+    // 3 -> (1, 350),  (2, NULL)
+    // 4 -> (1, NULL), (2, Pepita)
+    #[test]
+    fn iterator() {
+        let mut iterator = TableIterator::create(
+            MockIterator::create_from_byte_entries(vec![
+                (1, record(vec![(2, "100")])),
+                (1, record(vec![(2, "90"), (3, "Pago")])),
+                (2, record(vec![(2, "200"), (4, "30/30/3000")])),
+                (2, record(vec![(3, "Cena")])),
+                (3, record(vec![(2, "350")])),
+                (4, record(vec![(3, "Pepita"), (4, "1999")])),
+            ]),
+            vec![2, 3],
+            Table::create_mock(vec![
+                ColumnDescriptor{column_id: 1, column_type: Type::I64, column_name: String::from("ID"), is_primary: true, secondary_index_keyspace_id: None },
+                ColumnDescriptor{column_id: 2, column_type: Type::String, column_name: String::from("Money"), is_primary: false, secondary_index_keyspace_id: None },
+                ColumnDescriptor{column_id: 3, column_type: Type::String, column_name: String::from("Desc"), is_primary: false, secondary_index_keyspace_id: None },
+                ColumnDescriptor{column_id: 4, column_type: Type::String, column_name: String::from("Fecha"), is_primary: false, secondary_index_keyspace_id: None },
+            ])
+        );
+
+        assert!(iterator.next());
+
+        //Row 1º
+        let row1 = iterator.row();
+        let id = row1.get_column_value("ID").unwrap().get_i64().unwrap();
+        assert_eq!(id, 1);
+        let money = row1.get_column_value("Money").unwrap();
+        let money = money.get_string().unwrap();
+        assert_eq!(money, "100");
+        let desc = row1.get_column_value("Desc").unwrap();
+        let desc = desc.get_string().unwrap();
+        assert_eq!(desc, "Pago");
+
+        //Row 2º
+        assert!(iterator.next());
+        let row2 = iterator.row();
+        let id = row2.get_column_value("ID").unwrap().get_i64().unwrap();
+        assert_eq!(id, 2);
+        let money = row2.get_column_value("Money").unwrap();
+        let money = money.get_string().unwrap();
+        assert_eq!(money, "200");
+        let desc = row2.get_column_value("Desc").unwrap();
+        let desc = desc.get_string().unwrap();
+        assert_eq!(desc, "Cena");
+
+        //Row 3º
+        assert!(iterator.next());
+        let row3 = iterator.row();
+        let id = row3.get_column_value("ID").unwrap().get_i64().unwrap();
+        assert_eq!(id, 3);
+        let money = row3.get_column_value("Money").unwrap();
+        let money = money.get_string().unwrap();
+        assert_eq!(money, "350");
+        let desc = row3.get_column_value("Desc").unwrap();
+        assert_eq!(desc, Value::Null);
+
+        //Row 4º
+        assert!(iterator.next());
+        let row4 = iterator.row();
+        let id = row4.get_column_value("ID").unwrap().get_i64().unwrap();
+        assert_eq!(id, 4);
+        let money = row4.get_column_value("Money").unwrap();
+        assert_eq!(money, Value::Null);
+        let desc = row4.get_column_value("Desc").unwrap();
+        let desc = desc.get_string().unwrap();
+        assert_eq!(desc, "Pepita");
+
+        assert!(!iterator.next());
+    }
+
+    fn record(rows: Vec<(i32, &str)>) -> Bytes {
+        let mut record_builder = Record::builder();
+        for (column_id, column_value) in rows {
+            record_builder.add_column(column_id as ColumnId, Bytes::from(column_value.to_string()));
+        }
+
+        let record = record_builder.build();
+        let serialized = record.serialize();
+        Bytes::from(serialized)
     }
 }

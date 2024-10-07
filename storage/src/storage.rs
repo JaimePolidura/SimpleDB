@@ -27,38 +27,38 @@ pub type SimpleDbStorageIterator = StorageEngineIterator<
     TwoMergeIterator<MergeIterator<MemtableIterator>, MergeIterator<SSTableIterator>>
 >;
 
-pub fn create(options: Arc<SimpleDbOptions>) -> Result<Storage, SimpleDbError> {
-    println!("Starting storage engine!");
-    let transaction_manager = Arc::new(
-        TransactionManager::create_recover_from_log(options.clone())?
-    );
-    let keyspaces = Keyspaces::load_keyspaces(
-        transaction_manager.clone(), options.clone()
-    )?;
-
-    let mut storage = Storage {
-        transaction_manager,
-        keyspaces,
-        options
-    };
-
-    storage.keyspaces.recover_from_manifest();
-    storage.keyspaces.start_keyspaces_compaction_threads();
-
-    println!("Storage engine started!");
-
-    Ok(storage)
-}
-
-pub fn mock(simple_db_options: &Arc<SimpleDbOptions>) -> Storage {
-    Storage {
-        transaction_manager: Arc::new(TransactionManager::create_mock(simple_db_options.clone())),
-        keyspaces: Keyspaces::mock(simple_db_options.clone()),
-        options: simple_db_options.clone(),
-    }
-}
-
 impl Storage {
+    pub fn create(options: Arc<SimpleDbOptions>) -> Result<Storage, SimpleDbError> {
+        println!("Starting storage engine!");
+        let transaction_manager = Arc::new(
+            TransactionManager::create_recover_from_log(options.clone())?
+        );
+        let keyspaces = Keyspaces::load_keyspaces(
+            transaction_manager.clone(), options.clone()
+        )?;
+
+        let mut storage = Storage {
+            transaction_manager,
+            keyspaces,
+            options
+        };
+
+        storage.keyspaces.recover_from_manifest();
+        storage.keyspaces.start_keyspaces_compaction_threads();
+
+        println!("Storage engine started!");
+
+        Ok(storage)
+    }
+
+    pub fn create_mock(simple_db_options: &Arc<SimpleDbOptions>) -> Storage {
+        Storage {
+            transaction_manager: Arc::new(TransactionManager::create_mock(simple_db_options.clone())),
+            keyspaces: Keyspaces::mock(simple_db_options.clone()),
+            options: simple_db_options.clone(),
+        }
+    }
+
     pub fn scan_all(&self, keyspace_id: KeyspaceId) -> Result<SimpleDbStorageIterator, SimpleDbError> {
         let transaction = self.transaction_manager.start_transaction(IsolationLevel::SnapshotIsolation);
         let mut iterator = self.scan_all_with_transaction(&transaction, keyspace_id)?;

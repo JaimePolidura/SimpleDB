@@ -11,14 +11,14 @@ use crate::value::{Type, Value};
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::{ColumnNameAlreadyDefined, ColumnNotFound, IndexAlreadyExists, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
-use shared::{ColumnId, FlagMethods, KeyspaceId, SimpleDbError, SimpleDbFileWrapper};
+use shared::{ColumnId, FlagMethods, KeyspaceId, SimpleDbError, SimpleDbFile, SimpleDbFileWrapper, SimpleDbOptions};
 use std::cell::UnsafeCell;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hasher;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{fence, AtomicUsize, Ordering};
 use std::sync::Arc;
-use storage::SimpleDbStorageIterator;
+use storage::{SimpleDbStorageIterator, Storage};
 use storage::transactions::transaction::Transaction;
 use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 
@@ -101,6 +101,32 @@ impl Table {
         Ok(tables)
     }
 
+    pub(crate) fn create_mock(columns: Vec<ColumnDescriptor>) -> Arc<Table> {
+        let options = Arc::new(SimpleDbOptions::default());
+        let mut columns_by_id = SkipMap::new();
+        let mut primary_column_name = String::from("");
+        for column in columns {
+            if column.is_primary {
+                primary_column_name = column.column_name.clone();
+            }
+
+            columns_by_id.insert(column.column_id, column);
+        }
+
+        Arc::new(Table {
+            table_descriptor_file: SimpleDbFileWrapper {file: UnsafeCell::new(SimpleDbFile::mock())},
+            secondary_indexes: SecondaryIndexes::create_mock(options.clone()),
+            columns_by_name: Self::index_column_id_by_name(&columns_by_id),
+            storage: Arc::new(Storage::create_mock(&options)),
+            database: Database::create_mock(&options),
+            next_column_id: AtomicUsize::new(1),
+            table_name: String::from("Mock"),
+            storage_keyspace_id: 1,
+            primary_column_name,
+            columns_by_id,
+        })
+    }
+
     pub fn add_columns(
         &self,
         columns_to_add: Vec<(String, Type, bool)>,
@@ -149,7 +175,7 @@ impl Table {
         inclusive: bool,
         transaction: &Transaction,
         selection: Selection,
-    ) -> Result<TableIterator, SimpleDbError> {
+    ) -> Result<TableIterator<SimpleDbStorageIterator>, SimpleDbError> {
         let selection = self.selection_to_columns_id(&selection)?;
         let storage_iterator = self.storage.scan_from_key_with_transaction(
             transaction,
@@ -169,7 +195,7 @@ impl Table {
         self: Arc<Self>,
         transaction: &Transaction,
         selection: Selection
-    ) -> Result<TableIterator, SimpleDbError> {
+    ) -> Result<TableIterator<SimpleDbStorageIterator>, SimpleDbError> {
         let selection = self.selection_to_columns_id(&selection)?;
         let storage_iterator = self.storage.scan_all_with_transaction(transaction, self.storage_keyspace_id)?;
 

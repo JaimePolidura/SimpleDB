@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use shared::SimpleDbError;
+use storage::SimpleDbStorageIterator;
 use storage::transactions::transaction::Transaction;
 use crate::{Row};
 use crate::selection::Selection;
@@ -10,7 +11,7 @@ use crate::table::table_iterator::TableIterator;
 
 pub struct RangeScanStep {
     range: RangeScan,
-    iterator: TableIterator
+    iterator: TableIterator<SimpleDbStorageIterator>
 }
 
 impl RangeScanStep {

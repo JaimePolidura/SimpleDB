@@ -10,7 +10,20 @@ pub struct MockIterator {
 }
 
 impl MockIterator {
-    pub fn create_from(
+    pub fn create_from_byte_entries(
+        entries: Vec<(usize, Bytes)>
+    ) -> MockIterator {
+        let mut iterator = Self::create();
+        for entry in entries {
+            iterator.entries.push((
+                Key::create(Bytes::from(entry.0.to_le_bytes().to_vec()), 1),
+                entry.1)
+            );
+        }
+        iterator
+    }
+
+    pub fn create_from_strs_values(
         entries: Vec<&str>
     ) -> MockIterator {
         let mut iterator = Self::create();
@@ -111,7 +124,7 @@ mod test {
 
     #[test]
     fn seek_not_contained() {
-        let mut mock_iterator = MockIterator::create_from(vec!["a", "c", "d", "f"]);
+        let mut mock_iterator = MockIterator::create_from_strs_values(vec!["a", "c", "d", "f"]);
         mock_iterator.seek(&Bytes::from("b"), true);
         assertions::assert_iterator_str_seq(
             mock_iterator,
@@ -121,7 +134,7 @@ mod test {
 
     #[test]
     fn seek_higherbound_inclusive() {
-        let mut mock_iterator = MockIterator::create_from(vec!["b", "c"]);
+        let mut mock_iterator = MockIterator::create_from_strs_values(vec!["b", "c"]);
         mock_iterator.seek(&Bytes::from("c"), true);
         assertions::assert_iterator_str_seq(
             mock_iterator,
@@ -131,14 +144,14 @@ mod test {
 
     #[test]
     fn seek_higherbound_exclusive() {
-        let mut mock_iterator = MockIterator::create_from(vec!["b", "c"]);
+        let mut mock_iterator = MockIterator::create_from_strs_values(vec!["b", "c"]);
         mock_iterator.seek(&Bytes::from("d"), true);
         assertions::assert_empty_iterator(mock_iterator);
     }
 
     #[test]
     fn seek_lowerbound() {
-        let mut mock_iterator = MockIterator::create_from(vec!["b", "c"]);
+        let mut mock_iterator = MockIterator::create_from_strs_values(vec!["b", "c"]);
         mock_iterator.seek(&Bytes::from("a"), true);
         assertions::assert_iterator_str_seq(
             mock_iterator,
@@ -148,7 +161,7 @@ mod test {
 
     #[test]
     fn seek_exclusive() {
-        let mut mock_iterator = MockIterator::create_from(vec!["a", "c", "d", "f"]);
+        let mut mock_iterator = MockIterator::create_from_strs_values(vec!["a", "c", "d", "f"]);
         mock_iterator.seek(&Bytes::from("c"), false);
         assertions::assert_iterator_str_seq(
             mock_iterator,
@@ -158,7 +171,7 @@ mod test {
 
     #[test]
     fn seek_inclusive() {
-        let mut mock_iterator = MockIterator::create_from(vec!["a", "c", "d", "f"]);
+        let mut mock_iterator = MockIterator::create_from_strs_values(vec!["a", "c", "d", "f"]);
         mock_iterator.seek(&Bytes::from("c"), true);
         assertions::assert_iterator_str_seq(
             mock_iterator,
@@ -169,7 +182,7 @@ mod test {
     #[test]
     fn iterator() {
         assertions::assert_iterator_str_seq(
-            MockIterator::create_from(vec!["a", "c", "d"]),
+            MockIterator::create_from_strs_values(vec!["a", "c", "d"]),
             vec!["a", "c", "d"]
         );
     }
