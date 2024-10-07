@@ -166,7 +166,7 @@ impl<I: StorageIterator> StorageEngineIterator<I> {
 impl<I: StorageIterator> StorageIterator for StorageEngineIterator<I> {
     fn next(&mut self) -> bool {
         if self.first_iteration {
-           self.inner_iterator.next();
+            self.inner_iterator.next();
             self.first_iteration = false;
         }
 

@@ -110,7 +110,7 @@ impl StorageIterator for MemtableIterator {
     }
 
     fn seek(&mut self, key_bytes: &Bytes, inclusive: bool) {
-        let key_txn_id = if inclusive { self.transaction.txn_id } else { MAX_TXN_ID };
+        let key_txn_id = if inclusive { 0 } else { MAX_TXN_ID };
         let key = Key::create(key_bytes.clone(), key_txn_id);
         let bound = if inclusive { Included(&key) } else { Excluded(&key) };
 
