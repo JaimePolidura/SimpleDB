@@ -1,12 +1,12 @@
-use std::collections::VecDeque;
-use std::sync::Arc;
-use bytes::Bytes;
-use shared::{Flag, StorageValueMergeResult};
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::TransactionManager;
+use crate::utils::tombstone::TOMBSTONE;
+use bytes::Bytes;
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::key::Key;
-use crate::utils::tombstone::TOMBSTONE;
+use shared::{Flag, StorageValueMergeResult};
+use std::collections::VecDeque;
+use std::sync::Arc;
 
 //TODO Refactor this code
 
@@ -29,6 +29,8 @@ pub struct StorageEngineIterator<I: StorageIterator> {
     is_finished: bool,
 
     keyspace_flags: Flag,
+
+    first_iteration: bool,
 }
 
 impl<I: StorageIterator> StorageEngineIterator<I> {
@@ -39,9 +41,7 @@ impl<I: StorageIterator> StorageEngineIterator<I> {
     ) -> StorageEngineIterator<I> {
         let mut is_finished = false;
 
-        if iterator.has_next() {
-            iterator.next();
-        } else {
+        if !iterator.has_next() {
             is_finished = true
         }
 
@@ -50,6 +50,7 @@ impl<I: StorageIterator> StorageEngineIterator<I> {
             transaction_manager: None,
             inner_iterator: iterator,
             options: options.clone(),
+            first_iteration: true,
             current_value: None,
             current_key: None,
             transaction: None,
@@ -164,6 +165,11 @@ impl<I: StorageIterator> StorageEngineIterator<I> {
 
 impl<I: StorageIterator> StorageIterator for StorageEngineIterator<I> {
     fn next(&mut self) -> bool {
+        if self.first_iteration {
+           self.inner_iterator.next();
+            self.first_iteration = false;
+        }
+
         self.do_do_next()
     }
 
@@ -194,15 +200,15 @@ impl<I: StorageIterator> Drop for StorageEngineIterator<I> {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-    use bytes::Bytes;
-    use shared::StorageValueMergeResult;
-    use crate::memtables::memtable::{MemTable};
+    use crate::memtables::memtable::MemTable;
     use crate::memtables::memtable_iterator::MemtableIterator;
     use crate::transactions::transaction::Transaction;
     use crate::utils::storage_engine_iterator::StorageEngineIterator;
+    use bytes::Bytes;
     use shared::iterators::storage_iterator::StorageIterator;
     use shared::key::Key;
+    use shared::StorageValueMergeResult;
+    use std::sync::Arc;
 
     #[test]
     fn iterator_no_merger_fn() {

@@ -2,7 +2,6 @@ use bytes::Bytes;
 use crate::index::posting_list::PostingList;
 use crate::index::posting_list_iterator::PostingListIterator;
 use crossbeam_skiplist::SkipSet;
-use shared::iterators::seek_iterator::SeekIterator;
 use shared::TxnId;
 use storage::transactions::transaction::Transaction;
 use shared::iterators::storage_iterator::StorageIterator;
@@ -94,11 +93,8 @@ impl<I: StorageIterator> SecondaryIndexIterator<I> {
         self.posting_list_iterator = Some(PostingListIterator::create(&self.transaction, posting_list));
         true
     }
-}
 
-impl<I: StorageIterator + SeekIterator> SeekIterator for SecondaryIndexIterator<I> {
-    //Expect to be called after creation.
-    fn seek(&mut self, key: &Bytes, inclusive: bool) {
+    pub fn seek(&mut self, key: &Bytes, inclusive: bool) {
         self.storage_iterator.seek(key, inclusive);
     }
 }
@@ -111,7 +107,6 @@ mod test  {
     use shared::SimpleDbOptions;
     use std::sync::Arc;
     use shared::iterators::mock_iterator::MockIterator;
-    use shared::iterators::seek_iterator::SeekIterator;
     use shared::key::Key;
     use storage::transactions::transaction::Transaction;
     use storage::utils::storage_engine_iterator::StorageEngineIterator;
