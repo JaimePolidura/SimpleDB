@@ -17,10 +17,14 @@ impl<A: StorageIterator, B: StorageIterator> TwoMergeIterator<A, B> {
     }
 
     fn choose_a(&self) -> bool {
-        if !self.a.has_next() {
+        if !self.a.has_next() && !self.b.has_next() {
+            //Return previous choice
+            return self.choose_a;
+        }
+        if !self.a.has_next() && self.b.has_next() {
             return false;
         }
-        if !self.b.has_next() {
+        if !self.b.has_next() && self.a.has_next() {
             return true;
         }
 
