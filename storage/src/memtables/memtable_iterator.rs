@@ -25,10 +25,6 @@ pub struct MemtableIterator {
 
 impl MemtableIterator {
     pub fn create(memtable: &Arc<MemTable>, transaction: &Transaction) -> MemtableIterator {
-        for entry in memtable.data.iter() {
-            println!("{:?} => {:?}", entry.key().as_bytes(), entry.value());
-        }
-
         MemtableIterator {
             transaction: transaction.clone(),
             memtable: memtable.clone(),
@@ -153,8 +149,33 @@ mod test {
     use shared::assertions;
 
     #[test]
+    fn one_entry() {
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+            .unwrap());
+        memtable.set_active();
+        memtable.set(&transaction(1), Bytes::from("B"), &vec![]);
+
+        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
+
+        assert!(iterator.has_next());
+        iterator.next();
+        assert!(iterator.key().eq(&Key::create_from_str("B", 1)));
+        assertions::assert_empty_iterator(iterator);
+    }
+
+    #[test]
+    fn emtpy() {
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+            .unwrap());
+
+        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
+        assertions::assert_empty_iterator(iterator);
+    }
+
+    #[test]
     fn iterators_seek() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0).unwrap());
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+            .unwrap());
         memtable.set_active();
         memtable.set(&transaction(1), Bytes::from("B"), &vec![]);
         memtable.set(&transaction(2), Bytes::from("B"), &vec![]);

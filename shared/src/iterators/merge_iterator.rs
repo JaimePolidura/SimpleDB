@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::collections::HashSet;
 use crate::iterators::storage_iterator::StorageIterator;
 use crate::key::Key;
@@ -7,7 +8,7 @@ pub struct MergeIterator<I: StorageIterator> {
     //We use Option so that when an iterator has not next, we can remove it by placing None
     iterators: Vec<Option<Box<I>>>,
 
-    current_iterator_index: usize,
+    last_value_iterated: Option<Bytes>,
     last_key_iterated: Option<Key>,
     finished_iterators_indexes: HashSet<usize>,
 
@@ -27,7 +28,7 @@ impl<I: StorageIterator> MergeIterator<I> {
         MergeIterator {
             finished_iterators_indexes: HashSet::new(),
             iterators: iterators_options,
-            current_iterator_index: 0,
+            last_value_iterated: None,
             last_key_iterated: None,
             first_iteration: true,
         }
@@ -89,7 +90,7 @@ impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
         }
 
         let mut min_key_seen: Option<Key> = None;
-        let mut min_key_seen_iterator_index: usize = 0;
+        let mut min_iterator_index = 0;
 
         for (current_index, current_iterator) in &mut self.iterators.iter().enumerate() {
             if self.finished_iterators_indexes.contains(&current_index) {
@@ -105,13 +106,15 @@ impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
                     current_key >= min_key_seen.as_ref().unwrap();
 
                 if !key_smaller_than_prev_iteration && !key_larger_than_min {
-                    min_key_seen_iterator_index = current_index;
-
                     match min_key_seen {
                         Some(_) => if current_key.le(min_key_seen.as_ref().unwrap()) {
                             min_key_seen = Some(current_key.clone());
+                            min_iterator_index = current_index;
                         },
-                        None => min_key_seen = Some(current_key.clone()),
+                        None => {
+                            min_key_seen = Some(current_key.clone());
+                            min_iterator_index = current_index;
+                        },
                     }
                 }
             }
@@ -119,10 +122,13 @@ impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
 
         let some_key_found = min_key_seen.is_some();
         if some_key_found {
-            self.advance_iterators(min_key_seen.as_ref().unwrap());
+            self.last_key_iterated = min_key_seen.clone();
+            self.last_value_iterated = Some(Bytes::copy_from_slice(&self.iterators[min_iterator_index]
+                .as_ref()
+                .unwrap()
+                .value()));
 
-            self.current_iterator_index = min_key_seen_iterator_index;
-            self.last_key_iterated = min_key_seen;
+            self.advance_iterators(min_key_seen.as_ref().unwrap());
         }
 
         some_key_found
@@ -139,11 +145,9 @@ impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
     }
 
     fn value(&self) -> &[u8] {
-        self.iterators.get(self.current_iterator_index)
-            .unwrap()
+        self.last_value_iterated
             .as_ref()
-            .unwrap()
-            .value()
+            .expect("Illegal merge iterator state")
     }
 
     fn seek(&mut self, key: &Bytes, inclusive: bool) {
@@ -264,18 +268,18 @@ mod test {
 
     fn create_merge_iterator() -> MergeIterator<MockIterator> {
         let mut iterator1 = MockIterator::create();
-        iterator1.add_entry("a", 0, Bytes::from(vec![1]));
-        iterator1.add_entry("b", 0, Bytes::from(vec![1]));
-        iterator1.add_entry("d", 0, Bytes::from(vec![1]));
+        iterator1.add_entry("a", 0, Bytes::from("a"));
+        iterator1.add_entry("b", 0, Bytes::from("b"));
+        iterator1.add_entry("d", 0, Bytes::from("d"));
 
         let mut iterator2 = MockIterator::create();
-        iterator2.add_entry("b", 0, Bytes::from(vec![2]));
-        iterator2.add_entry("e", 0, Bytes::from(vec![2]));
+        iterator2.add_entry("b", 0, Bytes::from("b"));
+        iterator2.add_entry("e", 0, Bytes::from("e"));
 
         let mut iterator3 = MockIterator::create();
-        iterator3.add_entry("c", 0, Bytes::from(vec![3]));
-        iterator3.add_entry("d", 0, Bytes::from(vec![3]));
-        iterator3.add_entry("e", 0, Bytes::from(vec![3]));
+        iterator3.add_entry("c", 0, Bytes::from("c"));
+        iterator3.add_entry("d", 0, Bytes::from("d"));
+        iterator3.add_entry("e", 0, Bytes::from("e"));
 
         MergeIterator::create(vec![
             Box::new(iterator1),
