@@ -1,3 +1,4 @@
+use std::cell::UnsafeCell;
 use crate::sst::block::block::Block;
 use crate::sst::block_cache::BlockCache;
 use crate::sst::block_metadata::BlockMetadata;
@@ -10,6 +11,7 @@ use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering::Release;
 use std::sync::{Arc, Mutex};
 use shared::key::Key;
+use shared::{SimpleDbFile, SimpleDbFileWrapper};
 
 pub const SSTABLE_DELETED: u8 = 2;
 pub const SSTABLE_ACTIVE: u8 = 1;
@@ -17,7 +19,7 @@ pub const SSTABLE_ACTIVE: u8 = 1;
 pub struct SSTable {
     pub(crate) sstable_id: shared::SSTableId,
     pub(crate) bloom_filter: BloomFilter,
-    pub(crate) file: shared::SimpleDbFile,
+    pub(crate) file: SimpleDbFileWrapper,
     pub(crate) block_cache: Mutex<BlockCache>,
     pub(crate) block_metadata: Vec<BlockMetadata>,
     pub(crate) options: Arc<shared::SimpleDbOptions>,
@@ -47,6 +49,7 @@ impl SSTable {
         SSTable {
             block_cache: Mutex::new(BlockCache::create(options.clone())),
             state: AtomicU8::new(state),
+            file: SimpleDbFileWrapper {file: UnsafeCell::new(file)},
             active_txn_ids_written,
             block_metadata,
             bloom_filter,
@@ -54,7 +57,6 @@ impl SSTable {
             first_key,
             last_key,
             level,
-            file,
             sstable_id,
             keyspace_id,
         }
@@ -170,11 +172,14 @@ impl SSTable {
 
     pub fn delete(&self) -> Result<(), shared::SimpleDbError> {
         self.state.store(SSTABLE_DELETED, Release);
-        self.file.delete().map_err(|e| shared::SimpleDbError::CannotDeleteSSTable(self.keyspace_id, self.sstable_id, e))
+        let file: &mut SimpleDbFile = unsafe { &mut *self.file.file.get() };
+        file.delete()
+            .map_err(|e| shared::SimpleDbError::CannotDeleteSSTable(self.keyspace_id, self.sstable_id, e))
     }
 
     pub fn size(&self) -> shared::SSTableId {
-        self.file.size()
+        let file: &mut SimpleDbFile = unsafe { &mut *self.file.file.get() };
+        file.size()
     }
 
     pub fn load_block(&self, block_id: shared::SSTableId) -> Result<Arc<Block>, shared::SimpleDbError> {
@@ -191,7 +196,8 @@ impl SSTable {
 
         //Read from disk
         let metadata: &BlockMetadata = &self.block_metadata[block_id];
-        let encoded_block = self.file.read(metadata.offset, self.options.block_size_bytes)
+        let file: &mut SimpleDbFile = unsafe { &mut *self.file.file.get() };
+        let encoded_block = file.read(metadata.offset, self.options.block_size_bytes)
             .map_err(|e| shared::SimpleDbError::CannotReadSSTableFile(self.keyspace_id, self.sstable_id, e))?;
 
         let block = Block::deserialize(&encoded_block, &self.options)

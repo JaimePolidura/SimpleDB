@@ -29,8 +29,6 @@ pub struct TransactionLog {
 
 impl TransactionLog {
     pub fn create(options: Arc<shared::SimpleDbOptions>) -> Result<TransactionLog, SimpleDbError> {
-        println!("HERE");
-
         Ok(TransactionLog {
             log_file: shared::SimpleDbFileWrapper {file: UnsafeCell::new(
                 SimpleDbFile::open(to_transaction_log_file_path(&options).as_path(), shared::SimpleDbFileMode::AppendOnly)

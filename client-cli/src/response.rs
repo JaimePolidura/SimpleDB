@@ -90,7 +90,7 @@ impl Response {
             let index_type = match connection.read_u8().expect("Cannot read index type") {
                 1 => IndexType::Primary,
                 2 => IndexType::Secondary,
-                other => panic!(format!("Unknown index type id {}", other))
+                other => panic!("{}", format!("Unknown index type id {}", other))
             };
 
             indexes.push((column_name, index_type));

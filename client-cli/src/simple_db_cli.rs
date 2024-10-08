@@ -69,7 +69,7 @@ impl SimpleDbCli {
                     StatementResponse::Databases(databases) => self.print_vec_string_as_table("Databases", databases, duration),
                     StatementResponse::Tables(tables) => self.print_vec_string_as_table("Tables", tables, duration),
                     StatementResponse::Describe(desc) => self.print_table_describe(&desc, duration),
-                    StatementResponse::Indexes(indexes) => self.print_show_indexes(indexes),
+                    StatementResponse::Indexes(indexes) => self.print_show_indexes(indexes, duration),
                 };
             }
             Response::Error(error_type_id) => {
@@ -83,7 +83,7 @@ impl SimpleDbCli {
         print!("\n");
     }
 
-    fn print_show_indexes(&self, mut indexes: Vec<(String, IndexType)>) {
+    fn print_show_indexes(&self, mut indexes: Vec<(String, IndexType)>, duration: Duration) {
         let mut table = TablePrint::create(2);
         table.add_header("Field");
         table.add_header("Type");
@@ -95,6 +95,8 @@ impl SimpleDbCli {
                 IndexType::Primary => table.add_column_value("Primary".to_string())
             };
         }
+        
+        table.print(duration);
     }
 
     fn print_query_data(&self, query_data: QueryDataResponse, duration: Duration) {

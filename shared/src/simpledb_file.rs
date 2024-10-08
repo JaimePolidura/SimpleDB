@@ -1,9 +1,10 @@
 use std::cell::UnsafeCell;
 use std::fs;
-use std::fs::{File, OpenOptions};
+use std::fs::{File, OpenOptions, Permissions};
 use std::io::{Read, Write};
 use std::os::windows::fs::FileExt;
 use std::path::{Path, PathBuf};
+use std::process::exit;
 
 #[derive(Clone)]
 pub enum SimpleDbFileMode {
@@ -57,15 +58,8 @@ impl SimpleDbFile {
             Self::recover_from_backup(path)?;
         }
 
-        let is_append_only = matches!(mode, SimpleDbFileMode::AppendOnly);
-        let is_read_only = matches!(mode, SimpleDbFileMode::ReadOnly);
-        let file: File = OpenOptions::new()
-            .create(true)
-            .append(is_append_only)
-            .write(!is_read_only)
-            .create(true) //Create file if it doest exist
-            .read(true)
-            .open(path)?;
+        let open_options = Self::create_open_options_from_mode(&mode);
+        let file = open_options.open(path)?;
         let metadata = file.metadata()?;
 
         Ok(SimpleDbFile {
@@ -120,20 +114,22 @@ impl SimpleDbFile {
     }
 
     pub fn clear(&mut self) -> Result<(), std::io::Error> {
+        self.size_bytes = 0;
+        self.file.as_mut().unwrap().set_len(0)?;
+        Ok(())
+    }
+
+    pub fn delete(&mut self)  -> Result<(), std::io::Error> {
         match self.mode {
             SimpleDbFileMode::Mock => Ok(()),
             _ => {
-                self.size_bytes = 0;
-                self.file.as_mut().unwrap().set_len(0)
-            }
-        }
-    }
+                {
+                    //It goes out of scope, the fd gets closed
+                    let file = self.file.take().unwrap();
+                }
 
-    pub fn delete(&self)  -> Result<(), std::io::Error> {
-        //TODO, Take owner ship of file, make it to go out of scope so the fd gets removed, and then remove the path
-        match self.mode {
-            SimpleDbFileMode::Mock => Ok(()),
-            _ => fs::remove_file(self.path.as_ref().unwrap().as_path()),
+                fs::remove_file(self.path.as_ref().unwrap().as_path())
+            },
         }
     }
 
@@ -169,12 +165,16 @@ impl SimpleDbFile {
     }
 
     pub fn safe_replace(&mut self, bytes: &[u8]) -> Result<(), std::io::Error> {
-        let file_path = self.path.as_ref().unwrap();
-        let mut backup_file = self.copy(Self::create_file_backup_path(file_path).as_path(), self.mode.clone())?;
+        let file_path = self.path.clone().unwrap();
+
+        let prev_mode = self.upgrade_mode()?;
+        let mut backup_file = self.copy(Self::create_file_backup_path(&file_path).as_path(), self.mode.clone())?;
         self.clear()?;
         self.write(bytes)?;
         self.fsync()?;
+        self.restore_mode(prev_mode);
         backup_file.delete()?;
+
         Ok(())
     }
 
@@ -210,5 +210,49 @@ impl SimpleDbFile {
         let path_as_string = path.to_str().unwrap();
         let new_path = format!("{}.safe", path_as_string);
         PathBuf::from(new_path)
+    }
+
+    fn restore_mode(&mut self, prev_monde: SimpleDbFileMode) -> Result<(), std::io::Error> {
+        match prev_monde {
+            SimpleDbFileMode::Mock => Ok(()),
+            prev_mode => {
+                let open_options = Self::create_open_options_from_mode(&prev_mode);
+                let file = open_options.open(self.path.as_ref().unwrap().as_path())?;
+                self.file = Some(file);
+                self.mode = prev_mode;
+                Ok(())
+            }
+        }
+    }
+
+    //Upgrades permissions to allow writes and reads.
+    //Returns prev mode
+    fn upgrade_mode(&mut self) -> Result<SimpleDbFileMode, std::io::Error> {
+        match self.mode.clone() {
+            SimpleDbFileMode::Mock => Ok(SimpleDbFileMode::Mock),
+            prev_mode => {
+                self.file = Some(OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .read(true)
+                    .open(self.path.as_ref().unwrap().as_path())?);
+
+                self.mode = SimpleDbFileMode::RandomWrites;
+                Ok(prev_mode.clone())
+            }
+        }
+    }
+
+    fn create_open_options_from_mode(mode: &SimpleDbFileMode) -> OpenOptions {
+        let is_append_only = matches!(mode, SimpleDbFileMode::AppendOnly);
+        let is_read_only = matches!(mode, SimpleDbFileMode::ReadOnly);
+
+        OpenOptions::new()
+            .create(true)
+            .append(is_append_only)
+            .write(!is_read_only)
+            .create(true) //Create file if it doest exist
+            .read(true)
+            .clone()
     }
 }

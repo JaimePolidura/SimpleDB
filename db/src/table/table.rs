@@ -212,10 +212,8 @@ impl Table {
         transaction: &Transaction,
         column_name: &str
     ) -> Result<SecondaryIndexIterator<SimpleDbStorageIterator>, SimpleDbError> {
-        let column_id = self.columns_by_name.get(column_name)
-            .ok_or(ColumnNotFound(self.storage_keyspace_id, column_name.to_string()))?
-            .value()
-            .clone();
+        let column_id = self.get_column_desc_or_err(column_name)?
+            .column_id;
         let mut iterator = self.secondary_indexes.scan_all(transaction, column_id)?;
         iterator.seek(key, true);
         Ok(iterator)
@@ -226,10 +224,8 @@ impl Table {
         transaction: &Transaction,
         column_name: &str
     ) -> Result<SecondaryIndexIterator<SimpleDbStorageIterator>, SimpleDbError> {
-        let column_id = self.columns_by_name.get(column_name)
-            .ok_or(ColumnNotFound(self.storage_keyspace_id, column_name.to_string()))?
-            .value()
-            .clone();
+        let column_id = self.get_column_desc_or_err(column_name)?
+            .column_id;
         self.secondary_indexes.scan_all(transaction, column_id)
     }
 
@@ -263,7 +259,7 @@ impl Table {
             n_affected_rows = join_handle.join().unwrap();
         }
 
-        self.save_column_descriptor_as_indexed(column.column_id, secondary_index_keyspace_id);
+        self.save_column_descriptor_as_indexed(column.column_id, secondary_index_keyspace_id)?;
 
         Ok(n_affected_rows)
     }
@@ -406,7 +402,7 @@ impl Table {
             Selection::Some(selection) => {
                 for column_name in selection {
                     if !self.columns_by_name.contains_key(column_name) {
-                        return Err(SimpleDbError::ColumnNotFound(self.storage_keyspace_id, column_name.clone()));
+                        return Err(ColumnNotFound(self.storage_keyspace_id, column_name.clone()));
                     }
                 }
 
@@ -419,7 +415,7 @@ impl Table {
         &self,
         column_name: &str
     ) -> Result<(), SimpleDbError> {
-        let column = self.get_column_desc(column_name).unwrap();
+        let column = self.get_column_desc_or_err(column_name)?;
 
         if self.secondary_indexes.has(column.column_id) || column.is_primary{
             return Err(IndexAlreadyExists(self.storage_keyspace_id, column_name.to_string()));
@@ -477,10 +473,8 @@ impl Table {
         let mut data_records_to_return: Vec<(ColumnId, Bytes)> = Vec::new();
 
         for (column_name, column_value) in data_records.iter() {
-            match self.columns_by_name.get(column_name) {
-                Some(entry) => data_records_to_return.push((*entry.value(), column_value.clone())),
-                None => return Err(SimpleDbError::ColumnNotFound(self.storage_keyspace_id, column_name.clone())),
-            };
+            let column = self.get_column_desc_or_err(column_name)?;
+            data_records_to_return.push((column.column_id, column_value.clone()));
         }
 
         Ok(Record { data_records: data_records_to_return, })
@@ -612,6 +606,7 @@ impl Table {
     ) -> Result<(), SimpleDbError> {
         let mut file_lock = self.table_descriptor_file.lock().unwrap();
 
+        //Create new list of columns descriptors
         let mut new_columns = Vec::new();
         for current_entry in self.columns_by_id.iter() {
             let current_column_id = *current_entry.key();
@@ -619,17 +614,28 @@ impl Table {
             if current_column_id == column_id_indexed {
                 let mut current_column_to_update = current_column;
                 current_column_to_update.secondary_index_keyspace_id = Some(keyspace_id);
-                new_columns.push(current_column_to_update);
+                new_columns.push(current_column_to_update.clone());
+                self.columns_by_id.insert(current_column_id, current_column_to_update);
             } else {
                 new_columns.push(current_column);
             }
         }
 
+        //Save new table desc with updated column
         let serialized = TableDescriptor::serialize(new_columns, &self.primary_column_name);
-
         file_lock.safe_replace(&serialized)
             .map_err(|io_error| CannotWriteTableDescriptor(self.storage_keyspace_id, io_error))?;
-        Ok(())
 
+        Ok(())
+    }
+
+    fn get_column_desc_or_err(
+        &self,
+        column_name: &str
+    ) -> Result<ColumnDescriptor, SimpleDbError> {
+        match self.get_column_desc(column_name) {
+            Some(desc) => Ok(desc),
+            None => Err(ColumnNotFound(self.storage_keyspace_id, column_name.to_string()))
+        }
     }
 }
