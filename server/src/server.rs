@@ -4,7 +4,7 @@ use crossbeam_skiplist::SkipMap;
 use db::simple_db::StatementResult;
 use db::{Context, SimpleDb, Statement};
 use shared::connection::Connection;
-use shared::logger::{logger, Logger};
+use shared::logger::{logger, Logger, SimpleDbLayer};
 use shared::SimpleDbError::InvalidPassword;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::io::Write;
@@ -27,7 +27,10 @@ impl Server {
     ) -> Result<Server, SimpleDbError> {
         Logger::init(options.clone());
 
-        logger().info(&format!("Initializing server at address 127.0.0:{}", options.server_port));
+        logger().info(
+            SimpleDbLayer::Server,
+            &format!("Initializing server at address 127.0.0:{}", options.server_port)
+        );
 
         let simple_db = db::simple_db::create(options.clone())?;
         Ok(Server {
@@ -44,7 +47,7 @@ impl Server {
         loop {
             let (socket, _) = listener.accept().unwrap();
             let server = self.clone();
-            logger().debug(&format!("Accepted new connection {}", socket.peer_addr().unwrap()));
+            logger().debug(SimpleDbLayer::Server, &format!("Accepted new connection {}", socket.peer_addr().unwrap()));
             let connection = Connection::create(socket);
 
             thread::spawn(|| {
@@ -86,7 +89,7 @@ impl Server {
         match request {
             Request::UseDatabase(_, database) => {
                 Self::handle_use_database_connection_request(server, &database, connection_id)?;
-                logger().debug(&format!("Executed use database. Connection ID: {} Database: {}",
+                logger().debug(SimpleDbLayer::Server, &format!("Executed use database. Connection ID: {} Database: {}",
                     connection.connection_id(), database));
                 Ok(Response::Ok)
             },
@@ -96,7 +99,7 @@ impl Server {
             },
             Request::Close(_) => {
                 Self::handle_close_request(server, connection_id);
-                logger().debug(&format!("Executed close request with connection ID: {}", connection_id));
+                logger().debug(SimpleDbLayer::Server, &format!("Executed close request with connection ID: {}", connection_id));
                 Ok(Response::Ok)
             }
         }
@@ -187,42 +190,42 @@ impl Server {
     ) -> Result<StatementResponse, SimpleDbError> {
         match statement_result {
             StatementResult::Describe(describe) => {
-                logger().debug(&format!(
+                logger().debug(SimpleDbLayer::Server, &format!(
                     "Executed describe request Connection ID: {} Entries to return {}",
                     connection_id, describe.len())
                 );
                 Ok(StatementResponse::Describe(describe))
             },
             StatementResult::Databases(databases) => {
-                logger().debug(&format!(
+                logger().debug(SimpleDbLayer::Server, &format!(
                     "Executed show databases request Connection ID: {} Entries to return {}",
                     connection_id, databases.len())
                 );
                 Ok(StatementResponse::Databases(databases))
             },
             StatementResult::Indexes(indexes) => {
-                logger().debug(&format!(
+                logger().debug(SimpleDbLayer::Server, &format!(
                     "Executed show indexes request Connection ID: {} Entries to return {}",
                     connection_id, indexes.len())
                 );
                 Ok(StatementResponse::Indexes(indexes))
             }
             StatementResult::Tables(tables) => {
-                logger().debug(&format!(
+                logger().debug(SimpleDbLayer::Server, &format!(
                     "Executed show tables request Connection ID: {} Entries to return {}",
                     connection_id, tables.len())
                 );
                 Ok(StatementResponse::Tables(tables))
             },
             StatementResult::Ok(n) => {
-                logger().debug(&format!(
+                logger().debug(SimpleDbLayer::Server, &format!(
                     "Executed statement request Connection ID: {} Rows affected {}. Statement: {}",
                     connection_id, n, statement
                 ));
                 Ok(StatementResponse::Ok(n))
             },
             StatementResult::TransactionStarted(transaction) => {
-                logger().debug(&format!(
+                logger().debug(SimpleDbLayer::Server, &format!(
                     "Executed start transaction request Connection ID: {} Transaction ID: {}",
                     connection_id, transaction.id()
                 ));
@@ -230,7 +233,7 @@ impl Server {
             },
             StatementResult::Data(mut query_iterator) => {
                 let rows = query_iterator.all()?;
-                logger().debug(&format!(
+                logger().debug(SimpleDbLayer::Server, &format!(
                     "Executed query request request Connection ID: {} Rows returned: {} Statement: {}",
                     connection_id, rows.len(), statement
                 ));

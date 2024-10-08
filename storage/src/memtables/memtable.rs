@@ -10,12 +10,14 @@ use bytes::{Buf, Bytes};
 use crossbeam_skiplist::{SkipMap, SkipSet};
 use shared::{Flag, StorageValueMergeResult};
 use std::cell::UnsafeCell;
+use std::mem::forget;
 use std::ops::Bound::Excluded;
 use std::ops::Shl;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 use shared::key::Key;
+use shared::logger::{logger, SimpleDbLayer};
 
 pub struct MemTable {
     pub(crate) data: Arc<SkipMap<Key, Bytes>>,
@@ -250,7 +252,9 @@ impl MemTable {
         let wal: &Wal = unsafe { &*self.wal.get() };
         let mut entries = wal.read_entries()?;
 
-        println!("Applying {} operations from WAL to memtable with ID: {}", entries.len(), wal.get_memtable_id());
+        logger().info(SimpleDbLayer::StorageKeyspace(self.keyspace_id), &format!(
+            "Applying {} operations from WAL to memtable with ID: {}", entries.len(), wal.get_memtable_id())
+        );
 
         while let Some(entry) = entries.pop() {
             self.write(&entry.key, entry.value, entry.key.txn_id());

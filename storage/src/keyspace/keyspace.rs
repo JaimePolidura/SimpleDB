@@ -10,11 +10,13 @@ use crate::transactions::transaction_manager::{IsolationLevel, TransactionManage
 use crate::utils::storage_engine_iterator::StorageEngineIterator;
 use crate::SimpleDbStorageIterator;
 use bytes::Bytes;
+use shared::iterators::storage_iterator::StorageIterator;
 use shared::iterators::two_merge_iterators::TwoMergeIterator;
 use shared::Flag;
 use std::fs;
 use std::sync::Arc;
-use shared::iterators::storage_iterator::StorageIterator;
+use shared::logger::logger;
+use shared::logger::SimpleDbLayer::StorageKeyspace;
 
 pub struct Keyspace {
     keyspace_id: shared::KeyspaceId,
@@ -146,7 +148,11 @@ impl Keyspace {
         let sstable_builder_ready: SSTableBuilder = memtable.to_sst(&self.transaction_manager);
         let sstable_id = self.sstables.flush_memtable_to_disk(sstable_builder_ready)?;
         memtable.set_flushed();
-        println!("Flushed memtable with ID: {} to SSTable with ID: {}", memtable.get_id(), sstable_id);
+
+        logger().info(StorageKeyspace(self.keyspace_id), &format!(
+            "Flushed Memtable ID: {} To SSTable ID {}", memtable.get_id(), sstable_id
+        ));
+
         Ok(())
     }
 
@@ -175,7 +181,9 @@ impl Keyspace {
         let manifest_operations = self.manifest.read_uncompleted_operations()
             .expect("Cannot read Manifest");
 
-        println!("Recovering {} operations from manifest", manifest_operations.len());
+        logger().info(StorageKeyspace(self.keyspace_id), &format!(
+            "Recovering {} operations from manifest", manifest_operations.len())
+        );
 
         for manifest_operation in manifest_operations {
             match manifest_operation {

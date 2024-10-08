@@ -10,6 +10,8 @@ use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
 use bytes::Bytes;
 use shared::iterators::storage_iterator::StorageIterator;
+use shared::logger::logger;
+use shared::logger::SimpleDbLayer::StorageKeyspace;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
 use crate::transactions::transaction::Transaction;
@@ -50,6 +52,8 @@ impl SSTables {
         options: &Arc<shared::SimpleDbOptions>,
         keyspace_id: shared::KeyspaceId
     ) -> Result<(Vec<RwLock<Vec<Arc<SSTable>>>>, shared::SSTableId), shared::SimpleDbError> {
+        logger().info(StorageKeyspace(keyspace_id), &format!("Loading SSTables"));
+
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
@@ -67,7 +71,7 @@ impl SSTables {
             }
 
             if let Ok(sstable_id) = extract_sstable_id_from_file(&file) {
-                println!("Loading SSTable with ID: {}", sstable_id);
+                logger().info(StorageKeyspace(keyspace_id), &format!("Loading SSTable ID: {}", sstable_id));
 
                 let sstable = SSTable::from_file(
                     sstable_id, keyspace_id, file.path().as_path(), options.clone()
@@ -84,6 +88,8 @@ impl SSTables {
                 max_sstable_id = max(max_sstable_id, sstable_id);
             }
         }
+
+        logger().info(StorageKeyspace(keyspace_id), &format!("Loaded {} levels of SSTables", levels.len()));
 
         Ok((levels, max_sstable_id))
     }

@@ -7,6 +7,8 @@ use crate::sst::sstables::SSTables;
 use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_engine_iterator::StorageEngineIterator;
 use shared::iterators::storage_iterator::StorageIterator;
+use shared::logger::logger;
+use shared::logger::SimpleDbLayer::StorageKeyspace;
 use crate::utils::tombstone::TOMBSTONE;
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
@@ -78,9 +80,11 @@ pub(crate) fn start_simple_leveled_compaction(
         new_sstables_id.push(sstables.flush_to_disk(new_sstable_builder.take().unwrap())?);
     }
 
-    println!("Compacted SSTables: {:?} in level {} with SSTables {:?} in level {}. Created SSTables {:?}",
-             sstables_id_in_level, level_to_compact, sstables_id_in_next_level, level_to_compact + 1,
-             new_sstables_id);
+    logger().info(StorageKeyspace(keyspace_id), &format!(
+        "Compacted SSTables: {:?} in level {} with SSTables {:?} in level {}. Created SSTables {:?}",
+        sstables_id_in_level, level_to_compact, sstables_id_in_next_level, level_to_compact + 1,
+        new_sstables_id,
+    ));
 
     sstables.delete_sstables(level_to_compact + 1, sstables_id_in_next_level)?;
     sstables.delete_sstables(level_to_compact, sstables_id_in_level)?;

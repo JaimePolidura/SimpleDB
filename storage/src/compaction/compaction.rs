@@ -5,6 +5,8 @@ use crate::sst::sstables::SSTables;
 use std::time::Duration;
 use std::sync::Arc;
 use shared::Flag;
+use shared::logger::logger;
+use shared::logger::SimpleDbLayer::StorageKeyspace;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent};
 use crate::transactions::transaction_manager::TransactionManager;
 
@@ -54,7 +56,7 @@ impl Compaction {
     }
 
     pub fn start_compaction_thread(&self) {
-        println!("Starting compaction thread");
+        logger().info(StorageKeyspace(self.keyspace_id), "Starting compaction thread");
 
         let compaction_thread = CompactionThread {
             transaction_manager: self.transaction_manager.clone(),
@@ -91,7 +93,7 @@ impl CompactionThread {
                 let operation_id = self.manifest.append_operation(ManifestOperationContent::Compaction(compaction_task));
 
                 if let Err(compaction_error) = self.compact(compaction_task) {
-                    println!("Error while compacting: {:?}", compaction_error);
+                    logger().error(StorageKeyspace(self.keyspace_id), &format!("Error while compacting: {:?}", compaction_error));
                 }
 
                 if let Ok(operation_id) = operation_id {

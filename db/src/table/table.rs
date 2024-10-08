@@ -18,6 +18,8 @@ use std::hash::Hasher;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{fence, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use shared::logger::logger;
+use shared::logger::SimpleDbLayer::DB;
 use storage::transactions::transaction::Transaction;
 use storage::{SimpleDbStorageIterator, Storage};
 use crate::index::index_type::IndexType;
@@ -60,7 +62,7 @@ impl Table {
         Ok(Arc::new(Table {
             table_descriptor_file: Mutex::new(table_descriptor_file),
             next_column_id: AtomicUsize::new(max_column_id as usize + 1),
-            secondary_indexes: SecondaryIndexes::create_empty(storage.clone()),
+            secondary_indexes: SecondaryIndexes::create_empty(storage.clone(), table_name),
             columns_by_id: table_descriptor.columns,
             table_name: table_descriptor.table_name,
             storage_keyspace_id: table_keyspace_id,
@@ -240,26 +242,27 @@ impl Table {
             return Err(IndexAlreadyExists(self.storage_keyspace_id, column_name.to_string()));
         }
 
-        let secondary_index_keyspace_id = self.secondary_indexes.create_new_secondary_index(column.column_id)?;
+        let index_keyspace_id = self.secondary_indexes.create_new_secondary_index(column.column_id)?;
         //Before we start reading all the SSTables and Memtables, make sure the new secondary index is visible for writers
         fence(Ordering::Release);
 
-        let task = IndexCreationTask::create(
+        let (task, receiver) = IndexCreationTask::create(
             column.column_id,
-            secondary_index_keyspace_id,
+            index_keyspace_id,
+            self.storage_keyspace_id,
             self.database.clone(),
             self.storage.clone(),
             self.clone(),
         );
 
-        let join_handle = std::thread::spawn(move || task.start());
+        let _ = std::thread::spawn(move || task.start());
         let mut n_affected_rows = 0;
 
         if wait {
-            n_affected_rows = join_handle.join().unwrap();
+            n_affected_rows = receiver.recv().unwrap();
         }
 
-        self.save_column_descriptor_as_indexed(column.column_id, secondary_index_keyspace_id)?;
+        self.save_column_descriptor_as_indexed(column.column_id, index_keyspace_id)?;
 
         Ok(n_affected_rows)
     }
@@ -622,7 +625,7 @@ impl Table {
         }
 
         //Save new table desc with updated column
-        let serialized = TableDescriptor::serialize(new_columns, &self.primary_column_name);
+        let serialized = TableDescriptor::serialize(new_columns, &self.table_name);
         file_lock.safe_replace(&serialized)
             .map_err(|io_error| CannotWriteTableDescriptor(self.storage_keyspace_id, io_error))?;
 

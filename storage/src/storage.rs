@@ -10,6 +10,7 @@ use bytes::Bytes;
 use shared::{Flag, KeyspaceId, SimpleDbError, SimpleDbOptions};
 use std::collections::VecDeque;
 use std::sync::Arc;
+use shared::logger::{logger, SimpleDbLayer};
 
 pub struct Storage {
     transaction_manager: Arc<TransactionManager>,
@@ -29,7 +30,8 @@ pub type SimpleDbStorageIterator = StorageEngineIterator<
 
 impl Storage {
     pub fn create(options: Arc<SimpleDbOptions>) -> Result<Storage, SimpleDbError> {
-        println!("Starting storage engine!");
+        logger().info(SimpleDbLayer::Storage, "Starting storage engine!");
+
         let transaction_manager = Arc::new(
             TransactionManager::create_recover_from_log(options.clone())?
         );
@@ -46,7 +48,7 @@ impl Storage {
         storage.keyspaces.recover_from_manifest();
         storage.keyspaces.start_keyspaces_compaction_threads();
 
-        println!("Storage engine started!");
+        logger().info(SimpleDbLayer::Storage, "Storage engine started!");
 
         Ok(storage)
     }

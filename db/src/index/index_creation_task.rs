@@ -1,9 +1,12 @@
 use crate::table::record::Record;
 use crate::table::table::Table;
 use shared::{ColumnId, KeyspaceId};
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
+use std::sync::mpsc::{Receiver, Sender};
 use storage::transactions::transaction::Transaction;
 use shared::iterators::storage_iterator::StorageIterator;
+use shared::logger::logger;
+use shared::logger::SimpleDbLayer::DB;
 use storage::Storage;
 use crate::database::database::Database;
 
@@ -13,27 +16,48 @@ pub struct IndexCreationTask {
 
     indexed_column_id: ColumnId,
     index_keyspace_id: KeyspaceId,
-    storage: Arc<Storage>
+    table_keyspace_id: KeyspaceId,
+    storage: Arc<Storage>,
+
+    n_affected_rows_sender: Sender<usize>
 }
 
 impl IndexCreationTask {
     pub fn create(
         indexed_column_id: ColumnId,
-        keyspace_id: KeyspaceId,
+        index_keyspace_id: KeyspaceId,
+        table_keyspace_id: KeyspaceId,
         database: Arc<Database>,
         storage: Arc<Storage>,
         table: Arc<Table>,
-    ) -> IndexCreationTask {
-        IndexCreationTask { table, indexed_column_id, index_keyspace_id: keyspace_id, storage, database }
+    ) -> (IndexCreationTask, Receiver<usize>) {
+        let (send, receiver) = mpsc::channel();
+
+        let index = IndexCreationTask {
+            n_affected_rows_sender: send,
+            index_keyspace_id,
+            table_keyspace_id,
+            indexed_column_id,
+            database,
+            storage,
+            table,
+        };
+
+        (index, receiver)
     }
 
-    pub fn start(&self) -> usize {
+    pub fn start(&self) {
         let mut n_affected_rows = 0;
         let mut iterator = self.storage.scan_all_with_transaction(
             &Transaction::none(),
-            self.index_keyspace_id,
+            self.table_keyspace_id,
         ).unwrap();
-        
+
+        logger().info(DB(self.table.table_name.clone()), &format!(
+            "Creating secondary index for table {} Secondary index keyspace ID: {}",
+            self.table.table_name.clone(), self.index_keyspace_id
+        ));
+
         //This will get unlocked when it goes out of scope
         let guard = self.database.lock_rollbacks();
 
@@ -54,6 +78,11 @@ impl IndexCreationTask {
             }
         }
 
-        n_affected_rows
+        logger().info(DB(self.table.table_name.clone()), &format!(
+            "Created secondary index for table {} with {} entries",
+            self.table.table_name.clone(), n_affected_rows
+        ));
+
+        self.n_affected_rows_sender.send(n_affected_rows);
     }
 }

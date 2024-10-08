@@ -1,5 +1,5 @@
 use shared::connection::Connection;
-use shared::logger::logger;
+use shared::logger::{logger, SimpleDbLayer};
 use shared::SimpleDbError;
 use shared::SimpleDbError::{InvalidRequestBinaryFormat};
 
@@ -26,7 +26,7 @@ impl Request {
                 let statement = String::from_utf8(statement_bytes)
                     .map_err(|_| InvalidRequestBinaryFormat)?;
 
-                logger().debug(&format!(
+                logger().debug(SimpleDbLayer::Server, &format!(
                     "Received statement request. ConnectionID: {} Password: {} Statement: {}",
                     connection.connection_id(), authentication.password, statement
                 ));
@@ -34,7 +34,7 @@ impl Request {
                 Ok(Request::Statement(authentication, is_standalone, statement))
             },
             2 => {
-                logger().debug(&format!("Received close request. ConnectionID: {}", connection.connection_id()));
+                logger().debug(SimpleDbLayer::Server, &format!("Received close request. ConnectionID: {}", connection.connection_id()));
                 Ok(Request::Close(authentication))
             },
             3 => {
@@ -43,7 +43,7 @@ impl Request {
                 let database_name_string = String::from_utf8(database_name_bytes)
                     .map_err(|_| InvalidRequestBinaryFormat)?;
 
-                logger().debug(&format!(
+                logger().debug(SimpleDbLayer::Server, &format!(
                     "Received use database request. Password: {} Database: {}",
                     authentication.password, database_name_string
                 ));
