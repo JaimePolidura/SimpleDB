@@ -211,6 +211,39 @@ mod test {
     use std::sync::Arc;
 
     #[test]
+    fn iterator_one_entry() {
+        let options = Arc::new(shared::SimpleDbOptions::default());
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+            .unwrap());
+        memtable.set(&transaction(10), Bytes::from("aa"), &vec![1]);
+
+        let mut iterator = StorageEngineIterator::create(
+            0,
+            &options,
+            MemtableIterator::create(&memtable, &Transaction::none()),
+        );
+
+        assert!(iterator.next());
+        assert!(iterator.key().eq(&Key::create_from_str("aa", 10)));
+        assert!(!iterator.next());
+    }
+
+    #[test]
+    fn iterator_empty() {
+        let options = Arc::new(shared::SimpleDbOptions::default());
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+            .unwrap());
+
+        let mut iterator = StorageEngineIterator::create(
+            0,
+            &options,
+            MemtableIterator::create(&memtable, &Transaction::none()),
+        );
+
+        assert!(!iterator.next());
+    }
+
+    #[test]
     fn iterator_no_merger_fn() {
         let options = Arc::new(shared::SimpleDbOptions::default());
         let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)

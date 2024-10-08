@@ -171,6 +171,23 @@ mod test {
     use crate::iterators::mock_iterator::MockIterator;
     use crate::iterators::storage_iterator::StorageIterator;
 
+    #[test]
+    fn one_entry() {
+        assert_iterator_str_seq(
+            MergeIterator::create(vec![Box::new(
+                MockIterator::create_from_strs_values(vec!["a"])
+            )]),
+            vec!["a"]);
+    }
+
+    #[test]
+    fn emtpy() {
+        let mut iterator = MergeIterator::create(vec![Box::new(MockIterator::create())]);
+        //No effect
+        iterator.seek(&Bytes::from("e"), false);
+        assertions::assert_empty_iterator(iterator);
+    }
+
     /**
     A -> B -> D
     B -> E

@@ -1,0 +1,4 @@
+Bugs:
+
+- Cuando hacemos SELECT * FROM tabla, si la tabla tiene 1 fila, peta
+- Cuando hacemos dos inserts, las dos ultimas filas tienen las filas iguales, excepto el ID

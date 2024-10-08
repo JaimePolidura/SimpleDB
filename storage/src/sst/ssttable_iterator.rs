@@ -169,6 +169,7 @@ impl StorageIterator for SSTableIterator {
 
 #[cfg(test)]
 mod test {
+    use std::cell::UnsafeCell;
     use crate::sst::block::block_builder::BlockBuilder;
     use crate::sst::block_cache::BlockCache;
     use crate::sst::block_metadata::BlockMetadata;
@@ -181,7 +182,7 @@ mod test {
     use crossbeam_skiplist::SkipSet;
     use std::sync::atomic::AtomicU8;
     use std::sync::{Arc, Mutex};
-    use shared::assertions;
+    use shared::{assertions, SimpleDbFileWrapper};
     use shared::key::Key;
 
     //SSTable:
@@ -296,7 +297,7 @@ mod test {
             active_txn_ids_written: SkipSet::new(),
             sstable_id: 1,
             bloom_filter: BloomFilter::create(&Vec::new(), 8),
-            file: shared::SimpleDbFile::mock(),
+            file: SimpleDbFileWrapper{ file: UnsafeCell::new(shared::SimpleDbFile::mock()) },
             block_cache: Mutex::new(block_cache),
             block_metadata: vec![
                 BlockMetadata{offset: 0, first_key: Key::create_from_str("Alberto", 0), last_key: Key::create_from_str("Berto", 0)},

@@ -25,6 +25,10 @@ pub struct MemtableIterator {
 
 impl MemtableIterator {
     pub fn create(memtable: &Arc<MemTable>, transaction: &Transaction) -> MemtableIterator {
+        for entry in memtable.data.iter() {
+            println!("{:?} => {:?}", entry.key().as_bytes(), entry.value());
+        }
+
         MemtableIterator {
             transaction: transaction.clone(),
             memtable: memtable.clone(),

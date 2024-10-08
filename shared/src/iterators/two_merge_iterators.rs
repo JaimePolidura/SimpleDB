@@ -36,26 +36,44 @@ impl<A: StorageIterator, B: StorageIterator> TwoMergeIterator<A, B> {
             self.b.next();
         }
     }
+
+    fn first_iteration(&mut self) -> bool {
+        self.first_iteration = false;
+        let a_advanced = self.a.next();
+        let b_advanced = self.b.next();
+
+        if !a_advanced && !b_advanced {
+            return false;
+        }
+        if a_advanced && !b_advanced {
+            self.choose_a = true;
+        }
+        if !a_advanced && b_advanced {
+            self.choose_a = false;
+        }
+        if a_advanced && b_advanced {
+            self.skip_b_duplicates();
+            self.choose_a = self.choose_a();
+        }
+
+        true
+    }
 }
 
 impl<A: StorageIterator, B: StorageIterator> StorageIterator for TwoMergeIterator<A, B> {
     fn next(&mut self) -> bool {
+        if !self.has_next() {
+            return false;
+        }
         if self.first_iteration {
-            self.first_iteration = false;
-            self.a.next();
-            self.b.next();
-            self.skip_b_duplicates();
-            self.choose_a = self.choose_a();
-            return true;
+            return self.first_iteration();
         }
 
-        let mut advanced: bool = false;
-
-        if self.choose_a {
-            advanced = self.a.next();
+        let mut advanced: bool = if self.choose_a {
+            self.a.next()
         } else { //Choose b
-            advanced = self.b.next();
-        }
+            self.b.next()
+        };
 
         self.skip_b_duplicates();
         self.choose_a = self.choose_a();
@@ -98,6 +116,41 @@ mod test {
     use bytes::Bytes;
     use crate::assertions;
     use crate::iterators::storage_iterator::StorageIterator;
+
+    #[test]
+    fn multiple_entries_only_one_iterator() {
+        assertions::assert_iterator_str_seq(
+            TwoMergeIterator::create(
+                MockIterator::create_from_strs_values(vec!["a", "b", "c"]),
+                MockIterator::create(),
+            ),
+            vec!["a", "b", "c"]
+        );
+    }
+
+    #[test]
+    fn only_one_entry() {
+        assertions::assert_iterator_str_seq(
+            TwoMergeIterator::create(
+                MockIterator::create_from_strs_values(vec!["a"]),
+                MockIterator::create(),
+            ),
+            vec!["a"]
+        );
+    }
+
+    #[test]
+    fn empty_iterator() {
+        let mut iterator = TwoMergeIterator::create(
+            MockIterator::create(),
+            MockIterator::create(),
+        );
+
+        //No effect
+        iterator.seek(&Bytes::from("d"), false);
+
+        assertions::assert_empty_iterator(iterator);
+    }
 
     // A -> B -> D
     // A -> C -> D -> F

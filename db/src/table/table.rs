@@ -1,5 +1,6 @@
 use crate::database::database::Database;
 use crate::index::index_creation_task::IndexCreationTask;
+use crate::index::index_type::IndexType;
 use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 use crate::index::secondary_indexes::SecondaryIndexes;
 use crate::selection::Selection;
@@ -18,11 +19,8 @@ use std::hash::Hasher;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{fence, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use shared::logger::logger;
-use shared::logger::SimpleDbLayer::DB;
 use storage::transactions::transaction::Transaction;
 use storage::{SimpleDbStorageIterator, Storage};
-use crate::index::index_type::IndexType;
 
 pub struct Table {
     pub(crate) storage_keyspace_id: KeyspaceId,

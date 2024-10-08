@@ -4,20 +4,19 @@ use crate::memtables::wal::Wal;
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::TransactionManager;
-use shared::iterators::storage_iterator::StorageIterator;
 use crate::utils::tombstone::TOMBSTONE;
 use bytes::{Buf, Bytes};
 use crossbeam_skiplist::{SkipMap, SkipSet};
+use shared::iterators::storage_iterator::StorageIterator;
+use shared::key::Key;
+use shared::logger::{logger, SimpleDbLayer};
 use shared::{Flag, StorageValueMergeResult};
 use std::cell::UnsafeCell;
-use std::mem::forget;
 use std::ops::Bound::Excluded;
 use std::ops::Shl;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
-use shared::key::Key;
-use shared::logger::{logger, SimpleDbLayer};
 
 pub struct MemTable {
     pub(crate) data: Arc<SkipMap<Key, Bytes>>,
@@ -62,25 +61,6 @@ impl MemTable {
         })
     }
 
-    pub fn create_mock(
-        options: Arc<shared::SimpleDbOptions>,
-        memtable_id: shared::MemtableId,
-        keyspace_flags: Flag
-    ) -> Result<MemTable, shared::SimpleDbError> {
-        Ok(MemTable {
-            wal: UnsafeCell::new(Wal::create_mock(options.clone(), memtable_id)?),
-            max_size_bytes: options.memtable_max_size_bytes,
-            current_size_bytes: AtomicUsize::new(0),
-            state: UnsafeCell::new(MemtableState::Active),
-            data: Arc::new(SkipMap::new()),
-            txn_ids_written: SkipSet::new(),
-            keyspace_id: 0,
-            keyspace_flags,
-            memtable_id,
-            options,
-        })
-    }
-
     pub fn create_and_recover_from_wal(
         options: Arc<shared::SimpleDbOptions>,
         memtable_id: shared::MemtableId,
@@ -104,6 +84,25 @@ impl MemTable {
         memtable.recover_from_wal();
 
         Ok(memtable)
+    }
+
+    pub fn create_mock(
+        options: Arc<shared::SimpleDbOptions>,
+        memtable_id: shared::MemtableId,
+        keyspace_flags: Flag
+    ) -> Result<MemTable, shared::SimpleDbError> {
+        Ok(MemTable {
+            wal: UnsafeCell::new(Wal::create_mock(options.clone(), memtable_id)?),
+            max_size_bytes: options.memtable_max_size_bytes,
+            current_size_bytes: AtomicUsize::new(0),
+            state: UnsafeCell::new(MemtableState::Active),
+            data: Arc::new(SkipMap::new()),
+            txn_ids_written: SkipSet::new(),
+            keyspace_id: 0,
+            keyspace_flags,
+            memtable_id,
+            options,
+        })
     }
 
     pub fn has_txn_id_been_written(&self, txn_id: shared::TxnId) -> bool {
