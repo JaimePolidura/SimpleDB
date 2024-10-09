@@ -639,4 +639,10 @@ impl Table {
             None => Err(ColumnNotFound(self.storage_keyspace_id, column_name.to_string()))
         }
     }
+
+    pub fn is_secondary_indexed(&self, column_name: &str) -> bool {
+        let column_desc = self.get_column_desc_or_err(column_name)
+            .unwrap();
+        self.secondary_indexes.has(column_desc.column_id)
+    }
 }

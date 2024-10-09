@@ -1,25 +1,32 @@
-use crate::sql::expression::{BinaryOperator, Expression};
-use crate::sql::plan::plan_step::PlanStep;
-use crate::sql::statement::Limit;
+use crate::sql::expression::Expression;
 use bytes::Bytes;
-use shared::{utils, SimpleDbError};
+use shared::SimpleDbError;
 use SimpleDbError::MalformedQuery;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScanType {
     Full,
+
+    //Expression: Should produce the literal value which will be the primary key
+    ExactPrimary(Expression),
+    //String: Should
+    //Expression: Should produce the literal value which will be the secondary key
+    ExactSecondary(String, Expression),
+
+    Merge(ScanType, ScanType),
+    ConditionalMerge(ScanType, ScanType),
+
     // min < values < expression
     Range(RangeScan),
-    //This expression should produce the literal value which will be the primary key
-    Exact(Expression),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RangeScan {
-    start: Option<Expression>,
-    start_inclusive: bool,
-    end: Option<Expression>,
-    end_inclusive: bool,
+    pub(crate) column_name: String,
+    pub(crate) start: Option<Expression>,
+    pub(crate) start_inclusive: bool,
+    pub(crate) end: Option<Expression>,
+    pub(crate) end_inclusive: bool,
 }
 
 pub enum RangeKeyPosition {
@@ -29,174 +36,12 @@ pub enum RangeKeyPosition {
 }
 
 impl ScanType {
-    //Expect expressions to have been passed to evaluate_constant() before calling this function
-    pub fn get_scan_type(
-        primary_column_name: &str,
-        limit: &Limit,
-        expression: &Expression,
-    ) -> Result<ScanType, SimpleDbError> {
-        match expression {
-            Expression::Binary(operator, left, right) => {
-                Self::get_scan_type_binary_expr(primary_column_name, *operator, left, right, limit)
-            },
-            Expression::Unary(_, expr) => {
-                if expr.is_constant() {
-                    Ok(ScanType::Exact(*expr.clone()))
-                } else {
-                    Ok(ScanType::Full)
-                }
-            },
-            Expression::Identifier(identifier) => {
-                if identifier == &primary_column_name {
-                    Ok(ScanType::Exact(expression.clone()))
-                } else {
-                    //Not querying by primary key -> full steps
-                    Ok(ScanType::Full)
-                }
-            }
-            //The rest of expressions are literals: String, Numbers, boolean etc.
-            other => Ok(ScanType::Exact(other.clone())),
-        }
-    }
-
-    fn get_scan_type_binary_expr(
-        primary_column_name: &str,
-        operator: BinaryOperator,
-        left: &Box<Expression>,
-        right: &Box<Expression>,
-        limit: &Limit
-    ) -> Result<ScanType, SimpleDbError> {
-        match operator {
-            BinaryOperator::And => {
-                Self::get_scan_type_logical_expr(primary_column_name, operator, left, right, limit)
-            },
-            BinaryOperator::Or => {
-                Self::get_scan_type_logical_expr(primary_column_name, operator, left, right, limit)
-            },
-            BinaryOperator::Add |
-            BinaryOperator::Subtract |
-            BinaryOperator::Multiply |
-            BinaryOperator::Divide => {
-                Ok(ScanType::Full)
-            },
-            BinaryOperator::Equal => {
-                if right.is_constant() && left.identifier_eq(primary_column_name) {
-                    Ok(ScanType::Exact(*right.clone()))
-                } else {
-                    Ok(ScanType::Full)
-                }
-            }
-            BinaryOperator::NotEqual => {
-                Ok(ScanType::Full)
-            },
-            BinaryOperator::GreaterEqual |
-            BinaryOperator::Greater => {
-                if right.is_constant() && left.identifier_eq(primary_column_name) {
-                    Ok(ScanType::Range(RangeScan{
-                        start: Some(*right.clone()),
-                        start_inclusive: matches!(operator, BinaryOperator::GreaterEqual),
-                        end: None,
-                        end_inclusive: false,
-                    }))
-                } else {
-                    Ok(ScanType::Full)
-                }
-            },
-            BinaryOperator::LessEqual |
-            BinaryOperator::Less => {
-                if right.is_constant() && left.identifier_eq(&primary_column_name){
-                    Ok(ScanType::Range(RangeScan{
-                        start: None,
-                        start_inclusive: false,
-                        end: Some(*right.clone()),
-                        end_inclusive: matches!(operator, BinaryOperator::LessEqual),
-                    }))
-                } else {
-                    Ok(ScanType::Full)
-                }
-            }
-        }
-    }
-
-    fn get_scan_type_logical_expr(
-        primary_column_name: &str,
-        binary_operator: BinaryOperator,
-        left: &Box<Expression>,
-        right: &Box<Expression>,
-        limit: &Limit
-    ) -> Result<ScanType, SimpleDbError> {
-        let scan_type_right = Self::get_scan_type(primary_column_name, &limit, right)?;
-        let scan_type_left = Self::get_scan_type(primary_column_name, &limit, left)?;
-
-        //Check same value
-        if utils::enum_eq(&scan_type_left, &scan_type_right) {
-            return Self::merge_scan_types(binary_operator, scan_type_left, scan_type_right);
-        }
-
-        match binary_operator {
-            BinaryOperator::And => {
-                let full_range = (scan_type_left.is_full() && scan_type_right.is_range()) ||
-                    (scan_type_left.is_range() && scan_type_right.is_full());
-                let full_exact = (scan_type_left.is_full() && scan_type_right.is_exact()) ||
-                    (scan_type_left.is_exact() && scan_type_right.is_full());
-                let range_exact = (scan_type_left.is_range() && scan_type_right.is_exact()) ||
-                    (scan_type_left.is_exact() && scan_type_right.is_range());
-
-                if full_range {
-                    let range = match scan_type_left {
-                        ScanType::Full => match scan_type_right { ScanType::Range(range) => range, _ => panic!("") },
-                        ScanType::Range(range) => range,
-                        _ => panic!("Invalid code path")
-                    };
-                    return Ok(ScanType::Range(range));
-                } else if full_exact || range_exact {
-                    return Ok(ScanType::Exact(match (scan_type_left, scan_type_right) {
-                        (ScanType::Exact(exact), _) => exact,
-                        (_, ScanType::Exact(exact)) => exact,
-                        _ => panic!("Invalid code path")
-                    }));
-                }
-
-                 panic!("Illegal code path");
-            },
-            BinaryOperator::Or => Ok(ScanType::Full),
-            _ => panic!("Illegal code path")
-        }
-    }
-
-    fn merge_scan_types(
-        binary_operator: BinaryOperator,
-        a: ScanType,
-        b: ScanType
-    ) -> Result<ScanType, SimpleDbError> {
-        match (a, b) {
-            (ScanType::Full, ScanType::Full) => Ok(ScanType::Full),
-            (ScanType::Exact(a), ScanType::Exact(b)) => {
-                if matches!(binary_operator, BinaryOperator::And) {
-                    Err(MalformedQuery(String::from("Invalid range")))
-                } else {
-                    Ok(ScanType::Full)
-                }
-            },
-            (ScanType::Range(range_left), ScanType::Range(range_right)) => {
-                match binary_operator {
-                    BinaryOperator::And => {
-                        Ok(ScanType::Range(range_left.and(range_right)?))
-                    },
-                    BinaryOperator::Or => Ok(ScanType::Full), //TODO Optimize
-                    _ => panic!("")
-                }
-            },
-            _ => panic!("Illegal code path")
-        }
-    }
-
     pub fn is_range(&self) -> bool {
         matches!(self, ScanType::Range(_))
     }
 
-    pub fn is_exact(&self) -> bool {
-        matches!(self, ScanType::Exact(_))
+    pub fn is_exact_primary(&self) -> bool {
+        matches!(self, ScanType::ExactPrimary(_))
     }
 
     pub fn is_full(&self) -> bool {
@@ -212,6 +57,7 @@ impl RangeScan {
     pub fn and(&self, other: RangeScan) -> Result<RangeScan, SimpleDbError> {
         if self.has_only_start() && other.has_only_end() {
             let range_scan = RangeScan {
+                column_name: other.column_name,
                 start: self.start.clone(),
                 start_inclusive: self.start_inclusive,
                 end: other.end.clone(),
@@ -222,6 +68,7 @@ impl RangeScan {
         }
         if self.has_only_end() && other.has_only_start() {
             let range_scan = RangeScan {
+                column_name: other.column_name,
                 start: other.start.clone(),
                 start_inclusive: other.start_inclusive,
                 end: self.end.clone(),
@@ -231,6 +78,7 @@ impl RangeScan {
             return Ok(range_scan);
         }
         let mut result = RangeScan::empty();
+        result.column_name = self.column_name.clone();
         if self.has_start() && other.has_start() {
             let start_self = self.start.clone().unwrap();
             let start_other = other.start.clone().unwrap();
@@ -267,6 +115,10 @@ impl RangeScan {
         }
 
         Ok(())
+    }
+
+    pub fn same_column(&self, other: &RangeScan) -> bool {
+        self.column_name.eq(&other.column_name)
     }
 
     pub fn get_position(&self, other_key: &Bytes) -> RangeKeyPosition {
@@ -320,147 +172,11 @@ impl RangeScan {
 
     pub fn empty() -> RangeScan {
         RangeScan {
+            column_name: String::from(""),
             start: None,
             start_inclusive: false,
             end: None,
             end_inclusive: false,
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::sql::expression::{BinaryOperator, Expression};
-    use crate::sql::plan::scan_type::ScanType;
-    use crate::sql::statement::Limit;
-    use crate::value::Value;
-
-    //WHERE id >= 1 OR dinero < 100
-    #[test]
-    fn range_compound_or() {
-        let result = ScanType::get_scan_type("id", &Limit::None, &Expression::Binary(
-            BinaryOperator::Or,
-            Box::new(Expression::Binary(
-                BinaryOperator::GreaterEqual,
-                Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::Literal(Value::I64(1))),
-            )),
-            Box::new(Expression::Binary(
-                BinaryOperator::Less,
-                Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::Literal(Value::I64(100))),
-            ))
-        )).unwrap();
-        assert_eq!(result, ScanType::Full);
-    }
-
-    //WHERE id >= 1 AND dinero < 100
-    #[test]
-    fn range_compound_and() {
-        let result = ScanType::get_scan_type("id", &Limit::None, &Expression::Binary(
-            BinaryOperator::And,
-            Box::new(Expression::Binary(
-                BinaryOperator::GreaterEqual,
-                Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::Literal(Value::I64(1))),
-            )),
-            Box::new(Expression::Binary(
-                BinaryOperator::Less,
-                Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::Literal(Value::I64(100))),
-            ))
-        )).unwrap();
-
-        let range_scan = match result { ScanType::Range(value) => value, _ => panic!("") };
-        assert!(range_scan.start.is_some());
-        assert!(range_scan.start_inclusive);
-        assert_eq!(range_scan.start.as_ref().unwrap().clone(), Expression::Literal(Value::I64(1)));
-
-        assert!(range_scan.end.is_some());
-        assert!(!range_scan.end_inclusive);
-        assert_eq!(range_scan.end.as_ref().unwrap().clone(), Expression::Literal(Value::I64(100)));
-    }
-
-    //WHERE id >= 1 OR dinero == 100
-    #[test]
-    fn simple_range_or() {
-        let result = ScanType::get_scan_type("id", &Limit::None, &Expression::Binary(
-            BinaryOperator::Or,
-            Box::new(Expression::Binary(
-                BinaryOperator::GreaterEqual,
-                Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::Literal(Value::I64(1))),
-            )),
-            Box::new(Expression::Binary(
-                BinaryOperator::Equal,
-                Box::new(Expression::Identifier(String::from("dinero"))),
-                Box::new(Expression::Literal(Value::I64(100))),
-            ))
-        )).unwrap();
-        assert_eq!(result, ScanType::Full);
-    }
-
-    //WHERE id >= 1 AND dinero == 100
-    #[test]
-    fn simple_range_and() {
-        let result = ScanType::get_scan_type("id", &Limit::None, &Expression::Binary(
-            BinaryOperator::And,
-            Box::new(Expression::Binary(
-                BinaryOperator::GreaterEqual,
-                Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::Literal(Value::I64(1))),
-            )),
-            Box::new(Expression::Binary(
-                BinaryOperator::Equal,
-                Box::new(Expression::Identifier(String::from("dinero"))),
-                Box::new(Expression::Literal(Value::I64(100))),
-            ))
-        )).unwrap();
-
-        let range_scan = match result { ScanType::Range(value) => value, _ => panic!("") };
-        assert!(range_scan.start.is_some());
-        assert!(range_scan.start_inclusive);
-        assert_eq!(range_scan.start.as_ref().unwrap().clone(), Expression::Literal(Value::I64(1)));
-    }
-
-    //WHERE id == 1 AND dinero == 100
-    #[test]
-    fn simple_exact_and() {
-        let result = ScanType::get_scan_type("id", &Limit::None, &Expression::Binary(
-            BinaryOperator::And,
-            Box::new(Expression::Binary(
-                BinaryOperator::Equal,
-                Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::Literal(Value::I64(1))),
-            )),
-            Box::new(Expression::Binary(
-                BinaryOperator::Equal,
-                Box::new(Expression::Identifier(String::from("dinero"))),
-                Box::new(Expression::Literal(Value::I64(100))),
-            ))
-        )).unwrap();
-
-        let result = match result { ScanType::Exact(value) => value, _ => panic!("") };
-
-        assert_eq!(result, Expression::Literal(Value::I64(1)));
-    }
-
-    //WHERE id == 1 OR dinero == 100
-    #[test]
-    fn simple_full_or() {
-        let result = ScanType::get_scan_type("id", &Limit::None, &Expression::Binary(
-            BinaryOperator::Or,
-            Box::new(Expression::Binary(
-                BinaryOperator::Equal,
-                Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::Literal(Value::I64(1))),
-            )),
-            Box::new(Expression::Binary(
-                BinaryOperator::Equal,
-                Box::new(Expression::Identifier(String::from("dinero"))),
-                Box::new(Expression::Literal(Value::I64(100))),
-            ))
-        )).unwrap();
-        assert_eq!(result, ScanType::Full);
     }
 }

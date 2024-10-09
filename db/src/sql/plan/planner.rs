@@ -13,6 +13,7 @@ use shared::SimpleDbError::{FullScanNotAllowed, MalformedQuery, RangeScanNotAllo
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::sql::plan::scan_type_analyzer::ScanTypeAnalyzer;
 
 pub struct Planner {
     options: Arc<SimpleDbOptions>
@@ -110,7 +111,8 @@ impl Planner {
                     return Err(RangeScanNotAllowed());
                 }
             }
-            ScanType::Exact(_) => {}
+            ScanType::ExactPrimary(_) => {}
+            ScanType::ExactSecondary(_, _) => panic!("")
         };
 
         Ok(scan_type)
@@ -124,9 +126,10 @@ impl Planner {
         table: &Arc<Table>,
     ) -> Result<Plan, SimpleDbError> {
         match scan_type {
-            ScanType::Exact(exact_id_expr) => ExactScanStep::create(table.clone(), exact_id_expr.serialize(), selection, transaction),
+            ScanType::ExactPrimary(exact_id_expr) => ExactScanStep::create(table.clone(), exact_id_expr.serialize(), selection, transaction),
             ScanType::Range(range) => RangeScanStep::create(table.clone(), selection, transaction, range),
             ScanType::Full => FullScanStep::create(table.clone(), selection, transaction),
+            _ => panic!("")
         }
     }
 
@@ -136,10 +139,15 @@ impl Planner {
         table: &Arc<Table>,
         limit: &Limit,
     ) -> Result<ScanType, SimpleDbError> {
-        let primary_column_name = table.get_primary_column_data().unwrap().column_name;
-
         match expression {
-            Some(expression) => ScanType::get_scan_type(&primary_column_name, limit, expression),
+            Some(expression) => {
+                let scan_type_analyzer = ScanTypeAnalyzer::create(
+                    table.clone(),
+                    limit.clone(),
+                    expression.clone()
+                );
+                scan_type_analyzer.analyze()
+            },
             None => Ok(ScanType::Full),
         }
     }

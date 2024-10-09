@@ -5,6 +5,7 @@ use std::cmp::max;
 use std::path::PathBuf;
 use std::sync::Arc;
 use crate::value::Type;
+use crate::value::Type::I64;
 
 const NO_INDEX: KeyspaceId = 0xFFFFFFFFFFFFFFFF;
 
@@ -168,6 +169,26 @@ impl TableDescriptor {
 }
 
 impl ColumnDescriptor {
+    pub fn create_primary(name: &str) -> ColumnDescriptor {
+        ColumnDescriptor {
+            column_id: 0,
+            column_type: I64,
+            column_name: name.to_string(),
+            is_primary: true,
+            secondary_index_keyspace_id: None
+        }
+    }
+
+    pub fn create(name: &str, column_id: ColumnId) -> ColumnDescriptor {
+        ColumnDescriptor {
+            secondary_index_keyspace_id: None,
+            column_name: name.to_string(),
+            is_primary: false,
+            column_type: I64,
+            column_id,
+        }
+    }
+
     pub fn deserialize(
         keyspace_id: KeyspaceId,
         n_column: usize,

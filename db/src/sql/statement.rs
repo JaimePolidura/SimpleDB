@@ -19,6 +19,7 @@ pub enum Statement {
     ShowTables,
 }
 
+#[derive(Clone)]
 pub enum Limit {
     None,
     Some(usize)

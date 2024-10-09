@@ -72,6 +72,13 @@ impl Expression {
         }
     }
 
+    pub fn get_identifier(&self) -> Result<String, SimpleDbError> {
+        match self {
+            Expression::Identifier(actual_identifier) => Ok(actual_identifier.clone()),
+            _ => Err(MalformedQuery(String::from("Cannot get identifier from expression"))),
+        }
+    }
+
     pub fn identifier_eq(&self, expected_identifier: &str) -> bool {
         match self {
             Expression::Identifier(actual_identifier) => actual_identifier == expected_identifier,
