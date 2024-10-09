@@ -7,24 +7,24 @@ use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use crate::table::table::Table;
 
-pub struct ExactScanStep {
+pub struct PrimaryExactScanStep {
     row: Option<Row>
 }
 
-impl ExactScanStep {
+impl PrimaryExactScanStep {
     pub fn create(
         table: Arc<Table>,
         id: Bytes,
         selection: Selection,
         transaction: &Transaction
     ) -> Result<Plan, SimpleDbError> {
-        Ok(Box::new(ExactScanStep {
+        Ok(Box::new(PrimaryExactScanStep {
             row: table.get_by_primary_column(&id, transaction, &selection)?
         }))
     }
 }
 
-impl PlanStep for ExactScanStep {
+impl PlanStep for PrimaryExactScanStep {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         Ok(self.row.take())
     }

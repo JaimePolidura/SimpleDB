@@ -29,10 +29,6 @@ pub struct SimpleDbOptions {
     pub server_password: String,
     pub server_port: u16,
 
-    //DB Layer options
-    pub db_range_scan_allowed: bool,
-    pub db_full_scan_allowed: bool,
-
     //Storage engine layer options
     pub simple_leveled_compaction_options: SimpleLeveledCompactionOptions,
     #[serde(skip)]
@@ -81,11 +77,9 @@ impl Default for SimpleDbOptions {
             memtable_max_size_bytes: 1048576, //1Mb
             n_cached_blocks_per_sstable: 8, //Expect power of two
             bloom_filter_n_entries: 32768, //4kb of bloom filter so it fits in a page
-            db_range_scan_allowed: true,
             storage_value_merger: None,
             sst_size_bytes: 268435456, //256 MB ~ 64 blocks
             max_memtables_inactive: 8,
-            db_full_scan_allowed: true,
             block_size_bytes: 4096, //4kb
             use_debug_logging: true,
             server_port: 8888,

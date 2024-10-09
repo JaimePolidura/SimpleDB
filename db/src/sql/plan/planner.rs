@@ -2,7 +2,7 @@ use crate::selection::Selection;
 use crate::sql::expression::Expression;
 use crate::sql::plan::plan_step::Plan;
 use crate::sql::plan::scan_type::ScanType;
-use crate::sql::plan::steps::exact_scan_step::ExactScanStep;
+use crate::sql::plan::steps::primary_exact_scan_step::PrimaryExactScanStep;
 use crate::sql::plan::steps::filter_step::FilterStep;
 use crate::sql::plan::steps::full_scan_step::FullScanStep;
 use crate::sql::plan::steps::limit_step::LimitStep;
@@ -13,7 +13,11 @@ use shared::SimpleDbError::{FullScanNotAllowed, MalformedQuery, RangeScanNotAllo
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::sql::plan::scan_type::ScanType::{MergeIntersection, MergeUnion};
 use crate::sql::plan::scan_type_analyzer::ScanTypeAnalyzer;
+use crate::sql::plan::steps::merge_intersection_scan_type::MergeIntersectionScanType;
+use crate::sql::plan::steps::merge_union_scan_step::MergeUnionScanStep;
+use crate::sql::plan::steps::secondary_scan_type::SecondaryExactScanType;
 
 pub struct Planner {
     options: Arc<SimpleDbOptions>
@@ -76,10 +80,9 @@ impl Planner {
         select_statement: DeleteStatement,
         transaction: &Transaction
     ) -> Result<Plan, SimpleDbError> {
-        let scan_type = self.get_and_validate_scan_type(
+        let scan_type = self.get_scan_type(
             &select_statement.where_expr,
             table,
-            &select_statement.limit
         )?;
         let mut last_step = self.build_scan_step(scan_type, transaction, Selection::All, table)?;
 
@@ -93,31 +96,6 @@ impl Planner {
         Ok(last_step)
     }
 
-    fn get_and_validate_scan_type(
-        &self,
-        expression: &Option<Expression>,
-        table: &Arc<Table>,
-        limit: &Limit,
-    ) -> Result<ScanType, SimpleDbError> {
-        let scan_type = self.get_scan_type(expression, &table, limit)?;
-        match scan_type {
-            ScanType::Full => {
-                if !self.options.db_full_scan_allowed {
-                    return Err(FullScanNotAllowed());
-                }
-            },
-            ScanType::Range(_) => {
-                if !self.options.db_range_scan_allowed {
-                    return Err(RangeScanNotAllowed());
-                }
-            }
-            ScanType::ExactPrimary(_) => {}
-            ScanType::ExactSecondary(_, _) => panic!("")
-        };
-
-        Ok(scan_type)
-    }
-
     fn build_scan_step(
         &self,
         scan_type: ScanType,
@@ -126,10 +104,28 @@ impl Planner {
         table: &Arc<Table>,
     ) -> Result<Plan, SimpleDbError> {
         match scan_type {
-            ScanType::ExactPrimary(exact_id_expr) => ExactScanStep::create(table.clone(), exact_id_expr.serialize(), selection, transaction),
-            ScanType::Range(range) => RangeScanStep::create(table.clone(), selection, transaction, range),
-            ScanType::Full => FullScanStep::create(table.clone(), selection, transaction),
-            _ => panic!("")
+            ScanType::ExactSecondary(column, exact_id_expr) => {
+                SecondaryExactScanType::create(table.clone(), &column, exact_id_expr.serialize(), transaction, selection)
+            },
+            ScanType::ExactPrimary(exact_id_expr) => {
+                PrimaryExactScanStep::create(table.clone(), exact_id_expr.serialize(), selection, transaction)
+            },
+            ScanType::Range(range) => {
+                RangeScanStep::create(table.clone(), selection, transaction, range)
+            },
+            ScanType::Full => {
+                FullScanStep::create(table.clone(), selection, transaction)
+            },
+            ScanType::MergeUnion(left_scan_type, right_scan_type) => {
+                let left_scan_step = self.build_scan_step(left_scan_type, transaction, selection.clone(), table)?;
+                let right_scan_step = self.build_scan_step(right_scan_type, transaction, selection.clone(), table)?;
+                MergeUnionScanStep::create(left_scan_step, right_scan_step)
+            }
+            ScanType::MergeIntersection(left_scan_type, right_scan_type) => {
+                let left_scan_step = self.build_scan_step(left_scan_type, transaction, selection.clone(), table)?;
+                let right_scan_step = self.build_scan_step(right_scan_type, transaction, selection.clone(), table)?;
+                MergeIntersectionScanType::create(left_scan_step, right_scan_step)
+            }
         }
     }
 
@@ -137,13 +133,11 @@ impl Planner {
         &self,
         expression: &Option<Expression>,
         table: &Arc<Table>,
-        limit: &Limit,
     ) -> Result<ScanType, SimpleDbError> {
         match expression {
             Some(expression) => {
                 let scan_type_analyzer = ScanTypeAnalyzer::create(
                     table.clone(),
-                    limit.clone(),
                     expression.clone()
                 );
                 scan_type_analyzer.analyze()

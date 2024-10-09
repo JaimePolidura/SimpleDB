@@ -1,29 +1,24 @@
-use std::panic::set_hook;
 use crate::sql::expression::{BinaryOperator, Expression};
 use crate::sql::plan::scan_type::{RangeScan, ScanType};
 use crate::table::table::Table;
-use crate::Limit;
+use shared::SimpleDbError;
 use shared::SimpleDbError::MalformedQuery;
-use shared::{utils, SimpleDbError};
 use std::sync::Arc;
 
 pub struct ScanTypeAnalyzer {
     table: Arc<Table>,
     expression: Expression,
-    limit: Limit
 }
 
 impl ScanTypeAnalyzer {
     //Expect expressions to have been passed to evaluate_constant() before calling this function
     pub fn create(
         table: Arc<Table>,
-        limit: Limit,
         expression: Expression,
     ) -> ScanTypeAnalyzer {
         ScanTypeAnalyzer {
             expression,
             table,
-            limit
         }
     }
 
@@ -115,39 +110,39 @@ impl ScanTypeAnalyzer {
     // full AND|OR full -> full
     // full AND primary|secondary -> primary|secondary
     // full OR primary|secondary -> full
-    // full AND merge|conditional_merge -> merge|conditional_merge
-    // full OR merge|conditional_merge -> full
+    // full AND merge_union|merge_intersection -> merge|merge_intersection
+    // full OR merge_union|merge_intersection -> full
     // full OR range -> full
     // full AND range -> range
     //
     // primary AND primary -> error
-    // primary OR primary -> merge
+    // primary OR primary -> merge_union
     // primary AND secondary -> primary
     // primary OR secondary -> secondary
-    // primary AND merge|conditional_merge -> primary
-    // primary OR merge|conditional_merge -> merge|conditional_merge
+    // primary AND merge_union|merge_intersection -> primary
+    // primary OR merge_union|merge_intersection -> merge|merge_intersection
     // primary AND range -> primary
     // primary OR range -> merge
     //
     // secondary AND secondary -> error
     // secondary OR secondary -> merge
-    // secondary AND merge|conditional_merge -> secondary
-    // secondary OR merge|conditional_merge -> merge|conditional_merge
+    // secondary AND merge_union|merge_intersection -> secondary
+    // secondary OR merge_union|merge_intersection -> merge_union|merge_intersection
     // secondary AND range -> secondary
     // secondary OR range -> merge
     //
-    // merge AND merge|conditional_merge -> conditional_merge
-    // merge OR merge|conditional_merge -> merge
-    // merge AND range -> conditional_merge
-    // merge OR range -> merge
+    // merge_union AND merge_union|merge_intersection -> merge_intersection
+    // merge_union OR merge_union|merge_intersection -> merge_union
+    // merge_union AND range -> merge_intersection
+    // merge_union OR range -> merge_union
     //
-    // conditional_merge AND conditional_merge -> conditional_merge
-    // conditional_merge OR conditional_merge -> merge
-    // conditional_merge AND range -> conditional_merge
-    // conditional_merge OR range -> merge
+    // merge_intersection AND merge_intersection -> merge_intersection
+    // merge_intersection OR merge_intersection -> merge_union
+    // merge_intersection AND range -> merge_intersection
+    // merge_intersection OR range -> merge_union
     //
-    // range AND range -> conditional_merge
-    // range OR range -> merge
+    // range AND range -> merge_intersection
+    // range OR range -> merge_union
     fn merge_scan_types(
         &self,
         binary_operator: BinaryOperator,
@@ -173,18 +168,18 @@ impl ScanTypeAnalyzer {
                     Ok(ScanType::Full)
                 }
             },
-            (ScanType::Full, ScanType::Merge(left_merge, right_merge)) |
-            (ScanType::Merge(left_merge, right_merge), ScanType::Full) => {
+            (ScanType::Full, ScanType::MergeUnion(left_merge, right_merge)) |
+            (ScanType::MergeUnion(left_merge, right_merge), ScanType::Full) => {
                 if matches!(binary_operator, BinaryOperator::And) {
-                    Ok(ScanType::Merge(left_merge.clone(), right_merge.clone()))
+                    Ok(ScanType::MergeUnion(left_merge.clone(), right_merge.clone()))
                 } else { //Or binary operator
                     Ok(ScanType::Full)
                 }
             },
-            (ScanType::Full, ScanType::ConditionalMerge(left_merge, right_merge)) |
-            (ScanType::ConditionalMerge(left_merge, right_merge), ScanType::Full) => {
+            (ScanType::Full, ScanType::MergeIntersection(left_merge, right_merge)) |
+            (ScanType::MergeIntersection(left_merge, right_merge), ScanType::Full) => {
                 if matches!(binary_operator, BinaryOperator::And) {
-                    Ok(ScanType::ConditionalMerge(left_merge.clone(), right_merge.clone()))
+                    Ok(ScanType::MergeIntersection(left_merge.clone(), right_merge.clone()))
                 } else { //Or binary operator
                     Ok(ScanType::Full)
                 }
@@ -202,7 +197,7 @@ impl ScanTypeAnalyzer {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Err(MalformedQuery(String::from("Invalid range")))
                 } else { //Or binary operator
-                    Ok(ScanType::Merge(a, b))
+                    Ok(ScanType::MergeUnion(a, b))
                 }
             },
             (ScanType::ExactPrimary(primary_expr), ScanType::ExactSecondary(_, _)) |
@@ -210,23 +205,23 @@ impl ScanTypeAnalyzer {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactPrimary(primary_expr.clone()))
                 } else { //Or binary operator
-                    Ok(ScanType::Merge(a, b))
+                    Ok(ScanType::MergeUnion(a, b))
                 }
             },
-            (ScanType::ExactPrimary(primary_expr), ScanType::Merge(_, _)) |
-            (ScanType::Merge(_, _), ScanType::ExactPrimary(primary_expr)) => {
+            (ScanType::ExactPrimary(primary_expr), ScanType::MergeUnion(_, _)) |
+            (ScanType::MergeUnion(_, _), ScanType::ExactPrimary(primary_expr)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactPrimary(primary_expr.clone()))
                 } else {
-                    Ok(ScanType::Merge(a, b))
+                    Ok(ScanType::MergeUnion(a, b))
                 }
             },
-            (ScanType::ExactPrimary(primary_expr), ScanType::ConditionalMerge(_, _)) |
-            (ScanType::ConditionalMerge(_, _), ScanType::ExactPrimary(primary_expr)) => {
+            (ScanType::ExactPrimary(primary_expr), ScanType::MergeIntersection(_, _)) |
+            (ScanType::MergeIntersection(_, _), ScanType::ExactPrimary(primary_expr)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactPrimary(primary_expr.clone()))
                 } else {
-                    Ok(ScanType::ConditionalMerge(a, b))
+                    Ok(ScanType::MergeIntersection(a, b))
                 }
             },
             (ScanType::ExactPrimary(primary_expr), ScanType::Range(range)) |
@@ -234,7 +229,7 @@ impl ScanTypeAnalyzer {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactPrimary(primary_expr.clone()))
                 } else {
-                    Ok(ScanType::Merge(a, b))
+                    Ok(ScanType::MergeUnion(a, b))
                 }
             },
             //Secondary rules
@@ -242,23 +237,23 @@ impl ScanTypeAnalyzer {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Err(MalformedQuery(String::from("Invalid range")))
                 } else {
-                    Ok(ScanType::Merge(a, b))
+                    Ok(ScanType::MergeUnion(a, b))
                 }
             }
-            (ScanType::ExactSecondary(column, secondary_expr), ScanType::Merge(_, _)) |
-            (ScanType::Merge(_, _), ScanType::ExactSecondary(column, secondary_expr)) => {
+            (ScanType::ExactSecondary(column, secondary_expr), ScanType::MergeUnion(_, _)) |
+            (ScanType::MergeUnion(_, _), ScanType::ExactSecondary(column, secondary_expr)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactSecondary(column.clone(), secondary_expr.clone()))
                 } else {
-                    Ok(ScanType::Merge(a, b))
+                    Ok(ScanType::MergeUnion(a, b))
                 }
             },
-            (ScanType::ExactSecondary(column, secondary_expr), ScanType::ConditionalMerge(_, _)) |
-            (ScanType::ConditionalMerge(_, _), ScanType::ExactSecondary(column, secondary_expr)) => {
+            (ScanType::ExactSecondary(column, secondary_expr), ScanType::MergeIntersection(_, _)) |
+            (ScanType::MergeIntersection(_, _), ScanType::ExactSecondary(column, secondary_expr)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactSecondary(column.clone(), secondary_expr.clone()))
                 } else {
-                    Ok(ScanType::ConditionalMerge(a, b))
+                    Ok(ScanType::MergeIntersection(a, b))
                 }
             },
             (ScanType::ExactSecondary(column, secondary_expr), ScanType::Range(range)) |
@@ -266,41 +261,41 @@ impl ScanTypeAnalyzer {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactSecondary(column.clone(), secondary_expr.clone()))
                 } else {
-                    Ok(ScanType::Merge(a, b))
+                    Ok(ScanType::MergeUnion(a, b))
                 }
             },
             //merge rules
-            (ScanType::Merge(_, _), ScanType::Merge(_, _)) |
-            (ScanType::Merge(_, _), ScanType::ConditionalMerge(_, _)) |
-            (ScanType::ConditionalMerge(_, _), ScanType::Merge(_, _)) => {
+            (ScanType::MergeUnion(_, _), ScanType::MergeUnion(_, _)) |
+            (ScanType::MergeUnion(_, _), ScanType::MergeIntersection(_, _)) |
+            (ScanType::MergeIntersection(_, _), ScanType::MergeUnion(_, _)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
-                    Ok(ScanType::ConditionalMerge(a, b))
+                    Ok(ScanType::MergeIntersection(a, b))
                 } else {
-                    Ok(ScanType::Merge(a, b))
+                    Ok(ScanType::MergeUnion(a, b))
                 }
             },
-            (ScanType::Merge(_, _), ScanType::Range(range)) |
-            (ScanType::Range(_), ScanType::Merge(_, _)) => {
+            (ScanType::MergeUnion(_, _), ScanType::Range(range)) |
+            (ScanType::Range(_), ScanType::MergeUnion(_, _)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
-                    Ok(ScanType::ConditionalMerge(a, b))
+                    Ok(ScanType::MergeIntersection(a, b))
                 } else {
-                    Ok(ScanType::Merge(a, b))
+                    Ok(ScanType::MergeUnion(a, b))
                 }
             },
-            //conditional merge rules
-            (ScanType::ConditionalMerge(_, _), ScanType::ConditionalMerge(_, _)) => {
+            //Intersection merge rules
+            (ScanType::MergeIntersection(_, _), ScanType::MergeIntersection(_, _)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
-                    Ok(ScanType::ConditionalMerge(a, b))
+                    Ok(ScanType::MergeIntersection(a, b))
                 } else {
-                    Ok(ScanType::Merge(a, b))
+                    Ok(ScanType::MergeUnion(a, b))
                 }
             }
-            (ScanType::ConditionalMerge(_, _), ScanType::Range(_)) |
-            (ScanType::Range(_), ScanType::ConditionalMerge(_, _)) => {
+            (ScanType::MergeIntersection(_, _), ScanType::Range(_)) |
+            (ScanType::Range(_), ScanType::MergeIntersection(_, _)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
-                    Ok(ScanType::ConditionalMerge(a, b))
+                    Ok(ScanType::MergeIntersection(a, b))
                 } else {
-                    Ok(ScanType::Merge(a, b))
+                    Ok(ScanType::MergeUnion(a, b))
                 }
             },
             //Range rules
@@ -309,9 +304,9 @@ impl ScanTypeAnalyzer {
                     //Merge ranges
                     Ok(ScanType::Range(range_left.and(range_right.clone())?))
                 } else if matches!(binary_operator, BinaryOperator::And) && !range_left.same_column(range_right) {
-                    Ok(ScanType::ConditionalMerge(a, b))
+                    Ok(ScanType::MergeIntersection(a, b))
                 } else if matches!(binary_operator, BinaryOperator::Or) {
-                    Ok(ScanType::Merge(a, b))
+                    Ok(ScanType::MergeUnion(a, b))
                 } else {
                     panic!("Illegal code path");
                 }
@@ -323,7 +318,6 @@ impl ScanTypeAnalyzer {
     fn analyze_sub_expression(&self, expression: &Expression) -> Result<ScanType, SimpleDbError> {
         let analyzer = ScanTypeAnalyzer::create(
             self.table.clone(),
-            self.limit.clone(),
             expression.clone(),
         );
 
@@ -336,7 +330,6 @@ mod test {
     use crate::sql::expression::{BinaryOperator, Expression};
     use crate::sql::plan::scan_type::ScanType;
     use crate::sql::plan::scan_type_analyzer::ScanTypeAnalyzer;
-    use crate::sql::statement::Limit;
     use crate::table::table::Table;
     use crate::value::Value;
     use crate::ColumnDescriptor;
@@ -346,7 +339,6 @@ mod test {
     fn range_compound_or() {
         let analyzer = ScanTypeAnalyzer::create(
             Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            Limit::None,
             Expression::Binary(
                 BinaryOperator::Or,
                 Box::new(Expression::Binary(
@@ -370,7 +362,6 @@ mod test {
     fn range_compound_and() {
         let analyzer = ScanTypeAnalyzer::create(
             Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            Limit::None,
             Expression::Binary(
                 BinaryOperator::And,
                 Box::new(Expression::Binary(
@@ -402,7 +393,6 @@ mod test {
     fn simple_range_or() {
         let analyzer = ScanTypeAnalyzer::create(
             Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            Limit::None,
             Expression::Binary(
                 BinaryOperator::Or,
                 Box::new(Expression::Binary(
@@ -427,7 +417,6 @@ mod test {
     fn simple_range_and() {
         let analyzer = ScanTypeAnalyzer::create(
             Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            Limit::None,
             Expression::Binary(
                 BinaryOperator::And,
                 Box::new(Expression::Binary(
@@ -455,7 +444,6 @@ mod test {
     fn simple_exact_and() {
         let analyzer = ScanTypeAnalyzer::create(
             Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            Limit::None,
             Expression::Binary(
                 BinaryOperator::And,
                 Box::new(Expression::Binary(
@@ -481,7 +469,6 @@ mod test {
     fn simple_full_or() {
         let analyzer = ScanTypeAnalyzer::create(
             Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            Limit::None,
             Expression::Binary(
                 BinaryOperator::Or,
                 Box::new(Expression::Binary(

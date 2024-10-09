@@ -170,11 +170,11 @@ impl Table {
     }
 
     pub fn scan_from_key(
-        self: Arc<Self>,
+        self: &Arc<Self>,
         key: &Bytes,
         inclusive: bool,
         transaction: &Transaction,
-        selection: Selection,
+        selection: &Selection,
     ) -> Result<TableIterator<SimpleDbStorageIterator>, SimpleDbError> {
         let selection = self.selection_to_columns_id(&selection)?;
         let storage_iterator = self.storage.scan_from_key_with_transaction(
@@ -192,7 +192,7 @@ impl Table {
     }
 
     pub fn scan_all(
-        self: Arc<Self>,
+        self: &Arc<Self>,
         transaction: &Transaction,
         selection: Selection
     ) -> Result<TableIterator<SimpleDbStorageIterator>, SimpleDbError> {

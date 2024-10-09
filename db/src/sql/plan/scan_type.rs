@@ -13,8 +13,8 @@ pub enum ScanType {
     //Expression: Should produce the literal value which will be the secondary key
     ExactSecondary(String, Expression),
 
-    Merge(ScanType, ScanType),
-    ConditionalMerge(ScanType, ScanType),
+    MergeUnion(ScanType, ScanType),
+    MergeIntersection(ScanType, ScanType),
 
     // min < values < expression
     Range(RangeScan),
@@ -33,20 +33,6 @@ pub enum RangeKeyPosition {
     Bellow,
     Inside,
     Above
-}
-
-impl ScanType {
-    pub fn is_range(&self) -> bool {
-        matches!(self, ScanType::Range(_))
-    }
-
-    pub fn is_exact_primary(&self) -> bool {
-        matches!(self, ScanType::ExactPrimary(_))
-    }
-
-    pub fn is_full(&self) -> bool {
-        matches!(self, ScanType::Full)
-    }
 }
 
 impl RangeScan {
