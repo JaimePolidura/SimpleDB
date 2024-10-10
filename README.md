@@ -1,7 +1,5 @@
 # SimpleDB
-SQL database built over a LSM storage engine.
-
-This project consist of three layers:
+SQL database built over a LSM storage engine. This project consist of three layers:
 - Storage engine
 - DB
 - Server
@@ -18,7 +16,7 @@ This project consist of three layers:
 - Multiple index types.
 - Serializable transaction support.
 - Joins and inner queries.
-- 
+
 ## Storage engine (/storage)
 The storage engine exposes an API which is used by the upper layer (DB).
 - <b>LSM Based</b> The engine is based on a Log-Structured Merge (LSM) tree, following the <a link="https://skyzh.github.io/mini-lsm/00-preface.html">LSM in a week</a> guide. 

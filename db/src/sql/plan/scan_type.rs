@@ -13,8 +13,8 @@ pub enum ScanType {
     //Expression: Should produce the literal value which will be the secondary key
     ExactSecondary(String, Expression),
 
-    MergeUnion(ScanType, ScanType),
-    MergeIntersection(ScanType, ScanType),
+    MergeUnion(Box<ScanType>, Box<ScanType>),
+    MergeIntersection(Box<ScanType>, Box<ScanType>),
 
     // min < values < expression
     Range(RangeScan),

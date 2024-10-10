@@ -197,7 +197,7 @@ impl ScanTypeAnalyzer {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Err(MalformedQuery(String::from("Invalid range")))
                 } else { //Or binary operator
-                    Ok(ScanType::MergeUnion(a, b))
+                    Ok(ScanType::MergeUnion(Box::new(a.clone()), Box::new(b.clone())))
                 }
             },
             (ScanType::ExactPrimary(primary_expr), ScanType::ExactSecondary(_, _)) |
@@ -205,7 +205,7 @@ impl ScanTypeAnalyzer {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactPrimary(primary_expr.clone()))
                 } else { //Or binary operator
-                    Ok(ScanType::MergeUnion(a, b))
+                    Ok(ScanType::MergeUnion(Box::new(a.clone()), Box::new(b.clone())))
                 }
             },
             (ScanType::ExactPrimary(primary_expr), ScanType::MergeUnion(_, _)) |
@@ -213,7 +213,7 @@ impl ScanTypeAnalyzer {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactPrimary(primary_expr.clone()))
                 } else {
-                    Ok(ScanType::MergeUnion(a, b))
+                    Ok(ScanType::MergeUnion(Box::new(a.clone()), Box::new(b.clone())))
                 }
             },
             (ScanType::ExactPrimary(primary_expr), ScanType::MergeIntersection(_, _)) |
@@ -221,15 +221,15 @@ impl ScanTypeAnalyzer {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactPrimary(primary_expr.clone()))
                 } else {
-                    Ok(ScanType::MergeIntersection(a, b))
+                    Ok(ScanType::MergeIntersection(Box::new(a.clone()), Box::new(b.clone())))
                 }
             },
             (ScanType::ExactPrimary(primary_expr), ScanType::Range(range)) |
-            (ScanType::Range(range) | ScanType::ExactPrimary(primary_expr)) => {
+            (ScanType::Range(range), ScanType::ExactPrimary(primary_expr)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactPrimary(primary_expr.clone()))
                 } else {
-                    Ok(ScanType::MergeUnion(a, b))
+                    Ok(ScanType::MergeUnion(Box::new(a.clone()), Box::new(b.clone())))
                 }
             },
             //Secondary rules
@@ -237,7 +237,7 @@ impl ScanTypeAnalyzer {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Err(MalformedQuery(String::from("Invalid range")))
                 } else {
-                    Ok(ScanType::MergeUnion(a, b))
+                    Ok(ScanType::MergeUnion(Box::new(a.clone()), Box::new(b.clone())))
                 }
             }
             (ScanType::ExactSecondary(column, secondary_expr), ScanType::MergeUnion(_, _)) |
@@ -245,7 +245,7 @@ impl ScanTypeAnalyzer {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactSecondary(column.clone(), secondary_expr.clone()))
                 } else {
-                    Ok(ScanType::MergeUnion(a, b))
+                    Ok(ScanType::MergeUnion(Box::new(a.clone()), Box::new(b.clone())))
                 }
             },
             (ScanType::ExactSecondary(column, secondary_expr), ScanType::MergeIntersection(_, _)) |
@@ -253,15 +253,15 @@ impl ScanTypeAnalyzer {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactSecondary(column.clone(), secondary_expr.clone()))
                 } else {
-                    Ok(ScanType::MergeIntersection(a, b))
+                    Ok(ScanType::MergeIntersection(Box::new(a.clone()), Box::new(b.clone())))
                 }
             },
             (ScanType::ExactSecondary(column, secondary_expr), ScanType::Range(range)) |
-            (ScanType::Range(range) | ScanType::ExactSecondary(column, secondary_expr)) => {
+            (ScanType::Range(range), ScanType::ExactSecondary(column, secondary_expr)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactSecondary(column.clone(), secondary_expr.clone()))
                 } else {
-                    Ok(ScanType::MergeUnion(a, b))
+                    Ok(ScanType::MergeUnion(Box::new(a.clone()), Box::new(b.clone())))
                 }
             },
             //merge rules
@@ -269,33 +269,33 @@ impl ScanTypeAnalyzer {
             (ScanType::MergeUnion(_, _), ScanType::MergeIntersection(_, _)) |
             (ScanType::MergeIntersection(_, _), ScanType::MergeUnion(_, _)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
-                    Ok(ScanType::MergeIntersection(a, b))
+                    Ok(ScanType::MergeIntersection(Box::new(a.clone()), Box::new(b.clone())))
                 } else {
-                    Ok(ScanType::MergeUnion(a, b))
+                    Ok(ScanType::MergeUnion(Box::new(a.clone()), Box::new(b.clone())))
                 }
             },
             (ScanType::MergeUnion(_, _), ScanType::Range(range)) |
-            (ScanType::Range(_), ScanType::MergeUnion(_, _)) => {
+            (ScanType::Range(range), ScanType::MergeUnion(_, _)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
-                    Ok(ScanType::MergeIntersection(a, b))
+                    Ok(ScanType::MergeIntersection(Box::new(a.clone()), Box::new(b.clone())))
                 } else {
-                    Ok(ScanType::MergeUnion(a, b))
+                    Ok(ScanType::MergeUnion(Box::new(a.clone()), Box::new(b.clone())))
                 }
             },
             //Intersection merge rules
             (ScanType::MergeIntersection(_, _), ScanType::MergeIntersection(_, _)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
-                    Ok(ScanType::MergeIntersection(a, b))
+                    Ok(ScanType::MergeIntersection(Box::new(a.clone()), Box::new(b.clone())))
                 } else {
-                    Ok(ScanType::MergeUnion(a, b))
+                    Ok(ScanType::MergeUnion(Box::new(a.clone()), Box::new(b.clone())))
                 }
             }
             (ScanType::MergeIntersection(_, _), ScanType::Range(_)) |
             (ScanType::Range(_), ScanType::MergeIntersection(_, _)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
-                    Ok(ScanType::MergeIntersection(a, b))
+                    Ok(ScanType::MergeIntersection(Box::new(a.clone()), Box::new(b.clone())))
                 } else {
-                    Ok(ScanType::MergeUnion(a, b))
+                    Ok(ScanType::MergeUnion(Box::new(a.clone()), Box::new(b.clone())))
                 }
             },
             //Range rules
@@ -304,9 +304,9 @@ impl ScanTypeAnalyzer {
                     //Merge ranges
                     Ok(ScanType::Range(range_left.and(range_right.clone())?))
                 } else if matches!(binary_operator, BinaryOperator::And) && !range_left.same_column(range_right) {
-                    Ok(ScanType::MergeIntersection(a, b))
+                    Ok(ScanType::MergeIntersection(Box::new(a.clone()), Box::new(b.clone())))
                 } else if matches!(binary_operator, BinaryOperator::Or) {
-                    Ok(ScanType::MergeUnion(a, b))
+                    Ok(ScanType::MergeUnion(Box::new(a.clone()), Box::new(b.clone())))
                 } else {
                     panic!("Illegal code path");
                 }

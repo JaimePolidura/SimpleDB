@@ -36,10 +36,9 @@ impl Planner {
         select_statement: SelectStatement,
         transaction: &Transaction
     ) -> Result<Plan, SimpleDbError> {
-        let scan_type = self.get_and_validate_scan_type(
+        let scan_type = self.get_scan_type(
             &select_statement.where_expr,
             table,
-            &select_statement.limit
         )?;
         let mut last_step = self.build_scan_step(scan_type, transaction, select_statement.selection, table)?;
 
@@ -59,10 +58,9 @@ impl Planner {
         update_statement: &UpdateStatement,
         transaction: &Transaction,
     ) -> Result<Plan, SimpleDbError> {
-        let scan_type = self.get_and_validate_scan_type(
+        let scan_type = self.get_scan_type(
             &update_statement.where_expr,
-            table,
-            &Limit::None
+            table
         )?;
         let updated_values = update_statement.get_updated_values();
         let mut last_step = self.build_scan_step(scan_type, transaction, updated_values, table)?;
@@ -117,13 +115,13 @@ impl Planner {
                 FullScanStep::create(table.clone(), selection, transaction)
             },
             ScanType::MergeUnion(left_scan_type, right_scan_type) => {
-                let left_scan_step = self.build_scan_step(left_scan_type, transaction, selection.clone(), table)?;
-                let right_scan_step = self.build_scan_step(right_scan_type, transaction, selection.clone(), table)?;
+                let left_scan_step = self.build_scan_step(*left_scan_type, transaction, selection.clone(), table)?;
+                let right_scan_step = self.build_scan_step(*right_scan_type, transaction, selection.clone(), table)?;
                 MergeUnionScanStep::create(left_scan_step, right_scan_step)
             }
             ScanType::MergeIntersection(left_scan_type, right_scan_type) => {
-                let left_scan_step = self.build_scan_step(left_scan_type, transaction, selection.clone(), table)?;
-                let right_scan_step = self.build_scan_step(right_scan_type, transaction, selection.clone(), table)?;
+                let left_scan_step = self.build_scan_step(*left_scan_type, transaction, selection.clone(), table)?;
+                let right_scan_step = self.build_scan_step(*right_scan_type, transaction, selection.clone(), table)?;
                 MergeIntersectionScanType::create(left_scan_step, right_scan_step)
             }
         }
