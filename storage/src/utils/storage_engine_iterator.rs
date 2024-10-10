@@ -37,7 +37,7 @@ impl<I: StorageIterator> StorageEngineIterator<I> {
     pub fn create(
         keyspace_flags: Flag,
         options: &Arc<shared::SimpleDbOptions>,
-        mut iterator: I,
+        iterator: I,
     ) -> StorageEngineIterator<I> {
         let mut is_finished = false;
 
@@ -138,7 +138,7 @@ impl<I: StorageIterator> StorageEngineIterator<I> {
     }
 
     fn check_some_keys_in_entries_to_return_readable(&self) -> bool {
-        for ((key, value)) in &self.entries_to_return {
+        for (_, value) in &self.entries_to_return {
             if !value.eq(&TOMBSTONE) {
                 return true;
             }
@@ -193,7 +193,7 @@ impl<I: StorageIterator> StorageIterator for StorageEngineIterator<I> {
 impl<I: StorageIterator> Drop for StorageEngineIterator<I> {
     fn drop(&mut self) {
         if let Some(transaction_manager) = self.transaction_manager.as_ref() {
-            transaction_manager.commit(self.transaction.as_ref().unwrap());
+            let _ = transaction_manager.commit(self.transaction.as_ref().unwrap());
         }
     }
 }

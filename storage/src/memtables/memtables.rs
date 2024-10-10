@@ -1,14 +1,13 @@
-use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicPtr, AtomicUsize};
-use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
-use bytes::Bytes;
-use shared::Flag;
-use crate::memtables::memtable::{MemTable};
+use crate::memtables::memtable::MemTable;
 use crate::memtables::memtable_iterator::MemtableIterator;
 use crate::memtables::wal::Wal;
-use crate::transactions::transaction::{Transaction};
+use crate::transactions::transaction::Transaction;
+use bytes::Bytes;
 use shared::iterators::merge_iterator::MergeIterator;
-use shared::iterators::storage_iterator::StorageIterator;
+use shared::Flag;
+use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
+use std::sync::atomic::{AtomicPtr, AtomicUsize};
+use std::sync::{Arc, RwLock};
 
 pub struct Memtables {
     inactive_memtables: AtomicPtr<RwLock<Vec<Arc<MemTable>>>>,
@@ -32,35 +31,6 @@ impl Memtables {
         } else {
             Self::create_memtables_no_wal(options, keyspace_id, keyspace_flags)
         }
-    }
-
-    pub fn has_txn_id_been_written(&self, txn_id: shared::TxnId) -> bool {
-        unsafe {
-            let memtable_ref = (*self.current_memtable.load(Acquire)).clone();
-            if memtable_ref.has_txn_id_been_written(txn_id) {
-                return true;
-            }
-
-            let inactive_memtables_rw_lock = &*self.inactive_memtables.load(Acquire);
-            let inactive_memtables = inactive_memtables_rw_lock.read()
-                .unwrap();
-
-            for inactive_memtable in inactive_memtables.iter().rev() {
-                if inactive_memtable.has_txn_id_been_written(txn_id) {
-                    return true;
-                }
-            }
-
-            false
-        }
-    }
-
-    pub fn scan_from_key(&self, transaction: &Transaction, key: &Bytes) -> MergeIterator<MemtableIterator> {
-        let mut iterators = self.create_iterators(transaction);
-        for iterator in &mut iterators {
-            iterator.seek(key, true);
-        }
-        MergeIterator::create(iterators)
     }
 
     pub fn scan_all(&self, transaction: &Transaction) -> MergeIterator<MemtableIterator> {
@@ -210,7 +180,7 @@ impl Memtables {
 
         for wal in wals {
             let memtable_id = wal.get_memtable_id();
-            let mut memtable_created = MemTable::create_and_recover_from_wal(options.clone(), memtable_id, keyspace_id, keyspace_flags, wal)?;
+            let memtable_created = MemTable::create_and_recover_from_wal(options.clone(), memtable_id, keyspace_id, keyspace_flags, wal)?;
 
             if memtable_created.current_size_bytes.load(Relaxed) < options.memtable_max_size_bytes && active_memtable.is_none() {
                 //Active memtable

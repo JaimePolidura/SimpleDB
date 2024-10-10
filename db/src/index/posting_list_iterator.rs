@@ -1,6 +1,5 @@
-use bytes::Bytes;
-use storage::transactions::transaction::Transaction;
 use crate::index::posting_list::{PostingList, PostingListEntry};
+use storage::transactions::transaction::Transaction;
 
 //This iterator:
 // - Will only return posting list entries that are readable by the current transaction
@@ -50,10 +49,10 @@ impl PostingListIterator {
 
 #[cfg(test)]
 mod test {
-    use shared::key::Key;
-    use storage::transactions::transaction::Transaction;
     use crate::index::posting_list::{PostingList, PostingListEntry};
     use crate::index::posting_list_iterator::PostingListIterator;
+    use shared::key::Key;
+    use storage::transactions::transaction::Transaction;
 
     #[test]
     fn iterator() {

@@ -13,8 +13,6 @@ pub struct SimpleDb {
     statement_executor: StatementExecutor,
 
     databases: Arc<Databases>,
-
-    options: Arc<SimpleDbOptions>
 }
 
 pub enum StatementResult {
@@ -33,9 +31,8 @@ pub fn create(
     let databases = Arc::new(Databases::create(options.clone())?);
     
     Ok(SimpleDb {
-        statement_executor: StatementExecutor::create(&options, &databases),
+        statement_executor: StatementExecutor::create(&databases),
         databases,
-        options,
     })
 }
 
@@ -60,7 +57,7 @@ impl SimpleDb {
         &self,
         context: &Context,
         statement: Statement
-    ) -> Result<StatementResult, SimpleDbError>{
+    ) -> Result<StatementResult, SimpleDbError> {
         self.statement_executor.execute(&context, statement)
     }
 

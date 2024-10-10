@@ -35,15 +35,15 @@ fn populate_options_file_with_default_data(base_path: &Path) {
         .expect("Cannot create options file");
     let serialized = serde_json::to_string_pretty(&SimpleDbOptions::default());
     let serialized = serialized.unwrap().as_bytes().to_vec();
-    file.write(&serialized);
-    file.fsync();
+    file.write(&serialized).unwrap();
+    let _ = file.fsync();
 }
 
 fn load_options_from_existing_file(base_path: &Path) -> Result<SimpleDbOptions, ()> {
     let config_file_path = config_file_path(base_path);
     let config_file_path = config_file_path.as_path();
 
-    let mut file = SimpleDbFile::create(config_file_path, &Vec::new(), SimpleDbFileMode::RandomWrites)
+    let file = SimpleDbFile::create(config_file_path, &Vec::new(), SimpleDbFileMode::RandomWrites)
         .expect("Cannot create options file");
     let bytes = file.read_all()
         .expect("Cannot read file bytes");

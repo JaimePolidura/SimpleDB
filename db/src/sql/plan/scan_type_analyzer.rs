@@ -224,8 +224,8 @@ impl ScanTypeAnalyzer {
                     Ok(ScanType::MergeIntersection(Box::new(a.clone()), Box::new(b.clone())))
                 }
             },
-            (ScanType::ExactPrimary(primary_expr), ScanType::Range(range)) |
-            (ScanType::Range(range), ScanType::ExactPrimary(primary_expr)) => {
+            (ScanType::ExactPrimary(primary_expr), ScanType::Range(_)) |
+            (ScanType::Range(_), ScanType::ExactPrimary(primary_expr)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactPrimary(primary_expr.clone()))
                 } else {
@@ -256,8 +256,8 @@ impl ScanTypeAnalyzer {
                     Ok(ScanType::MergeIntersection(Box::new(a.clone()), Box::new(b.clone())))
                 }
             },
-            (ScanType::ExactSecondary(column, secondary_expr), ScanType::Range(range)) |
-            (ScanType::Range(range), ScanType::ExactSecondary(column, secondary_expr)) => {
+            (ScanType::ExactSecondary(column, secondary_expr), ScanType::Range(_)) |
+            (ScanType::Range(_), ScanType::ExactSecondary(column, secondary_expr)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::ExactSecondary(column.clone(), secondary_expr.clone()))
                 } else {
@@ -274,8 +274,8 @@ impl ScanTypeAnalyzer {
                     Ok(ScanType::MergeUnion(Box::new(a.clone()), Box::new(b.clone())))
                 }
             },
-            (ScanType::MergeUnion(_, _), ScanType::Range(range)) |
-            (ScanType::Range(range), ScanType::MergeUnion(_, _)) => {
+            (ScanType::MergeUnion(_, _), ScanType::Range(_)) |
+            (ScanType::Range(_), ScanType::MergeUnion(_, _)) => {
                 if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::MergeIntersection(Box::new(a.clone()), Box::new(b.clone())))
                 } else {
@@ -310,8 +310,7 @@ impl ScanTypeAnalyzer {
                 } else {
                     panic!("Illegal code path");
                 }
-            }
-            _ => panic!("Illegal scan type combinations")
+            },
         }
     }
 

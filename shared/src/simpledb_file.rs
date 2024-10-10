@@ -1,10 +1,9 @@
 use std::cell::UnsafeCell;
 use std::fs;
-use std::fs::{File, OpenOptions, Permissions};
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::windows::fs::FileExt;
 use std::path::{Path, PathBuf};
-use std::process::exit;
 
 #[derive(Clone)]
 pub enum SimpleDbFileMode {
@@ -125,7 +124,7 @@ impl SimpleDbFile {
             _ => {
                 {
                     //It goes out of scope, the fd gets closed
-                    let file = self.file.take().unwrap();
+                    let _ = self.file.take().unwrap();
                 }
 
                 fs::remove_file(self.path.as_ref().unwrap().as_path())
@@ -172,7 +171,7 @@ impl SimpleDbFile {
         self.clear()?;
         self.write(bytes)?;
         self.fsync()?;
-        self.restore_mode(prev_mode);
+        self.restore_mode(prev_mode)?;
         backup_file.delete()?;
 
         Ok(())

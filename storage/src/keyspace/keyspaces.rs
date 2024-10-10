@@ -87,17 +87,6 @@ impl Keyspaces {
         Ok(keyspace)
     }
 
-    pub fn has_txn_id_been_written(&self, txn_id: shared::TxnId) -> bool {
-        for keyspace in self.keyspaces.iter() {
-            let keyspace = keyspace.value();
-            if keyspace.has_txn_id_been_written(txn_id) {
-                return true;
-            }
-        }
-
-        false
-    }
-
     pub fn start_keyspaces_compaction_threads(&self) {
         for keyspace in self.keyspaces.iter() {
             let keyspace = keyspace.value();

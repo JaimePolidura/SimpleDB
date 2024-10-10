@@ -14,7 +14,6 @@ use shared::logger::{logger, SimpleDbLayer};
 
 pub struct Storage {
     transaction_manager: Arc<TransactionManager>,
-    options: Arc<SimpleDbOptions>,
     keyspaces: Keyspaces,
 }
 
@@ -42,7 +41,6 @@ impl Storage {
         let mut storage = Storage {
             transaction_manager,
             keyspaces,
-            options
         };
 
         storage.keyspaces.recover_from_manifest();
@@ -57,7 +55,6 @@ impl Storage {
         Storage {
             transaction_manager: Arc::new(TransactionManager::create_mock(simple_db_options.clone())),
             keyspaces: Keyspaces::mock(simple_db_options.clone()),
-            options: simple_db_options.clone(),
         }
     }
 

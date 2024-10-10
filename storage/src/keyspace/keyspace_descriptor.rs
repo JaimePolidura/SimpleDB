@@ -1,7 +1,7 @@
-use std::path::PathBuf;
-use bytes::{Buf, BufMut};
-use shared::{Flag, KeyspaceId, SimpleDbError, SimpleDbFile, SimpleDbFileMode};
+use bytes::Buf;
 use shared::SimpleDbError::{CannotCreateKeyspaceDescriptorFile, CannotOpenKeyspaceDescriptorFile, CannotReadKeyspaceDescriptorFile};
+use shared::{Flag, KeyspaceId, SimpleDbError, SimpleDbFile, SimpleDbFileMode};
+use std::path::PathBuf;
 
 pub struct KeyspaceDescriptor {
     pub(crate) flags: Flag,
@@ -31,14 +31,8 @@ impl KeyspaceDescriptor {
         Ok(Self::deserialize(keyspace_desc_bytes))
     }
 
-    pub fn serialize(&self) -> Vec<u8> {
-        let mut vec: Vec<u8> = Vec::new();
-        vec.put_u64_le(self.flags);
-        vec
-    }
-
     pub fn deserialize(bytes: Vec<u8>) -> KeyspaceDescriptor {
-        let mut bytes_ptr = &mut bytes.as_slice();
+        let bytes_ptr = &mut bytes.as_slice();
 
         KeyspaceDescriptor {
             flags: bytes_ptr.get_u64_le()

@@ -55,9 +55,7 @@ impl DatabaseDescriptor {
         Self::deserialize_database_descriptor(
             database_descriptor_file,
             database_descriptor_file_bytes,
-            database_name,
-            &path
-        )
+            database_name)
     }
 
     pub fn add_table(&mut self, table_name: &str, keyspace_id: KeyspaceId) -> Result<(), SimpleDbError> {
@@ -80,10 +78,9 @@ impl DatabaseDescriptor {
         file: SimpleDbFile,
         bytes: Vec<u8>,
         database_name: &String,
-        path: &PathBuf,
     ) -> Result<DatabaseDescriptor, SimpleDbError> {
         let mut current_ptr = bytes.as_slice();
-        let mut keyspace_id_by_table_name = SkipMap::new();
+        let keyspace_id_by_table_name = SkipMap::new();
 
         while current_ptr.has_remaining() {
             let table_name_length = current_ptr.get_u32_le() as usize;

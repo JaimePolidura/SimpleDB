@@ -4,25 +4,21 @@ use crate::sql::expression::Expression;
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
 use crate::table::table::Table;
 use crate::value::Type;
+use crate::CreateIndexStatement;
 use shared::SimpleDbError::UnknownColumn;
-use shared::{SimpleDbError, SimpleDbOptions};
+use shared::SimpleDbError;
 use std::sync::Arc;
-use crate::{CreateIndexStatement, StatementDescriptor};
 
 pub struct StatementValidator {
     databases: Arc<Databases>,
-
-    options: Arc<SimpleDbOptions>,
 }
 
 impl StatementValidator {
     pub fn create(
         databases: &Arc<Databases>,
-        options: &Arc<SimpleDbOptions>
     ) -> StatementValidator {
         StatementValidator {
             databases: databases.clone(),
-            options: options.clone(),
         }
     }
 
@@ -111,7 +107,7 @@ impl StatementValidator {
         table_name: &str,
     ) -> Result<(), SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
-        let table = database.get_table_or_err(table_name)?;
+        let _ = database.get_table_or_err(table_name)?;
         Ok(())
     }
 

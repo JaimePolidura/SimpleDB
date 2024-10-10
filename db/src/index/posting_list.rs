@@ -19,18 +19,6 @@ impl PostingList {
         PostingList { entries: Vec::new() }
     }
 
-    pub fn create_new(
-        id: Bytes,
-        transaction: &Transaction
-    ) -> PostingList {
-        PostingList {
-            entries: vec![PostingListEntry{
-                primary_key: Key::create(id, transaction.id()),
-                is_present: true,
-            }]
-        }
-    }
-
     pub fn create_deleted(
         id: Bytes,
         transaction: &Transaction

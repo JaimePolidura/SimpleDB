@@ -47,7 +47,7 @@ impl Databases {
     pub fn get_database_or_err(&self, name: &str) -> Result<Arc<Database>, SimpleDbError> {
         self.databases.get(name)
             .map(|entry| entry.value().clone())
-            .ok_or(SimpleDbError::DatabaseNotFound(name.clone().to_string()))
+            .ok_or(SimpleDbError::DatabaseNotFound(name.to_string()))
     }
 
     pub fn create_database(&self, database_name: &str) -> Result<Arc<Database>, SimpleDbError> {
@@ -71,7 +71,7 @@ impl Databases {
     }
 
     fn index_databases_by_name(databases: &mut Vec<Arc<Database>>) -> SkipMap<String, Arc<Database>> {
-        let mut indexed = SkipMap::new();
+        let indexed = SkipMap::new();
 
         while let Some(database) = databases.pop() {
             indexed.insert(database.name().clone(), database);

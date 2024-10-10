@@ -1,4 +1,4 @@
-use crate::{key, TxnId};
+use crate::TxnId;
 use bytes::{Buf, BufMut, Bytes};
 use std::cmp::Ordering;
 use std::fmt;

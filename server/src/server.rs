@@ -7,7 +7,6 @@ use shared::connection::Connection;
 use shared::logger::{logger, Logger, SimpleDbLayer};
 use shared::SimpleDbError::InvalidPassword;
 use shared::{SimpleDbError, SimpleDbOptions};
-use std::io::Write;
 use std::net::TcpListener;
 use std::sync::Arc;
 use std::thread;
@@ -154,7 +153,7 @@ impl Server {
             }
             Err(error) => {
                 if statement_desc.requires_transaction() && is_stand_alone {
-                    server.simple_db.execute(&context, Statement::Rollback);
+                    server.simple_db.execute(&context, Statement::Rollback)?;
                 }
 
                 Err(error)
@@ -172,7 +171,7 @@ impl Server {
         match server.context_by_connection_id.get(&connection_id) {
             Some(context) => {
                 let context = context.value();
-                server.simple_db.execute(context, Statement::Rollback);
+                server.simple_db.execute(context, Statement::Rollback)?;
                 server.context_by_connection_id.insert(connection_id, Context::create_with_database(&database_name));
             }
             None => {
@@ -248,7 +247,7 @@ impl Server {
         if let Some(context_entry) = server.context_by_connection_id.get(&connection_id) {
             let context = context_entry.value();
             if context.has_transaction() {
-                server.simple_db.execute(context, Statement::Rollback);
+                server.simple_db.execute(context, Statement::Rollback).expect("Cannot close connection");
             }
 
             server.context_by_connection_id.remove(&connection_id);

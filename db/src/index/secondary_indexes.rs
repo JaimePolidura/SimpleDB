@@ -42,7 +42,7 @@ impl SecondaryIndexes {
     ) -> SecondaryIndexes {
         logger().info(DB(table_descriptor.table_name.clone()), "Loading secondary indexes");
 
-        let mut secondary_indexes = SkipMap::new();
+        let secondary_indexes = SkipMap::new();
         for entry in table_descriptor.columns.iter() {
             let column_descriptor = entry.value();
 
@@ -118,7 +118,11 @@ impl SecondaryIndexes {
         Ok(())
     }
 
-    pub fn has(&self, column_id: ColumnId) -> bool {
-        self.secondary_index_by_column_id.contains_key(&column_id)
+    pub fn can_be_read(&self, column_id: ColumnId) -> bool {
+        if let Some(secondary_index) = self.secondary_index_by_column_id.get(&column_id) {
+            secondary_index.value().can_be_read()
+        } else {
+            false
+        }
     }
 }

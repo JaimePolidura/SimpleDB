@@ -39,7 +39,7 @@ pub(crate) fn start_simple_leveled_compaction(
         sstables.scan_from_level(&vec![level_to_compact, level_to_compact + 1]),
     );
     let mut new_sstable_builder = Some(SSTableBuilder::create(
-        options.clone(), transaction_manager.clone(), keyspace_id, (level_to_compact + 1) as u32
+        options.clone(), keyspace_id, (level_to_compact + 1) as u32
     ));
 
     let mut new_sstables_id = Vec::new();
@@ -51,7 +51,7 @@ pub(crate) fn start_simple_leveled_compaction(
 
         match transaction_manager.on_write_key(&key) {
             Ok(_) => {
-                let value = iterator.value().clone();
+                let value = iterator.value();
                 let is_tombstone = value.eq(TOMBSTONE.as_ref());
 
                 if is_new_level_last_level && is_tombstone {
@@ -68,7 +68,7 @@ pub(crate) fn start_simple_leveled_compaction(
                     new_sstables_id.push(new_sstable_id);
 
                     new_sstable_builder = Some(SSTableBuilder::create(
-                        options.clone(), transaction_manager.clone(), keyspace_id, (level_to_compact + 1) as u32
+                        options.clone(), keyspace_id, (level_to_compact + 1) as u32
                     ));
                 }
             },

@@ -1,32 +1,28 @@
-use std::fmt;
-use std::fmt::Formatter;
 use crate::table::record::Record;
 use crate::table::table::Table;
-use bytes::{BufMut, Bytes};
-use shared::{utils, ColumnId, SimpleDbError};
-use std::sync::Arc;
-use shared::SimpleDbError::CannotDecodeColumn;
-use crate::table::table_descriptor::ColumnDescriptor;
 use crate::value::{Type, Value};
+use bytes::{BufMut, Bytes};
+use shared::SimpleDbError::CannotDecodeColumn;
+use shared::{utils, SimpleDbError};
+use std::fmt;
+use std::fmt::Formatter;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct Row {
     pub(crate) storage_engine_record: Record,
     pub(crate) key_bytes: Bytes,
 
-    pub(crate) selection: Arc<Vec<ColumnId>>,
     pub(crate) table: Arc<Table>
 }
 
 impl Row {
     pub(crate) fn create(
         storage_engine_record: Record,
-        selection: &Arc<Vec<ColumnId>>,
         table: &Arc<Table>,
         key_bytes: Bytes
     ) -> Row {
         Row {
-            selection: selection.clone(),
             storage_engine_record,
             table: table.clone(),
             key_bytes
@@ -48,10 +44,6 @@ impl Row {
                 .map_err(|_| CannotDecodeColumn(column_name.to_string(), self.get_primary_column_value().clone())),
             None => Ok(Value::Null)
         }
-    }
-
-    pub(crate) fn get_column_desc(&self, column_name: &str) -> Option<ColumnDescriptor> {
-        self.table.get_column_desc(column_name)
     }
 
     pub fn serialize(self) -> Vec<u8> {

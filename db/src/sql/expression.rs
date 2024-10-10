@@ -1,8 +1,8 @@
+use crate::value::Value;
 use bytes::Bytes;
-use shared::{utils, SimpleDbError};
+use shared::SimpleDbError;
 use std::cmp::PartialEq;
 use SimpleDbError::MalformedQuery;
-use crate::value::{Type, Value};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
@@ -49,25 +49,10 @@ impl Expression {
         }
     }
 
-    pub fn is_number(&self) -> bool {
-        match self {
-            Expression::Literal(value) => value.is_number(),
-            _ => false
-        }
-    }
-
     pub fn get_boolean(&self) -> Result<bool, SimpleDbError> {
         match self {
             Expression::Literal(value) => value.get_boolean()
                 .map_err(|_| MalformedQuery(String::from("Cannot get boolean from expression"))),
-            _ => Err(MalformedQuery(String::from("Cannot get F64 from expression")))
-        }
-    }
-
-    pub fn get_f64(&self) -> Result<f64, SimpleDbError> {
-        match self {
-            Expression::Literal(value) => value.get_f64()
-                .map_err(|_| MalformedQuery(String::from("Cannot get F64 from expression"))),
             _ => Err(MalformedQuery(String::from("Cannot get F64 from expression")))
         }
     }

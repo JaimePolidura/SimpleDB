@@ -152,10 +152,6 @@ impl RangeScan {
         self.start.as_ref()
     }
 
-    pub fn end(&self) -> Option<&Expression> {
-        self.end.as_ref()
-    }
-
     pub fn empty() -> RangeScan {
         RangeScan {
             column_name: String::from(""),

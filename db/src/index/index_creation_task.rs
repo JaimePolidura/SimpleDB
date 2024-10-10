@@ -1,6 +1,6 @@
 use crate::table::record::Record;
 use crate::table::table::Table;
-use shared::{ColumnId, KeyspaceId};
+use shared::{ColumnId, KeyspaceId, SimpleDbError};
 use std::sync::{mpsc, Arc};
 use std::sync::mpsc::{Receiver, Sender};
 use storage::transactions::transaction::Transaction;
@@ -19,7 +19,7 @@ pub struct IndexCreationTask {
     table_keyspace_id: KeyspaceId,
     storage: Arc<Storage>,
 
-    n_affected_rows_sender: Sender<usize>
+    n_affected_rows_sender: Sender<Result<usize, SimpleDbError>>
 }
 
 impl IndexCreationTask {
@@ -30,7 +30,7 @@ impl IndexCreationTask {
         database: Arc<Database>,
         storage: Arc<Storage>,
         table: Arc<Table>,
-    ) -> (IndexCreationTask, Receiver<usize>) {
+    ) -> (IndexCreationTask, Receiver<Result<usize, SimpleDbError>>) {
         let (send, receiver) = mpsc::channel();
 
         let index = IndexCreationTask {
@@ -59,7 +59,7 @@ impl IndexCreationTask {
         ));
 
         //This will get unlocked when it goes out of scope
-        let guard = self.database.lock_rollbacks();
+        let lock = self.database.lock_rollbacks();
 
         while iterator.next() {
             let key = iterator.key();
@@ -69,12 +69,15 @@ impl IndexCreationTask {
             if let Some(value_to_be_indexed) = record.take_value(self.indexed_column_id) {
                 n_affected_rows += 1;
 
-                self.storage.set_with_transaction(
+                if let Err(error) = self.storage.set_with_transaction(
                     self.index_keyspace_id,
                     &Transaction::create(key.txn_id()),
                     value_to_be_indexed,
                     key.as_bytes()
-                );
+                ) {
+                    self.n_affected_rows_sender.send(Err(error)).unwrap();
+                    return;
+                }
             }
         }
 
@@ -83,6 +86,6 @@ impl IndexCreationTask {
             self.table.table_name.clone(), n_affected_rows
         ));
 
-        self.n_affected_rows_sender.send(n_affected_rows);
+        self.n_affected_rows_sender.send(Ok(n_affected_rows)).unwrap();
     }
 }

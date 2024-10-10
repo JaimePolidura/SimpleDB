@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use bytes::{Buf, BufMut};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use crate::compaction::compaction::CompactionTask;
 
 pub struct Manifest {
@@ -103,7 +103,7 @@ impl Manifest {
 
     fn read_all_operations_from_disk(&self) -> Result<Vec<ManifestOperation>, shared::SimpleDbError> {
         let mut file_lock_result = self.file.lock();
-        let mut file = file_lock_result
+        let file = file_lock_result
             .as_mut()
             .unwrap();
         let records_bytes = file.read_all()
@@ -162,7 +162,7 @@ impl Manifest {
 
                 file.write(&serialized)
                     .map_err(|e| shared::SimpleDbError::CannotWriteManifestOperation(self.keyspace_id, e))?;
-                file.fsync();
+                let _ = file.fsync(); //We dont care if it fails to fysnc
                 Ok(manifest_record_id)
             }
             //This won't happen since manifest_record does not contain a map with non string keys

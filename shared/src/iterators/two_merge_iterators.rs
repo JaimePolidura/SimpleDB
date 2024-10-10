@@ -12,7 +12,7 @@ pub struct TwoMergeIterator<A: StorageIterator, B: StorageIterator> {
 }
 
 impl<A: StorageIterator, B: StorageIterator> TwoMergeIterator<A, B> {
-    pub fn create(mut a: A, mut b: B) -> TwoMergeIterator<A, B> {
+    pub fn create(a: A, b: B) -> TwoMergeIterator<A, B> {
         TwoMergeIterator { a, b, choose_a: false, first_iteration: true }
     }
 
@@ -69,7 +69,7 @@ impl<A: StorageIterator, B: StorageIterator> StorageIterator for TwoMergeIterato
             return self.first_iteration();
         }
 
-        let mut advanced: bool = if self.choose_a {
+        let advanced= if self.choose_a {
             self.a.next()
         } else { //Choose b
             self.b.next()

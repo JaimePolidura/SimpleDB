@@ -54,7 +54,7 @@ impl TransactionLog {
             .map_err(|e| shared::SimpleDbError::CannotWriteTransactionLogEntry(e))?;
 
         if matches!(self.options.durability_level, shared::DurabilityLevel::Strong) {
-            log_file.fsync();
+            let _ = log_file.fsync();
         }
         
         Ok(())
@@ -68,7 +68,7 @@ impl TransactionLog {
             .collect();
 
         log_file.safe_replace(&new_entries_encoded)
-            .map_err(|e| SimpleDbError::CannotResetTransactionLog(e));
+            .map_err(|e| SimpleDbError::CannotResetTransactionLog(e))?;
 
         Ok(())
     }
@@ -93,6 +93,7 @@ impl TransactionLog {
     }
 }
 
+#[allow(suspicious_double_ref_op)]
 impl TransactionLogEntry {
     pub fn deserialize(
         current_ptr: &mut &[u8],
@@ -106,10 +107,10 @@ impl TransactionLogEntry {
             WRITE_BINARY_CODE => TransactionLogEntry::Write(current_ptr.get_u64_le() as TxnId),
             START_ROLLBACK_BINARY_CODE => TransactionLogEntry::StartRollback(current_ptr.get_u64_le() as TxnId),
             ROLLEDBACK_WRITE_BINARY_CODE => TransactionLogEntry::RolledbackWrite(current_ptr.get_u64_le() as TxnId),
-            _ => return Err(SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
+            unknown_flag => return Err(SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
                 offset: n_entry_index,
                 index: n_entry_index,
-                error_type: shared::DecodeErrorType::UnknownFlag(current_ptr[0] as usize)
+                error_type: shared::DecodeErrorType::UnknownFlag(unknown_flag as usize)
             }))
         };
 

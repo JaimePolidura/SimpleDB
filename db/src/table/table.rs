@@ -15,7 +15,6 @@ use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::{CannotWriteTableDescriptor, ColumnNameAlreadyDefined, ColumnNotFound, IndexAlreadyExists, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
 use shared::{ColumnId, FlagMethods, KeyspaceId, SimpleDbError, SimpleDbFile, SimpleDbOptions};
 use std::collections::{HashMap, HashSet};
-use std::hash::Hasher;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{fence, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -103,7 +102,7 @@ impl Table {
 
     pub(crate) fn create_mock(columns: Vec<ColumnDescriptor>) -> Arc<Table> {
         let options = Arc::new(SimpleDbOptions::default());
-        let mut columns_by_id = SkipMap::new();
+        let columns_by_id = SkipMap::new();
         let mut primary_column_name = String::from("");
         for column in columns {
             if column.is_primary {
@@ -236,7 +235,7 @@ impl Table {
     ) -> Result<usize, SimpleDbError> {
         let column = self.get_column_desc(column_name).unwrap();
 
-        if self.secondary_indexes.has(column.column_id) {
+        if self.secondary_indexes.can_be_read(column.column_id) {
             return Err(IndexAlreadyExists(self.storage_keyspace_id, column_name.to_string()));
         }
 
@@ -257,7 +256,14 @@ impl Table {
         let mut n_affected_rows = 0;
 
         if wait {
-            n_affected_rows = receiver.recv().unwrap();
+            match receiver.recv().unwrap() {
+                Ok(n) => n_affected_rows = n,
+                Err(err) => {
+                    //TODO Delete keyspace & secondary index
+                    return Err(err);
+                }
+            }
+
         }
 
         self.save_column_descriptor_as_indexed(column.column_id, index_keyspace_id)?;
@@ -418,7 +424,7 @@ impl Table {
     ) -> Result<(), SimpleDbError> {
         let column = self.get_column_desc_or_err(column_name)?;
 
-        if self.secondary_indexes.has(column.column_id) || column.is_primary{
+        if self.secondary_indexes.can_be_read(column.column_id) || column.is_primary{
             return Err(IndexAlreadyExists(self.storage_keyspace_id, column_name.to_string()));
         }
 
@@ -523,12 +529,6 @@ impl Table {
         }
 
         result
-    }
-
-    fn has_primary_key(&self) -> bool {
-        self.columns_by_id.iter()
-            .find(|i| i.value().is_primary)
-            .is_some()
     }
 
     fn selection_to_columns_id(&self, selection: &Selection) -> Result<Vec<ColumnId>, SimpleDbError> {
@@ -643,6 +643,6 @@ impl Table {
     pub fn is_secondary_indexed(&self, column_name: &str) -> bool {
         let column_desc = self.get_column_desc_or_err(column_name)
             .unwrap();
-        self.secondary_indexes.has(column_desc.column_id)
+        self.secondary_indexes.can_be_read(column_desc.column_id)
     }
 }

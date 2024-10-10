@@ -51,13 +51,13 @@ impl Wal {
             .map_err(|e| shared::SimpleDbError::CannotWriteWalEntry(self.keyspace_id, self.memtable_id, e))?;
 
         if matches!(self.options.durability_level, shared::DurabilityLevel::Strong) {
-            self.file.fsync();
+            let _ = self.file.fsync();
         }
 
         Ok(())
     }
 
-    pub fn read_entries(&self) -> Result<Vec<WalEntry>, shared::SimpleDbError> {
+    pub(crate) fn read_entries(&self) -> Result<Vec<WalEntry>, shared::SimpleDbError> {
         let entries = self.file.read_all()
             .map_err(|e| shared::SimpleDbError::CannotReadWalEntries(self.keyspace_id, self.memtable_id, e))?;
         let mut current_ptr = entries.as_slice();
@@ -65,7 +65,7 @@ impl Wal {
         let mut current_offset = 0;
 
         while current_ptr.has_remaining() {
-            let start_entry_ptr = current_ptr.clone();
+            let start_entry_ptr = current_ptr;
             let mut entry_bytes_size = 0;
 
             let key_len = current_ptr.get_u32_le() as usize;
@@ -96,7 +96,7 @@ impl Wal {
             }
 
             entries.push(WalEntry{
-                value: Bytes::copy_from_slice(value_bytes.clone()),
+                value: Bytes::copy_from_slice(value_bytes),
                 key
             });
 

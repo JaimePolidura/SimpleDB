@@ -60,7 +60,7 @@ impl<I: StorageIterator> TableIterator<I> {
         let row_in_reassembling = self.rows_reassembling.remove(0);
         let key_bytes = row_in_reassembling.key.clone();
         let row_record_reassembled = row_in_reassembling.build();
-        self.current_row = Some(Row::create(row_record_reassembled, &self.selection, &self.table, key_bytes));
+        self.current_row = Some(Row::create(row_record_reassembled, &self.table, key_bytes));
 
         true
     }
@@ -86,7 +86,7 @@ impl<I: StorageIterator> TableIterator<I> {
             }
         };
 
-        let mut row_reassemble = &mut self.rows_reassembling[row_reassemble_index];
+        let row_reassemble = &mut self.rows_reassembling[row_reassemble_index];
         row_reassemble.add_record(record);
     }
     

@@ -2,32 +2,27 @@ use crate::selection::Selection;
 use crate::sql::expression::Expression;
 use crate::sql::plan::plan_step::Plan;
 use crate::sql::plan::scan_type::ScanType;
-use crate::sql::plan::steps::primary_exact_scan_step::PrimaryExactScanStep;
+use crate::sql::plan::scan_type_analyzer::ScanTypeAnalyzer;
 use crate::sql::plan::steps::filter_step::FilterStep;
 use crate::sql::plan::steps::full_scan_step::FullScanStep;
 use crate::sql::plan::steps::limit_step::LimitStep;
-use crate::sql::plan::steps::range_scan_step::RangeScanStep;
-use crate::sql::statement::{DeleteStatement, Limit, SelectStatement, UpdateStatement};
-use crate::table::table::Table;
-use shared::SimpleDbError::{FullScanNotAllowed, MalformedQuery, RangeScanNotAllowed};
-use shared::{SimpleDbError, SimpleDbOptions};
-use std::sync::Arc;
-use storage::transactions::transaction::Transaction;
-use crate::sql::plan::scan_type::ScanType::{MergeIntersection, MergeUnion};
-use crate::sql::plan::scan_type_analyzer::ScanTypeAnalyzer;
 use crate::sql::plan::steps::merge_intersection_scan_type::MergeIntersectionScanType;
 use crate::sql::plan::steps::merge_union_scan_step::MergeUnionScanStep;
+use crate::sql::plan::steps::primary_exact_scan_step::PrimaryExactScanStep;
+use crate::sql::plan::steps::range_scan_step::RangeScanStep;
 use crate::sql::plan::steps::secondary_scan_type::SecondaryExactScanType;
+use crate::sql::statement::{DeleteStatement, Limit, SelectStatement, UpdateStatement};
+use crate::table::table::Table;
+use shared::SimpleDbError;
+use std::sync::Arc;
+use storage::transactions::transaction::Transaction;
 
 pub struct Planner {
-    options: Arc<SimpleDbOptions>
 }
 
 impl Planner {
-    pub fn create(options: Arc<SimpleDbOptions>) -> Planner {
-        Planner {
-            options: options.clone()
-        }
+    pub fn create() -> Planner {
+        Planner {}
     }
 
     pub fn plan_select(

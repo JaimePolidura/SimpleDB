@@ -24,7 +24,7 @@ pub struct TransactionManager {
 
 impl TransactionManager {
     pub fn create_recover_from_log(options: Arc<shared::SimpleDbOptions>) -> Result<TransactionManager, shared::SimpleDbError> {
-        let mut log = TransactionLog::create(options)?;
+        let log = TransactionLog::create(options)?;
         let transaction_log_entries = log.read_entries()?;
         let (active_transactions, pending_to_rollback, max_txn_id) =
             Self::get_pending_transactions(&transaction_log_entries);
@@ -90,7 +90,7 @@ impl TransactionManager {
             Some(entry_rolledback_transaction) => {
                 let n_writes_entry_rolledback_transaction = entry_rolledback_transaction.value();
 
-                self.log.add_entry(TransactionLogEntry::RolledbackWrite(key.txn_id()));
+                let _ = self.log.add_entry(TransactionLogEntry::RolledbackWrite(key.txn_id()));
                 n_writes_entry_rolledback_transaction.fetch_sub(1, Relaxed);
 
                 if n_writes_entry_rolledback_transaction.load(Relaxed) == 0 {
@@ -143,8 +143,8 @@ impl TransactionManager {
         entries: &Vec<TransactionLogEntry>
     ) -> (SkipMap<TxnId, usize>, SkipMap<TxnId, usize>, TxnId) {
         //Transaction ID -> Nº writes
-        let mut active_transactions = SkipMap::new();
-        let mut transactions_to_rollback = SkipMap::new();
+        let active_transactions = SkipMap::new();
+        let transactions_to_rollback = SkipMap::new();
         let mut max_txn_id = 1 as TxnId;
 
         for entry in entries.iter() {
@@ -190,7 +190,7 @@ impl TransactionManager {
         rollback_transaction: &SkipMap<TxnId, usize>,
         active_transaction: &SkipMap<TxnId, usize>,
     ) -> SkipMap<TxnId, AtomicUsize> {
-        let mut txnids = SkipMap::new();
+        let txnids = SkipMap::new();
         for entry in rollback_transaction.iter() {
             txnids.insert(*entry.key(), AtomicUsize::new(*entry.value()));
         }

@@ -81,4 +81,8 @@ impl SecondaryIndex {
             &deleted_entry
         )
     }
+
+    pub fn can_be_read(&self) -> bool {
+        matches!(self.state, SecondaryIndexState::Active)
+    }
 }

@@ -29,6 +29,7 @@ pub struct Keyspace {
     descriptor: KeyspaceDescriptor,
 }
 
+#[allow(dead_code)]
 impl Keyspace {
     pub fn create_new(
         keyspace_id: shared::KeyspaceId,
@@ -117,7 +118,7 @@ impl Keyspace {
         key: Bytes,
         value: &[u8],
     ) -> Result<(), shared::SimpleDbError> {
-        self.transaction_manager.mark_write(transaction);
+        self.transaction_manager.mark_write(transaction)?;
         match self.memtables.set(key, value, transaction) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(())
@@ -137,7 +138,7 @@ impl Keyspace {
         transaction: &Transaction,
         key: Bytes,
     ) -> Result<(), shared::SimpleDbError> {
-        self.transaction_manager.mark_write(transaction);
+        self.transaction_manager.mark_write(transaction)?;
         match self.memtables.delete(key, transaction) {
             Some(memtable_to_flush) => self.flush_memtable(memtable_to_flush),
             None => Ok(()),
@@ -154,14 +155,6 @@ impl Keyspace {
         ));
 
         Ok(())
-    }
-
-    pub fn has_txn_id_been_written(&self, txn_id: shared::TxnId) -> bool {
-        if self.memtables.has_txn_id_been_written(txn_id) {
-            return true;
-        }
-
-        self.sstables.has_has_txn_id_been_written(txn_id)
     }
 
     pub fn start_compaction_thread(&self) {
@@ -195,7 +188,8 @@ impl Keyspace {
     }
 
     fn restart_compaction(&self, compaction: CompactionTask) {
-        self.compaction.compact(compaction);
+        self.compaction.compact(compaction)
+            .expect("Cannot restart compaction");
     }
 
     fn restart_memtable_flush(&self, memtable_flush: MemtableFlushManifestOperation) {
@@ -203,7 +197,8 @@ impl Keyspace {
         if !self.sstables.contains_sstable_id(memtable_flush.sstable_id) {
             let memtable_to_flush = self.memtables.get_memtable_to_flush(memtable_flush.memtable_id);
             if memtable_to_flush.is_some() {
-                self.flush_memtable(memtable_to_flush.unwrap());
+                self.flush_memtable(memtable_to_flush.unwrap())
+                    .expect("Cannot flush memtable");
             }
         }
     }

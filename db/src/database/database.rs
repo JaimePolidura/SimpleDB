@@ -50,7 +50,7 @@ impl Database {
             &String::from(database_name),
         )?;
 
-        let mut database = Arc::new(Database {
+        let database = Arc::new(Database {
             database_descriptor: Mutex::new(database_descriptor),
             name: String::from(database_name),
             options: database_options.clone(),

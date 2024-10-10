@@ -6,7 +6,6 @@ use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStateme
 use crate::value::{Type, Value};
 use shared::SimpleDbError;
 use shared::SimpleDbError::IllegalToken;
-use std::cmp::PartialEq;
 use crate::CreateIndexStatement;
 
 const MAX_PRECEDENCE: u8 = u8::MAX;
@@ -383,7 +382,7 @@ impl Parser {
     }
 
     fn show_indexes(&mut self) -> Result<Statement, SimpleDbError> {
-        self.expect_token(Token::From);
+        self.expect_token(Token::From)?;
         let table_name = self.identifier()?;
         Ok(Statement::ShowIndexes(table_name))
     }

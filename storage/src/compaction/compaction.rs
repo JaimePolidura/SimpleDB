@@ -74,11 +74,11 @@ impl Compaction {
 
     pub fn compact(&self, compaction_task: CompactionTask) -> Result<(), shared::SimpleDbError> {
         match compaction_task {
-            CompactionTask::SimpleLeveled(simpleLeveledTask) => start_simple_leveled_compaction(
-                simpleLeveledTask, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id, self.keyspace_flags
+            CompactionTask::SimpleLeveled(simple_leveled_task) => start_simple_leveled_compaction(
+                simple_leveled_task, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id, self.keyspace_flags
             ),
-            CompactionTask::Tiered(tieredTask) => start_tiered_compaction(
-                tieredTask, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id, self.keyspace_flags
+            CompactionTask::Tiered(tiered_task) => start_tiered_compaction(
+                tiered_task, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id, self.keyspace_flags
             ),
         }
     }
@@ -97,7 +97,7 @@ impl CompactionThread {
                 }
 
                 if let Ok(operation_id) = operation_id {
-                    self.manifest.mark_as_completed(operation_id);
+                    let _ = self.manifest.mark_as_completed(operation_id);
                 }
             }
         }
@@ -126,11 +126,11 @@ impl CompactionThread {
 
     fn compact(&self, compaction_task: CompactionTask) -> Result<(), shared::SimpleDbError> {
         match compaction_task {
-            CompactionTask::SimpleLeveled(simpleLeveledTask) => start_simple_leveled_compaction(
-                simpleLeveledTask, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id, self.keyspace_flags
+            CompactionTask::SimpleLeveled(simple_leveled_task) => start_simple_leveled_compaction(
+                simple_leveled_task, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id, self.keyspace_flags
             ),
-            CompactionTask::Tiered(tieredTask) => start_tiered_compaction(
-                tieredTask, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id, self.keyspace_flags,
+            CompactionTask::Tiered(tiered_task) => start_tiered_compaction(
+                tiered_task, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id, self.keyspace_flags,
             ),
         }
     }

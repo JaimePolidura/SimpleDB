@@ -1,7 +1,7 @@
 use crate::sst::block::block_decoder::decode_block;
 use crate::sst::block::block_encoder::encode_block;
 use crate::transactions::transaction::Transaction;
-use bytes::{Buf, Bytes};
+use bytes::{Bytes};
 use shared::key::Key;
 use std::sync::Arc;
 
@@ -81,13 +81,13 @@ impl Block {
         &self,
         key_lookup: &Bytes,
         transaction: &Transaction
-    ) -> (Option<(Bytes)>, usize) {
+    ) -> (Option<Bytes>, usize) {
         let mut right = self.offsets.len();
         let mut left = 0;
 
         while left < right {
             let current_index = (left + right) / 2;
-            let mut current_key = self.get_key_by_index(current_index);
+            let current_key = self.get_key_by_index(current_index);
 
             if left == right {
                 return (None, current_index);
@@ -114,7 +114,7 @@ impl Block {
         transaction: &Transaction,
         key: &Bytes,
         index: usize
-    ) -> (Option<(Bytes)>, usize) {
+    ) -> (Option<Bytes>, usize) {
         //We make current_index to point to the first version of a given key bytes. Example:
         //[(A, 1), (B, 1), (B, 2), (B, 3)], given key = B, index: 3, this would make current_index to
         //have value 1 (first entry of B)

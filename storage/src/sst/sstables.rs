@@ -1,20 +1,19 @@
-use std::cmp::max;
+use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
+use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables_files::{extract_sstable_id_from_file, is_sstable_file, to_sstable_file_name};
 use crate::sst::ssttable_iterator::SSTableIterator;
+use crate::transactions::transaction::Transaction;
+use bytes::Bytes;
 use shared::iterators::merge_iterator::MergeIterator;
+use shared::logger::logger;
+use shared::logger::SimpleDbLayer::StorageKeyspace;
+use std::cmp::max;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
-use bytes::Bytes;
-use shared::iterators::storage_iterator::StorageIterator;
-use shared::logger::logger;
-use shared::logger::SimpleDbLayer::StorageKeyspace;
-use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
-use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
-use crate::transactions::transaction::Transaction;
 
 pub struct SSTables {
     //For each level one index entry
@@ -78,7 +77,7 @@ impl SSTables {
                 )?;
 
                 if sstable.state.load(Acquire) != SSTABLE_ACTIVE {
-                    sstable.delete();
+                    sstable.delete()?;
                 }
 
                 let lock: &RwLock<Vec<Arc<SSTable>>> = &levels[sstable.level as usize];
@@ -106,14 +105,6 @@ impl SSTables {
             }
         }
 
-        MergeIterator::create(iterators)
-    }
-
-    pub fn scan_from_key(&self, transaction: &Transaction, key: &Bytes) -> MergeIterator<SSTableIterator> {
-        let mut iterators = self.create_iterators(transaction);
-        for iterator in &mut iterators {
-            iterator.seek(key, true);
-        }
         MergeIterator::create(iterators)
     }
 
@@ -153,26 +144,11 @@ impl SSTables {
         Ok(None)
     }
 
-    pub fn has_has_txn_id_been_written(&self, txn_id: shared::TxnId) -> bool {
-        for sstables_in_level_lock in self.sstables.iter() {
-            let lock_result = sstables_in_level_lock.read();
-            let sstable_in_level = lock_result.as_ref().unwrap();
-
-            for sstable in sstable_in_level.iter() {
-                if sstable.has_has_txn_id_been_written(txn_id) {
-                    return true;
-                }
-            }
-        }
-
-        false
-    }
-
     pub fn delete_all_sstables(&self, level_id: usize) {
         match self.sstables.get(level_id) {
             Some(lock) => {
                 let mut lock_result = lock.write();
-                let mut sstables = lock_result.as_mut().unwrap();
+                let sstables = lock_result.as_mut().unwrap();
                 sstables.clear();
             },
             None => {},
@@ -196,7 +172,7 @@ impl SSTables {
         match self.sstables.get(level) {
             Some(sstables_lock) => {
                 let mut lock_result = sstables_lock.write();
-                let mut sstables_in_level = lock_result.as_mut().unwrap();
+                let sstables_in_level = lock_result.as_mut().unwrap();
                 let mut indexes_to_remove = Vec::new();
 
                 for (current_index, current_sstable) in sstables_in_level.iter().enumerate() {
@@ -208,7 +184,7 @@ impl SSTables {
                 }
 
                 for index_to_remove in indexes_to_remove.iter().rev() {
-                    let mut sstable = sstables_in_level.remove(*index_to_remove);
+                    let sstable = sstables_in_level.remove(*index_to_remove);
                     sstable.delete()?;
                 }
 
@@ -222,16 +198,6 @@ impl SSTables {
         match self.sstables.get(level) {
             Some(sstables) => sstables.read().unwrap().clone(),
             None => Vec::new(),
-        }
-    }
-
-    pub fn get_level_size_bytes(&self, level_id: usize) -> usize {
-        match self.sstables.get(level_id) {
-            Some(sstables) => sstables.read().unwrap()
-                .iter()
-                .map(|it| it.size())
-                .sum(),
-            None => 0,
         }
     }
 

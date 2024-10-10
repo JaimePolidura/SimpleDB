@@ -5,7 +5,7 @@ use crate::sst::sstable_builder::SSTableBuilder;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::tombstone::TOMBSTONE;
-use bytes::{Buf, Bytes};
+use bytes::{Bytes};
 use crossbeam_skiplist::{SkipMap, SkipSet};
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::key::Key;
@@ -13,7 +13,6 @@ use shared::logger::{logger, SimpleDbLayer};
 use shared::{Flag, StorageValueMergeResult};
 use std::cell::UnsafeCell;
 use std::ops::Bound::Excluded;
-use std::ops::Shl;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
@@ -31,7 +30,7 @@ pub struct MemTable {
     pub(crate) keyspace_flags: Flag,
 }
 
-enum MemtableState {
+pub(crate) enum MemtableState {
     New,
     RecoveringFromWal,
     Active,
@@ -81,7 +80,7 @@ impl MemTable {
             options
         };
 
-        memtable.recover_from_wal();
+        memtable.recover_from_wal()?;
 
         Ok(memtable)
     }
@@ -229,8 +228,7 @@ impl MemTable {
 
     pub fn to_sst(self: &Arc<MemTable>, transaction_manager: &Arc<TransactionManager>) -> SSTableBuilder {
         let mut memtable_iterator = MemtableIterator::create(&self, &Transaction::none());
-        let mut sstable_builder = SSTableBuilder::create(self.options.clone(),
-                                                         transaction_manager.clone(), self.keyspace_id, 0);
+        let mut sstable_builder = SSTableBuilder::create(self.options.clone(), self.keyspace_id, 0);
         sstable_builder.set_memtable_id(self.memtable_id);
 
         while memtable_iterator.next() {
@@ -256,7 +254,7 @@ impl MemTable {
         );
 
         while let Some(entry) = entries.pop() {
-            self.write(&entry.key, entry.value, entry.key.txn_id());
+            self.write(&entry.key, entry.value, entry.key.txn_id())?;
         }
 
         self.set_active();

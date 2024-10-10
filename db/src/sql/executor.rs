@@ -12,12 +12,11 @@ use crate::value::Value;
 use crate::{ColumnDescriptor, CreateIndexStatement};
 use bytes::Bytes;
 use shared::SimpleDbError::MalformedQuery;
-use shared::{SimpleDbError, SimpleDbOptions};
+use shared::SimpleDbError;
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 
 pub struct StatementExecutor {
-    options: Arc<SimpleDbOptions>,
     databases: Arc<Databases>,
 
     validator: StatementValidator,
@@ -25,11 +24,10 @@ pub struct StatementExecutor {
 }
 
 impl StatementExecutor {
-    pub fn create(options: &Arc<SimpleDbOptions>, databases: &Arc<Databases>) -> StatementExecutor {
+    pub fn create(databases: &Arc<Databases>) -> StatementExecutor {
         StatementExecutor {
-            validator: StatementValidator::create(databases, options),
-            planner: Planner::create(options.clone()),
-            options: options.clone(),
+            validator: StatementValidator::create(databases),
+            planner: Planner::create(),
             databases: databases.clone()
         }
     }
@@ -135,7 +133,7 @@ impl StatementExecutor {
         &self,
         database_name: &String,
         transaction: &Transaction,
-        mut insert_statement: InsertStatement,
+        insert_statement: InsertStatement,
     ) -> Result<StatementResult, SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table_or_err(insert_statement.table_name.as_str())?;
@@ -250,7 +248,7 @@ impl StatementExecutor {
         formatted_values
     }
 
-    fn evaluate_constant_expressions(&self, mut statement: Statement) -> Result<Statement, SimpleDbError> {
+    fn evaluate_constant_expressions(&self, statement: Statement) -> Result<Statement, SimpleDbError> {
         match statement {
             Statement::Select(mut select) => {
                 if let Some(where_expr) = select.where_expr {

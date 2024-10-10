@@ -1,8 +1,7 @@
-use std::cmp::min;
-use std::collections::HashSet;
 use crate::iterators::storage_iterator::StorageIterator;
 use crate::key::Key;
 use bytes::Bytes;
+use std::collections::HashSet;
 
 pub struct MergeIterator<I: StorageIterator> {
     //We use Option so that when an iterator has not next, we can remove it by placing None
@@ -168,12 +167,12 @@ fn is_iterator_up_to_date<I: StorageIterator>(it: &Box<I>, last_key: &Key) -> bo
 
 #[cfg(test)]
 mod test {
-    use bytes::Bytes;
     use crate::assertions;
     use crate::assertions::assert_iterator_str_seq;
     use crate::iterators::merge_iterator::MergeIterator;
     use crate::iterators::mock_iterator::MockIterator;
     use crate::iterators::storage_iterator::StorageIterator;
+    use bytes::Bytes;
 
     #[test]
     fn one_entry() {

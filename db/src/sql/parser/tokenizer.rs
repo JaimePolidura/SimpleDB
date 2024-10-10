@@ -56,7 +56,7 @@ impl Tokenizer {
             ';' => Ok(Token::Semicolon),
             '"' => self.string(),
             '>' => self.match_char_or('=', Token::GreaterEqual, Token::Greater),
-            '<' => self.match_char_or('=', Token::LessEqual, Token::LessEqual),
+            '<' => self.match_char_or('=', Token::LessEqual, Token::Less),
             '=' => self.match_char_or('=', Token::EqualEqual, Token::Equal),
             '!' => self.match_char_or_error('=', Token::NotEqual),
             _ => Err(IllegalToken(self.current_location(), String::from("Unexpected token")))
@@ -399,11 +399,6 @@ impl Tokenizer {
         }
     }
 
-    fn advance_backward(&mut self) {
-        self.current_column_index -= 1;
-        self.next -= 1;
-    }
-
     fn advance(&mut self) -> char {
         let current = self.current();
         self.current_column_index += 1;
@@ -417,10 +412,6 @@ impl Tokenizer {
 
     fn end_reached(&self) -> bool {
         self.next >= self.string.len()
-    }
-
-    fn char_at(&self, index: usize) -> char {
-        self.string.chars().nth(index).unwrap()
     }
 
     pub fn current_location(&self) -> TokenLocation {

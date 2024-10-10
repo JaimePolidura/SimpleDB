@@ -50,7 +50,7 @@ fn do_tiered_compaction(
         sstables.scan_from_level(&levels_id_to_compact),
     );
     let mut new_sstable_builder = Some(SSTableBuilder::create(
-        options.clone(), transaction_manager.clone(), keyspace_id, new_level as u32
+        options.clone(), keyspace_id, new_level as u32
     ));
 
     while iterator.has_next() {
@@ -59,7 +59,7 @@ fn do_tiered_compaction(
         let key = iterator.key().clone();
         match transaction_manager.on_write_key(&key) {
             Ok(_) => {
-                let value = iterator.value().clone();
+                let value = iterator.value();
                 let is_tombstone = value.eq(TOMBSTONE.as_ref());
 
                 if is_new_level_last_level && is_tombstone {
@@ -75,7 +75,7 @@ fn do_tiered_compaction(
                     sstables.flush_to_disk(new_sstable_builder.take().unwrap())?;
 
                     new_sstable_builder = Some(
-                        SSTableBuilder::create(options.clone(), transaction_manager.clone(), keyspace_id, new_level as u32)
+                        SSTableBuilder::create(options.clone(), keyspace_id, new_level as u32)
                     );
                 }
             },

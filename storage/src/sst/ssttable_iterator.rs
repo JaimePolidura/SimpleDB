@@ -36,12 +36,6 @@ impl SSTableIterator {
         }
     }
 
-    fn set_iterator_as_empty(&mut self) {
-        self.pending_blocks.clear();
-        self.current_block_iterator = None;
-        self.current_block_metadata = None;
-    }
-
     fn next_key_iterator(&mut self) -> bool {
         let mut advanced = false;
 
@@ -100,7 +94,7 @@ impl SSTableIterator {
 impl StorageIterator for SSTableIterator {
     fn next(&mut self) -> bool {
         loop {
-            let mut advanced = self.next_key_iterator();
+            let advanced = self.next_key_iterator();
             if advanced && self.transaction.can_read(self.key()) {
                 return true
             } else if !advanced {

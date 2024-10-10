@@ -59,18 +59,6 @@ pub enum Token {
 }
 
 impl Token {
-    pub fn to_column_type(&self) -> Result<Type, ()> {
-        match self {
-            Token::True => Ok(Type::Boolean),
-            Token::False => Ok(Type::Boolean),
-            Token::Null => Ok(Type::Null),
-            Token::String(_) => Ok(Type::String),
-            Token::NumberI64(_) => Ok(Type::I64),
-            Token::NumberF64(_) => Ok(Type::F64),
-            _ => Err(())
-        }
-    }
-
     pub fn serialize(&self) -> Result<Value, ()> {
         match self {
             Token::String(string) => Ok(Value::String(string.clone())),

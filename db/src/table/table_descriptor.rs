@@ -1,11 +1,10 @@
+use crate::value::Type;
+use crate::value::Type::I64;
 use bytes::{Buf, BufMut};
 use crossbeam_skiplist::SkipMap;
 use shared::{ColumnId, KeyspaceId, SimpleDbError, SimpleDbFile};
-use std::cmp::max;
 use std::path::PathBuf;
 use std::sync::Arc;
-use crate::value::Type;
-use crate::value::Type::I64;
 
 const NO_INDEX: KeyspaceId = 0xFFFFFFFFFFFFFFFF;
 
@@ -105,19 +104,6 @@ impl TableDescriptor {
             .clone()
     }
 
-    pub fn name(&self) -> String {
-        self.table_name.clone()
-    }
-
-    fn max_column_id(column_descriptors: &Vec<ColumnDescriptor>) -> ColumnId {
-        let mut max_column_id = 0;
-        for column_descriptor in column_descriptors {
-            max_column_id = max(column_descriptor.column_id, max_column_id);
-        }
-
-        max_column_id
-    }
-
     fn deserialize_table_descriptor_bytes(
         keyspace_id: KeyspaceId,
         bytes: &Vec<u8>,
@@ -148,7 +134,7 @@ impl TableDescriptor {
     }
 
     fn index_by_column_name(column_descriptors: &mut Vec<ColumnDescriptor>) -> SkipMap<shared::ColumnId, ColumnDescriptor> {
-        let mut indexed = SkipMap::new();
+        let indexed = SkipMap::new();
 
         while let Some(column_descriptor) = column_descriptors.pop() {
             indexed.insert(column_descriptor.column_id, column_descriptor);

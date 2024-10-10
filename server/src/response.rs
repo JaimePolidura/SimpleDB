@@ -1,4 +1,3 @@
-use std::ops::Index;
 use bytes::BufMut;
 use db::{ColumnDescriptor, IndexType, Row};
 use shared::{ErrorTypeId, SimpleDbError};
@@ -42,7 +41,7 @@ impl Response {
 
         match self {
             Response::Statement(result) => serialized.extend(result.serialize()),
-            Response::Error(errorTypeId) => serialized.put_u8(*errorTypeId as u8),
+            Response::Error(error_type_id) => serialized.put_u8(*error_type_id as u8),
             Response::Ok => {},
         };
 
