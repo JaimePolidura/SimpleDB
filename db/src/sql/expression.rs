@@ -42,6 +42,14 @@ impl Expression {
         }
     }
 
+    pub fn get_f64(&self) -> Result<f64, SimpleDbError> {
+        match self {
+            Expression::Literal(value) => value.get_f64()
+                .map_err(|_| MalformedQuery(String::from("Cannot get F64 from expression"))),
+            _ => Err(MalformedQuery(String::from("Cannot get F64 from expression")))
+        }
+    }
+
     pub fn serialize(&self) -> Bytes {
         match self {
             Expression::Literal(value) => value.serialize(),

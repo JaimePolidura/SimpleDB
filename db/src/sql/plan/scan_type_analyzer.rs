@@ -67,7 +67,7 @@ impl ScanTypeAnalyzer {
             BinaryOperator::Greater => {
                 if right.is_constant() && left.identifier_eq(&self.table.primary_column_name) {
                     Ok(ScanType::Range(RangeScan{
-                        column_name: right.get_identifier()?,
+                        column_name: left.get_identifier()?,
                         start: Some(*right.clone()),
                         start_inclusive: matches!(operator, BinaryOperator::GreaterEqual),
                         end: None,
@@ -81,7 +81,7 @@ impl ScanTypeAnalyzer {
             BinaryOperator::Less => {
                 if right.is_constant() && left.identifier_eq(&self.table.primary_column_name){
                     Ok(ScanType::Range(RangeScan{
-                        column_name: right.get_identifier()?,
+                        column_name: left.get_identifier()?,
                         start: None,
                         start_inclusive: false,
                         end: Some(*right.clone()),
@@ -107,6 +107,9 @@ impl ScanTypeAnalyzer {
     }
 
     //Rules:
+    //secondary -> SecondaryExact
+    //primary -> PrimaryExact
+
     // full AND|OR full -> full
     // full AND primary|secondary -> primary|secondary
     // full OR primary|secondary -> full
@@ -117,12 +120,12 @@ impl ScanTypeAnalyzer {
     //
     // primary AND primary -> error
     // primary OR primary -> merge_union
-    // primary AND secondary -> primary
-    // primary OR secondary -> secondary
+    // primary AND secondary -> secondary
+    // primary OR secondary -> merge_union
     // primary AND merge_union|merge_intersection -> primary
     // primary OR merge_union|merge_intersection -> merge|merge_intersection
     // primary AND range -> primary
-    // primary OR range -> merge
+    // primary OR range -> merge_union
     //
     // secondary AND secondary -> error
     // secondary OR secondary -> merge
@@ -326,54 +329,112 @@ impl ScanTypeAnalyzer {
 
 #[cfg(test)]
 mod test {
-    use crate::sql::expression::{BinaryOperator, Expression};
+    use crate::sql::expression::Expression;
+    use crate::sql::parser::parser::Parser;
     use crate::sql::plan::scan_type::ScanType;
     use crate::sql::plan::scan_type_analyzer::ScanTypeAnalyzer;
     use crate::table::table::Table;
     use crate::value::Value;
     use crate::ColumnDescriptor;
+    use crate::sql::plan::scan_type::ScanType::{ExactPrimary, ExactSecondary, MergeUnion, Range};
 
-    //WHERE id >= 1 OR dinero < 100
     #[test]
-    fn range_compound_or() {
+    fn compound_2() {
+        //primary OR range -> merge_union
+        //primary OR range -> merge_union
+        //merge_union and merge_union -> merge_intersection
+        let analyzer = ScanTypeAnalyzer::create(
+            Table::create_mock(vec![
+                ColumnDescriptor::create_primary("id"),
+                ColumnDescriptor::create_secondary("dinero", 1),
+            ]),
+            parse("(id == 1 OR dinero == 100) AND (id == 2 OR dinero == 200)")
+        );
+        let result = analyzer.analyze().unwrap();
+
+        assert_eq!(result, ScanType::MergeIntersection(
+            Box::new(MergeUnion(
+                Box::new(ExactPrimary(Expression::Literal(Value::I64(1)))),
+                Box::new(ExactSecondary(String::from("dinero"), Expression::Literal(Value::I64(100)))),
+            )),
+            Box::new(MergeUnion(
+                Box::new(ExactPrimary(Expression::Literal(Value::I64(2)))),
+                Box::new(ExactSecondary(String::from("dinero"), Expression::Literal(Value::I64(200)))),
+            )),
+        ));
+    }
+
+    #[test]
+    fn compound_1() {
+        //primary AND range -> primary
+        //primary AND full -> full
+        //primary or full -> full
+        let analyzer = ScanTypeAnalyzer::create(
+            Table::create_mock(vec![
+                ColumnDescriptor::create_primary("id"),
+                ColumnDescriptor::create_secondary("dinero", 1),
+                ColumnDescriptor::create("dinero", 2)
+            ]),
+            parse("(id == 1 AND dinero > 100) OR (id == 2 OR credito > 200)")
+        );
+        let result = analyzer.analyze().unwrap();
+
+        assert_eq!(result, ScanType::Full);
+    }
+
+    //Expect merge union
+    #[test]
+    fn primary_or_secondary() {
+        let analyzer = ScanTypeAnalyzer::create(
+            Table::create_mock(vec![
+                ColumnDescriptor::create_primary("id"),
+                ColumnDescriptor::create_secondary("dinero", 1)
+            ]),
+            parse("id == 1 OR dinero == 100")
+        );
+        let result = analyzer.analyze().unwrap();
+
+        match result {
+            ScanType::MergeUnion(left, right) => {
+                assert_eq!(*right, ScanType::ExactSecondary(String::from("dinero"), Expression::Literal(Value::I64(100))));
+                assert_eq!(*left, ScanType::ExactPrimary(Expression::Literal(Value::I64(1))));
+            },
+            _ => panic!("")
+        };
+    }
+
+    //Expect secondary
+    #[test]
+    fn primary_and_secondary() {
+        let analyzer = ScanTypeAnalyzer::create(
+            Table::create_mock(vec![
+                ColumnDescriptor::create_primary("id"),
+                ColumnDescriptor::create_secondary("dinero", 1)
+            ]),
+            parse("id == 1 AND dinero == 100")
+        );
+        let result = analyzer.analyze().unwrap();
+
+        assert_eq!(result, ScanType::ExactPrimary(Expression::Literal(Value::I64(1))));
+    }
+
+    //Expect full
+    #[test]
+    fn range_or_full_range() {
         let analyzer = ScanTypeAnalyzer::create(
             Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            Expression::Binary(
-                BinaryOperator::Or,
-                Box::new(Expression::Binary(
-                    BinaryOperator::GreaterEqual,
-                    Box::new(Expression::Identifier(String::from("id"))),
-                    Box::new(Expression::Literal(Value::I64(1))),
-                )),
-                Box::new(Expression::Binary(
-                    BinaryOperator::Less,
-                    Box::new(Expression::Identifier(String::from("dinero"))),
-                    Box::new(Expression::Literal(Value::I64(100))),
-                ))
-            )
+            parse("id >= 1 OR dinero < 100")
         );
         let result = analyzer.analyze().unwrap();
         assert_eq!(result, ScanType::Full);
     }
 
-    // WHERE id >= 1 AND dinero < 100
+    //Expect range
     #[test]
-    fn range_compound_and() {
+    fn range_and_full() {
         let analyzer = ScanTypeAnalyzer::create(
             Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            Expression::Binary(
-                BinaryOperator::And,
-                Box::new(Expression::Binary(
-                    BinaryOperator::GreaterEqual,
-                    Box::new(Expression::Identifier(String::from("id"))),
-                    Box::new(Expression::Literal(Value::I64(1))),
-                )),
-                Box::new(Expression::Binary(
-                    BinaryOperator::Less,
-                    Box::new(Expression::Identifier(String::from("dinero"))),
-                    Box::new(Expression::Literal(Value::I64(100))),
-                ))
-            )
+            parse("id >= 1 AND dinero < 100")
         );
         let result = analyzer.analyze().unwrap();
 
@@ -382,53 +443,27 @@ mod test {
         assert!(range_scan.start_inclusive);
         assert_eq!(range_scan.start.as_ref().unwrap().clone(), Expression::Literal(Value::I64(1)));
 
-        assert!(range_scan.end.is_some());
-        assert!(!range_scan.end_inclusive);
-        assert_eq!(range_scan.end.as_ref().unwrap().clone(), Expression::Literal(Value::I64(100)));
+        assert!(range_scan.end.is_none());
     }
 
-    //WHERE id >= 1 OR dinero == 100
+    //Expect full
     #[test]
-    fn simple_range_or() {
+    fn range_or_full() {
         let analyzer = ScanTypeAnalyzer::create(
             Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            Expression::Binary(
-                BinaryOperator::Or,
-                Box::new(Expression::Binary(
-                    BinaryOperator::GreaterEqual,
-                    Box::new(Expression::Identifier(String::from("id"))),
-                    Box::new(Expression::Literal(Value::I64(1))),
-                )),
-                Box::new(Expression::Binary(
-                    BinaryOperator::Equal,
-                    Box::new(Expression::Identifier(String::from("dinero"))),
-                    Box::new(Expression::Literal(Value::I64(100))),
-                ))
-            )
+            parse("id >= 1 OR dinero == 100")
         );
         let result = analyzer.analyze().unwrap();
 
         assert_eq!(result, ScanType::Full);
     }
 
-    //WHERE id >= 1 AND dinero == 100
+    //Expect range
     #[test]
-    fn simple_range_and() {
+    fn range_and_full_2() {
         let analyzer = ScanTypeAnalyzer::create(
             Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            Expression::Binary(
-                BinaryOperator::And,
-                Box::new(Expression::Binary(
-                    BinaryOperator::GreaterEqual,
-                    Box::new(Expression::Identifier(String::from("id"))),
-                    Box::new(Expression::Literal(Value::I64(1))),
-                )),
-                Box::new(Expression::Binary(
-                    BinaryOperator::Equal,
-                    Box::new(Expression::Identifier(String::from("dinero"))),
-                    Box::new(Expression::Literal(Value::I64(100))),
-                ))
-            )
+            parse("id >= 1 AND dinero == 100")
         );
         let result = analyzer.analyze().unwrap();
 
@@ -438,24 +473,12 @@ mod test {
         assert_eq!(range_scan.start.as_ref().unwrap().clone(), Expression::Literal(Value::I64(1)));
     }
 
-    //WHERE id == 1 AND dinero == 100
+    //Expect: ExactPrimary
     #[test]
-    fn simple_exact_and() {
+    fn exact_primary_and_full() {
         let analyzer = ScanTypeAnalyzer::create(
             Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            Expression::Binary(
-                BinaryOperator::And,
-                Box::new(Expression::Binary(
-                    BinaryOperator::Equal,
-                    Box::new(Expression::Identifier(String::from("id"))),
-                    Box::new(Expression::Literal(Value::I64(1))),
-                )),
-                Box::new(Expression::Binary(
-                    BinaryOperator::Equal,
-                    Box::new(Expression::Identifier(String::from("dinero"))),
-                    Box::new(Expression::Literal(Value::I64(100))),
-                ))
-            )
+            parse("id == 1 AND dinero == 100")
         );
         let result = analyzer.analyze().unwrap();
         let result = match result { ScanType::ExactPrimary(value) => value, _ => panic!("") };
@@ -463,26 +486,20 @@ mod test {
         assert_eq!(result, Expression::Literal(Value::I64(1)));
     }
 
-    //WHERE id == 1 OR dinero == 100
+    //Expect: full
     #[test]
-    fn simple_full_or() {
+    fn exact_primary_or_full() {
         let analyzer = ScanTypeAnalyzer::create(
             Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            Expression::Binary(
-                BinaryOperator::Or,
-                Box::new(Expression::Binary(
-                    BinaryOperator::Equal,
-                    Box::new(Expression::Identifier(String::from("id"))),
-                    Box::new(Expression::Literal(Value::I64(1))),
-                )),
-                Box::new(Expression::Binary(
-                    BinaryOperator::Equal,
-                    Box::new(Expression::Identifier(String::from("dinero"))),
-                    Box::new(Expression::Literal(Value::I64(100))),
-                )))
+            parse("id == 1 OR dinero == 100")
         );
 
         let result = analyzer.analyze().unwrap();
         assert_eq!(result, ScanType::Full);
+    }
+
+    fn parse(query: &str) -> Expression {
+        let mut parser = Parser::create(query.to_string());
+        parser.parse_expression().unwrap()
     }
 }

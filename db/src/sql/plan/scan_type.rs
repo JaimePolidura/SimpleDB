@@ -69,8 +69,8 @@ impl RangeScan {
             let start_self = self.start.clone().unwrap();
             let start_other = other.start.clone().unwrap();
             let is_self_less_than_other = start_self.less_equal(&start_other)?.get_boolean()?;
-            let is_new_start_inclusive = if is_self_less_than_other { self.start_inclusive } else { other.start_inclusive };
-            let new_start = if is_self_less_than_other { start_self } else { start_other };
+            let is_new_start_inclusive = if is_self_less_than_other { other.start_inclusive } else { self.start_inclusive };
+            let new_start = if is_self_less_than_other { start_other } else { start_self };
 
             result.start_inclusive = is_new_start_inclusive;
             result.start = Some(new_start);
@@ -79,7 +79,7 @@ impl RangeScan {
             let end_other = other.end.clone().unwrap();
             let end_self = self.end.clone().unwrap();
             let is_self_less_than_other = end_self.less_equal(&end_other)?.get_boolean()?;
-            let is_new_end_inclusive = if is_self_less_than_other { self.start_inclusive } else { other.start_inclusive };
+            let is_new_end_inclusive = if is_self_less_than_other { self.end_inclusive } else { other.end_inclusive };
             let new_end = if is_self_less_than_other { end_self } else { end_other };
 
             result.end_inclusive = is_new_end_inclusive;
@@ -160,5 +160,151 @@ impl RangeScan {
             end: None,
             end_inclusive: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::sql::expression::Expression;
+    use crate::sql::plan::scan_type::RangeScan;
+    use crate::value::Value;
+
+    //Range(_, 100] AND Range(_, 200) = Range(_, 100)
+    #[test]
+    fn and_5() {
+        let a = RangeScan {
+            column_name: String::from("a"),
+            start_inclusive: false,
+            start: None,
+            end: Some(Expression::Literal(Value::I64(100))),
+            end_inclusive: true,
+        };
+        let b = RangeScan {
+            column_name: String::from("a"),
+            start_inclusive: false,
+            start: None,
+            end: Some(Expression::Literal(Value::I64(200))),
+            end_inclusive: false,
+        };
+
+        let result = a.and(b).unwrap();
+
+        assert_eq!(result, RangeScan {
+            column_name: String::from("a"),
+            start: None,
+            start_inclusive: false,
+            end: Some(Expression::Literal(Value::I64(100))),
+            end_inclusive: true,
+        });
+    }
+
+
+    //Range(_, 100) AND Range(_, 200] = Range(_, 100)
+    #[test]
+    fn and_4() {
+        let a = RangeScan {
+            column_name: String::from("a"),
+            start_inclusive: false,
+            start: None,
+            end: Some(Expression::Literal(Value::I64(100))),
+            end_inclusive: false,
+        };
+        let b = RangeScan {
+            column_name: String::from("a"),
+            start_inclusive: false,
+            start: None,
+            end: Some(Expression::Literal(Value::I64(200))),
+            end_inclusive: true,
+        };
+
+        let result = a.and(b).unwrap();
+
+        assert_eq!(result, RangeScan {
+            column_name: String::from("a"),
+            start: None,
+            start_inclusive: false,
+            end: Some(Expression::Literal(Value::I64(100))),
+            end_inclusive: false,
+        });
+    }
+
+    //Range(100, _) AND Range [200, _) = Range(200, _)
+    #[test]
+    fn and_3() {
+        let a = RangeScan {
+            column_name: String::from("a"),
+            start: Some(Expression::Literal(Value::I64(100))),
+            start_inclusive: false,
+            end: None,
+            end_inclusive: false,
+        };
+        let b = RangeScan {
+            column_name: String::from("a"),
+            start: Some(Expression::Literal(Value::I64(200))),
+            start_inclusive: true,
+            end: None,
+            end_inclusive: false,
+        };
+
+        let result = a.and(b).unwrap();
+
+        assert_eq!(result, RangeScan {
+            column_name: String::from("a"),
+            start: Some(Expression::Literal(Value::I64(200))),
+            start_inclusive: true,
+            end: None,
+            end_inclusive: false,
+        });
+    }
+
+    //Range(200, _) AND Range(_, 100) = Range(_, _) Invalid!
+    #[test]
+    fn and_2() {
+        let a = RangeScan {
+            column_name: String::from("a"),
+            start: Some(Expression::Literal(Value::I64(200))),
+            start_inclusive: false,
+            end: None,
+            end_inclusive: false,
+        };
+        let b = RangeScan {
+            column_name: String::from("a"),
+            start: None,
+            start_inclusive: false,
+            end: Some(Expression::Literal(Value::I64(100))),
+            end_inclusive: false,
+        };
+
+        let result = a.and(b);
+        assert!(result.is_err());
+    }
+
+    //Range(100, _) AND Range(_, 200) = Range(100, 200)
+    #[test]
+    fn and_1() {
+        let a = RangeScan {
+            column_name: String::from("a"),
+            start: Some(Expression::Literal(Value::I64(100))),
+            start_inclusive: false,
+            end: None,
+            end_inclusive: false,
+        };
+        let b = RangeScan {
+            column_name: String::from("a"),
+            start: None,
+            start_inclusive: false,
+            end: Some(Expression::Literal(Value::I64(200))),
+            end_inclusive: false,
+        };
+
+        let result = a.and(b).unwrap();
+
+        assert_eq!(result, RangeScan {
+            column_name: String::from("a"),
+            start: Some(Expression::Literal(Value::I64(100))),
+            start_inclusive: false,
+            end: Some(Expression::Literal(Value::I64(200))),
+            end_inclusive: false,
+        });
     }
 }

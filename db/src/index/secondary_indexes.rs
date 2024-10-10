@@ -29,9 +29,12 @@ impl SecondaryIndexes {
     }
 
     pub fn create_mock(options: Arc<SimpleDbOptions>) -> SecondaryIndexes {
+        let mut secondary_indexes = SkipMap::new();
+        secondary_indexes.insert(1, Arc::new(SecondaryIndex::create_mock()));
+
         SecondaryIndexes {
             storage: Arc::new(Storage::create_mock(&options)),
-            secondary_index_by_column_id: SkipMap::new(),
+            secondary_index_by_column_id: secondary_indexes,
             table_name: String::from(""),
         }
     }

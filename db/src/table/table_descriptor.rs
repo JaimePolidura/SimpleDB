@@ -165,6 +165,16 @@ impl ColumnDescriptor {
         }
     }
 
+    pub fn create_secondary(name: &str, column_id: ColumnId) -> ColumnDescriptor {
+        ColumnDescriptor {
+            column_id,
+            column_type: I64,
+            column_name: name.to_string(),
+            is_primary: false,
+            secondary_index_keyspace_id: Some(1)
+        }
+    }
+
     pub fn create(name: &str, column_id: ColumnId) -> ColumnDescriptor {
         ColumnDescriptor {
             secondary_index_keyspace_id: None,

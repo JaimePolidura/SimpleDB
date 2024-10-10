@@ -3,10 +3,10 @@ use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 use bytes::Bytes;
 use shared::logger::logger;
 use shared::logger::SimpleDbLayer::DB;
-use shared::{KeyspaceId, SimpleDbError};
+use shared::{KeyspaceId, SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use storage::SimpleDbStorageIterator;
+use storage::{SimpleDbStorageIterator, Storage};
 
 pub enum SecondaryIndexState {
     Creating,
@@ -28,6 +28,15 @@ impl SecondaryIndex {
         table_name: String
     ) -> SecondaryIndex {
         SecondaryIndex { keyspace_id, storage, state, table_name }
+    }
+
+    pub fn create_mock() -> SecondaryIndex {
+        SecondaryIndex {
+            storage: Arc::new(Storage::create_mock(&Arc::new(SimpleDbOptions::default()))),
+            table_name: String::from("table_name"),
+            state: SecondaryIndexState::Active,
+            keyspace_id: 1,
+        }
     }
 
     pub fn update(

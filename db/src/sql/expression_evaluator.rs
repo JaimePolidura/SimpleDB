@@ -248,7 +248,6 @@ mod test {
         ]);
 
         Row {
-            selection: Arc::new(Vec::new()),
             key_bytes: Bytes::copy_from_slice(id.to_le_bytes().as_slice()),
             storage_engine_record: record.build(),
             table: Arc::new(table),
