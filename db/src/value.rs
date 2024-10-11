@@ -274,6 +274,26 @@ impl Value {
         matches!(self, Value::Null)
     }
 
+    pub fn to_string(&self) -> String {
+        match &self {
+            Value::I8(value) => value.to_string(),
+            Value::U8(value) => value.to_string(),
+            Value::I16(value) => value.to_string(),
+            Value::U16(value) => value.to_string(),
+            Value::U32(value) => value.to_string(),
+            Value::I32(value) => value.to_string(),
+            Value::U64(value) => value.to_string(),
+            Value::I64(value) => value.to_string(),
+            Value::F32(value) => format!("{:.2}", value.to_string()),
+            Value::F64(value) => format!("{:.2}", value.to_string()),
+            Value::Boolean(value) => if *value { String::from("false") } else { String::from("true") }
+            Value::String(value) => value.clone(),
+            Value::Date => todo!(),
+            Value::Blob(value) => format!("{:02X?}", value.to_vec()),
+            Value::Null => "Null".to_string()
+        }
+    }
+
     pub fn is_number(&self) -> bool {
         match &self {
             Value::I8(_) |

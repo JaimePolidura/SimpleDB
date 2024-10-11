@@ -1,8 +1,70 @@
+use crate::sql::plan::scan_type::RangeScan;
+use crate::sql::plan::steps::filter_step::FilterStep;
+use crate::sql::plan::steps::full_scan_step::FullScanStep;
+use crate::sql::plan::steps::limit_step::LimitStep;
+use crate::sql::plan::steps::merge_intersection_scan_step::MergeIntersectionStep;
+use crate::sql::plan::steps::merge_union_scan_step::MergeUnionStep;
+use crate::sql::plan::steps::primary_exact_scan_step::PrimaryExactScanStep;
+use crate::sql::plan::steps::range_scan_step::RangeScanStep;
+use crate::sql::plan::steps::secondary_exact_scan_type::SecondaryExactScanStep;
+use crate::{Limit, Row};
+use bytes::Bytes;
 use shared::SimpleDbError;
-use crate::Row;
 
-pub type Plan = Box<dyn PlanStep>;
-
-pub trait PlanStep {
+pub(crate) trait PlanStepTrait {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError>;
+    fn desc(&self) -> PlanStepDesc;
+}
+
+pub enum PlanStep {
+    Limit(Box<LimitStep>),
+    Filter(Box<FilterStep>),
+
+    MergeIntersection(MergeIntersectionStep),
+    MergeUnion(MergeUnionStep),
+
+    FullScan(FullScanStep),
+    RangeScan(RangeScanStep),
+    PrimaryExactScan(PrimaryExactScanStep),
+    SecondaryExactExactScan(SecondaryExactScanStep),
+}
+
+pub enum PlanStepDesc {
+    Limit(Limit, Box<PlanStepDesc>),
+    Filter(Box<PlanStepDesc>),
+    MergeIntersection(Box<PlanStepDesc>, Box<PlanStepDesc>),
+    MergeUnion(Box<PlanStepDesc>, Box<PlanStepDesc>),
+
+    FullScan,
+    RangeScan(RangeScan),
+    PrimaryExactScan(Bytes),
+    SecondaryExactExactScan(String, Bytes),
+}
+
+impl PlanStep {
+    pub fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
+        match self {
+            PlanStep::Limit(step) => step.next(),
+            PlanStep::Filter(step) => step.next(),
+            PlanStep::MergeIntersection(step) => step.next(),
+            PlanStep::MergeUnion(step) => step.next(),
+            PlanStep::FullScan(step) => step.next(),
+            PlanStep::RangeScan(step) => step.next(),
+            PlanStep::PrimaryExactScan(step) => step.next(),
+            PlanStep::SecondaryExactExactScan(step) => step.next(),
+        }
+    }
+
+    pub fn desc(&self) -> PlanStepDesc {
+        match self {
+            PlanStep::Limit(step) => step.desc(),
+            PlanStep::Filter(step) => step.desc(),
+            PlanStep::MergeIntersection(step) => step.desc(),
+            PlanStep::MergeUnion(step) => step.desc(),
+            PlanStep::FullScan(step) => step.desc(),
+            PlanStep::RangeScan(step) => step.desc(),
+            PlanStep::PrimaryExactScan(step) => step.desc(),
+            PlanStep::SecondaryExactExactScan(step) => step.desc(),
+        }
+    }
 }

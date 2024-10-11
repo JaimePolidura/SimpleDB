@@ -291,7 +291,7 @@ mod test {
             active_txn_ids_written: SkipSet::new(),
             sstable_id: 1,
             bloom_filter: BloomFilter::create(&Vec::new(), 8),
-            file: SimpleDbFileWrapper{ file: UnsafeCell::new(shared::SimpleDbFile::mock()) },
+            file: SimpleDbFileWrapper{ file: UnsafeCell::new(shared::SimpleDbFile::create_mock()) },
             block_cache: Mutex::new(block_cache),
             block_metadata: vec![
                 BlockMetadata{offset: 0, first_key: Key::create_from_str("Alberto", 0), last_key: Key::create_from_str("Berto", 0)},

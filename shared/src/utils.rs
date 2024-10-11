@@ -2,6 +2,7 @@ use bytes::Bytes;
 use std::fs;
 use std::fs::DirEntry;
 use std::path::PathBuf;
+use crossbeam_skiplist::SkipMap;
 
 pub fn bytes_to_f64_le(bytes: &Bytes) -> f64 {
     let byte_array: [u8; 8] = bytes[..8].try_into().expect("Slice must be 8 bytes long");
@@ -177,4 +178,21 @@ pub fn create_paths(path: &String) -> Result<(), std::io::Error> {
     let path = PathBuf::from(path);
     let path = path.as_path();
     fs::create_dir_all(path)
+}
+
+pub fn clone_skipmap<K, V>(source: &SkipMap<K, V>) -> SkipMap<K, V>
+where
+    K: Clone + Ord + Send + 'static,
+    V: Clone + Send + 'static
+{
+    let mut result: SkipMap<K, V> = SkipMap::new();
+
+    for entry in source.iter() {
+        let key = entry.key();
+        let value = entry.value();
+
+        result.insert(key.clone(), value.clone());
+    }
+
+    result
 }

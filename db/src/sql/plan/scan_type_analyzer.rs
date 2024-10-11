@@ -1,24 +1,23 @@
 use crate::sql::expression::{BinaryOperator, Expression};
 use crate::sql::plan::scan_type::{RangeScan, ScanType};
-use crate::table::table::Table;
+use crate::table::schema::Schema;
 use shared::SimpleDbError;
 use shared::SimpleDbError::MalformedQuery;
-use std::sync::Arc;
 
 pub struct ScanTypeAnalyzer {
-    table: Arc<Table>,
     expression: Expression,
+    schema: Schema,
 }
 
 impl ScanTypeAnalyzer {
     //Expect expressions to have been passed to evaluate_constant() before calling this function
     pub fn create(
-        table: Arc<Table>,
         expression: Expression,
+        schema: Schema
     ) -> ScanTypeAnalyzer {
         ScanTypeAnalyzer {
             expression,
-            table,
+            schema,
         }
     }
 
@@ -52,9 +51,9 @@ impl ScanTypeAnalyzer {
                 Ok(ScanType::Full)
             },
             BinaryOperator::Equal => {
-                if right.is_constant() && self.table.is_secondary_indexed(&left.get_identifier()?) {
+                if right.is_constant() && self.schema.is_secondary_indexed(&left.get_identifier()?) {
                     Ok(ScanType::ExactSecondary(left.get_identifier()?, *right.clone()))
-                } else if right.is_constant() && left.identifier_eq(&self.table.primary_column_name) {
+                } else if right.is_constant() && left.identifier_eq(&self.schema.get_primary_column().column_name) {
                     Ok(ScanType::ExactPrimary(*right.clone()))
                 } else {
                     Ok(ScanType::Full)
@@ -65,7 +64,7 @@ impl ScanTypeAnalyzer {
             },
             BinaryOperator::GreaterEqual |
             BinaryOperator::Greater => {
-                if right.is_constant() && left.identifier_eq(&self.table.primary_column_name) {
+                if right.is_constant() && left.identifier_eq(&self.schema.get_primary_column().column_name) {
                     Ok(ScanType::Range(RangeScan{
                         column_name: left.get_identifier()?,
                         start: Some(*right.clone()),
@@ -79,7 +78,7 @@ impl ScanTypeAnalyzer {
             },
             BinaryOperator::LessEqual |
             BinaryOperator::Less => {
-                if right.is_constant() && left.identifier_eq(&self.table.primary_column_name){
+                if right.is_constant() && left.identifier_eq(&self.schema.get_primary_column().column_name){
                     Ok(ScanType::Range(RangeScan{
                         column_name: left.get_identifier()?,
                         start: None,
@@ -319,8 +318,8 @@ impl ScanTypeAnalyzer {
 
     fn analyze_sub_expression(&self, expression: &Expression) -> Result<ScanType, SimpleDbError> {
         let analyzer = ScanTypeAnalyzer::create(
-            self.table.clone(),
             expression.clone(),
+            self.schema.clone(),
         );
 
         analyzer.analyze()
@@ -332,11 +331,11 @@ mod test {
     use crate::sql::expression::Expression;
     use crate::sql::parser::parser::Parser;
     use crate::sql::plan::scan_type::ScanType;
+    use crate::sql::plan::scan_type::ScanType::{ExactPrimary, ExactSecondary, MergeUnion};
     use crate::sql::plan::scan_type_analyzer::ScanTypeAnalyzer;
+    use crate::table::schema::{Column, Schema};
     use crate::table::table::Table;
     use crate::value::Value;
-    use crate::ColumnDescriptor;
-    use crate::sql::plan::scan_type::ScanType::{ExactPrimary, ExactSecondary, MergeUnion, Range};
 
     #[test]
     fn compound_2() {
@@ -344,11 +343,11 @@ mod test {
         //primary OR range -> merge_union
         //merge_union and merge_union -> merge_intersection
         let analyzer = ScanTypeAnalyzer::create(
-            Table::create_mock(vec![
-                ColumnDescriptor::create_primary("id"),
-                ColumnDescriptor::create_secondary("dinero", 1),
+            parse("(id == 1 OR dinero == 100) AND (id == 2 OR dinero == 200)"),
+            Schema::create(vec![
+                Column::create_primary("id"),
+                Column::create_secondary("dinero", 1),
             ]),
-            parse("(id == 1 OR dinero == 100) AND (id == 2 OR dinero == 200)")
         );
         let result = analyzer.analyze().unwrap();
 
@@ -370,12 +369,12 @@ mod test {
         //primary AND full -> full
         //primary or full -> full
         let analyzer = ScanTypeAnalyzer::create(
-            Table::create_mock(vec![
-                ColumnDescriptor::create_primary("id"),
-                ColumnDescriptor::create_secondary("dinero", 1),
-                ColumnDescriptor::create("dinero", 2)
+            parse("(id == 1 AND dinero > 100) OR (id == 2 OR credito > 200)"),
+            Schema::create(vec![
+                Column::create_primary("id"),
+                Column::create_secondary("dinero", 1),
+                Column::create("dinero", 2)
             ]),
-            parse("(id == 1 AND dinero > 100) OR (id == 2 OR credito > 200)")
         );
         let result = analyzer.analyze().unwrap();
 
@@ -386,11 +385,11 @@ mod test {
     #[test]
     fn primary_or_secondary() {
         let analyzer = ScanTypeAnalyzer::create(
-            Table::create_mock(vec![
-                ColumnDescriptor::create_primary("id"),
-                ColumnDescriptor::create_secondary("dinero", 1)
+            parse("id == 1 OR dinero == 100"),
+            Schema::create(vec![
+                Column::create_primary("id"),
+                Column::create_secondary("dinero", 1)
             ]),
-            parse("id == 1 OR dinero == 100")
         );
         let result = analyzer.analyze().unwrap();
 
@@ -407,11 +406,11 @@ mod test {
     #[test]
     fn primary_and_secondary() {
         let analyzer = ScanTypeAnalyzer::create(
-            Table::create_mock(vec![
-                ColumnDescriptor::create_primary("id"),
-                ColumnDescriptor::create_secondary("dinero", 1)
+            parse("id == 1 AND dinero == 100"),
+            Schema::create(vec![
+                Column::create_primary("id"),
+                Column::create_secondary("dinero", 1)
             ]),
-            parse("id == 1 AND dinero == 100")
         );
         let result = analyzer.analyze().unwrap();
 
@@ -422,8 +421,11 @@ mod test {
     #[test]
     fn range_or_full_range() {
         let analyzer = ScanTypeAnalyzer::create(
-            Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            parse("id >= 1 OR dinero < 100")
+            parse("id >= 1 OR dinero < 100"),
+            Schema::create(vec![
+                Column::create_primary("id"),
+                Column::create("dinero", 1)
+            ]),
         );
         let result = analyzer.analyze().unwrap();
         assert_eq!(result, ScanType::Full);
@@ -433,8 +435,11 @@ mod test {
     #[test]
     fn range_and_full() {
         let analyzer = ScanTypeAnalyzer::create(
-            Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            parse("id >= 1 AND dinero < 100")
+            parse("id >= 1 AND dinero < 100"),
+            Schema::create(vec![
+                Column::create("dinero", 1),
+                Column::create_primary("id"),
+            ]),
         );
         let result = analyzer.analyze().unwrap();
 
@@ -450,8 +455,11 @@ mod test {
     #[test]
     fn range_or_full() {
         let analyzer = ScanTypeAnalyzer::create(
-            Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            parse("id >= 1 OR dinero == 100")
+            parse("id >= 1 OR dinero == 100"),
+            Schema::create(vec![
+                Column::create_primary("id"),
+                Column::create("dinero", 1)
+            ]),
         );
         let result = analyzer.analyze().unwrap();
 
@@ -462,8 +470,11 @@ mod test {
     #[test]
     fn range_and_full_2() {
         let analyzer = ScanTypeAnalyzer::create(
-            Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            parse("id >= 1 AND dinero == 100")
+            parse("id >= 1 AND dinero == 100"),
+            Schema::create(vec![
+                Column::create_primary("id"),
+                Column::create("dinero", 1)
+            ]),
         );
         let result = analyzer.analyze().unwrap();
 
@@ -477,8 +488,11 @@ mod test {
     #[test]
     fn exact_primary_and_full() {
         let analyzer = ScanTypeAnalyzer::create(
-            Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            parse("id == 1 AND dinero == 100")
+            parse("id == 1 AND dinero == 100"),
+            Schema::create(vec![
+                Column::create_primary("id"),
+                Column::create("dinero", 1)
+            ]),
         );
         let result = analyzer.analyze().unwrap();
         let result = match result { ScanType::ExactPrimary(value) => value, _ => panic!("") };
@@ -490,8 +504,11 @@ mod test {
     #[test]
     fn exact_primary_or_full() {
         let analyzer = ScanTypeAnalyzer::create(
-            Table::create_mock(vec![ColumnDescriptor::create_primary("id"), ColumnDescriptor::create("dinero", 1)]),
-            parse("id == 1 OR dinero == 100")
+            parse("id == 1 OR dinero == 100"),
+            Schema::create(vec![
+                Column::create_primary("id"),
+                Column::create("dinero", 1)
+            ]),
         );
 
         let result = analyzer.analyze().unwrap();

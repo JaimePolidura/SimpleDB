@@ -102,7 +102,6 @@ impl Database {
             table_name,
             &self.options,
             &self.storage,
-            primary_column_name,
             self.clone()
         )?;
 

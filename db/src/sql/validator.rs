@@ -89,8 +89,8 @@ impl StatementValidator {
         self.validate_where_expression(&statement.where_expr, &table)?;
 
         for (updated_column_name, updated_column_value_expr) in &statement.updated_values {
-            let column_data = table.get_column_desc(updated_column_name)
-                .ok_or(SimpleDbError::ColumnNotFound(table.storage_keyspace_id, updated_column_name.clone()))?;
+            let column_data = table.get_column(updated_column_name)
+                .ok_or(SimpleDbError::ColumnNotFound(updated_column_name.clone()))?;
             let expression_type_result = self.validate_expression(updated_column_value_expr, &table)?;
 
             if !expression_type_result.can_be_casted(&column_data.column_type) {
@@ -118,7 +118,7 @@ impl StatementValidator {
     ) -> Result<(), SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table_or_err(statement.table_name.as_str())?;
-        table.validate_column_values(&statement.values)
+        table.validate_insert_column_values(&statement.values)
     }
 
     fn validate_create_table(
@@ -205,7 +205,7 @@ impl StatementValidator {
                 }
             }
             Expression::Identifier(table_name) => {
-                table.get_column_desc(table_name)
+                table.get_column(table_name)
                     .ok_or(UnknownColumn(table_name.clone()))
                     .map(|it| it.column_type)
             },

@@ -1,5 +1,5 @@
 use crate::request::Request;
-use crate::response::{QueryDataResponse, Response, StatementResponse};
+use crate::response::{Response, RowsResponse, StatementResponse};
 use crossbeam_skiplist::SkipMap;
 use db::simple_db::StatementResult;
 use db::{Context, SimpleDb, Statement};
@@ -129,6 +129,7 @@ impl Server {
 
         let statement = server.simple_db.parse(&statement_string)?;
         let statement_desc = statement.get_descriptor();
+        let is_explained = statement.is_explained();
 
         if statement_desc.requires_transaction() && !context.has_transaction() && is_stand_alone {
             let transaction = server.simple_db.execute(&context, Statement::StartTransaction)?
@@ -149,7 +150,7 @@ impl Server {
                     server.context_by_connection_id.insert(connection_id, context);
                 }
 
-                Self::create_response(statement_result, connection_id, statement_string)
+                Self::create_response(statement_result, connection_id, statement_string, is_explained)
             }
             Err(error) => {
                 if statement_desc.requires_transaction() && is_stand_alone {
@@ -171,7 +172,8 @@ impl Server {
         match server.context_by_connection_id.get(&connection_id) {
             Some(context) => {
                 let context = context.value();
-                server.simple_db.execute(context, Statement::Rollback)?;
+                //Rollback previous transaction
+                let _ = server.simple_db.execute(context, Statement::Rollback);
                 server.context_by_connection_id.insert(connection_id, Context::create_with_database(&database_name));
             }
             None => {
@@ -186,6 +188,7 @@ impl Server {
         statement_result: StatementResult,
         connection_id: ConnectionId,
         statement: String,
+        is_explained: bool,
     ) -> Result<StatementResponse, SimpleDbError> {
         match statement_result {
             StatementResult::Describe(describe) => {
@@ -231,14 +234,26 @@ impl Server {
                 Ok(StatementResponse::Ok(0))
             },
             StatementResult::Data(mut query_iterator) => {
-                let rows = query_iterator.all()?;
-                logger().debug(SimpleDbLayer::Server, &format!(
-                    "Executed query request request Connection ID: {} Rows returned: {} Statement: {}",
-                    connection_id, rows.len(), statement
-                ));
-                Ok(StatementResponse::Data(QueryDataResponse::create(
-                    query_iterator.columns_descriptor_selection().clone(), rows
-                )))
+                if !is_explained {
+                    let rows = query_iterator.all()?;
+                    logger().debug(SimpleDbLayer::Server, &format!(
+                        "Executed query request request Connection ID: {} Rows returned: {} Statement: {}",
+                        connection_id, rows.len(), statement
+                    ));
+                    // Ok(StatementResponse::Rows(RowsResponse::create(
+                    //     query_iterator.schema().clone(),
+                    //     rows
+                    // )))
+                    Ok(StatementResponse::Ok(1))
+                } else {
+                    let explanation = query_iterator.get_plan_desc();
+                    logger().debug(SimpleDbLayer::Server, &format!(
+                        "Executed query explain request request Connection ID: {} Statement: {}",
+                        connection_id, statement
+                    ));
+                    // Ok(StatementResponse::Rows(QueryResponse::Explanation()))
+                    Ok(StatementResponse::Ok(1))
+                }
             }
         }
     }

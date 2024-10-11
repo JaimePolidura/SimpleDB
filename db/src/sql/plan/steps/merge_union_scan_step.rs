@@ -2,29 +2,29 @@ use std::collections::HashSet;
 use bytes::Bytes;
 use shared::SimpleDbError;
 use crate::Row;
-use crate::sql::plan::plan_step::{Plan, PlanStep};
+use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc, PlanStepTrait};
 
-pub struct MergeUnionScanStep {
-    plans: Vec<Plan>,
+pub struct MergeUnionStep {
+    plans: Vec<PlanStep>,
     returned_rows: HashSet<Bytes>,
 
     prev_plan_index_returned: usize,
 }
 
-impl MergeUnionScanStep {
-    pub fn create(
-        a: Plan,
-        b: Plan,
-    ) -> Result<Plan, SimpleDbError> {
+impl MergeUnionStep {
+    pub(crate) fn create(
+        a: PlanStep,
+        b: PlanStep,
+    ) -> Result<MergeUnionStep, SimpleDbError> {
         let mut plans = Vec::new();
         plans.push(a);
         plans.push(b);
 
-        Ok(Box::new(MergeUnionScanStep {
+        Ok(MergeUnionStep {
             returned_rows: HashSet::new(),
             prev_plan_index_returned: 0,
             plans
-        }))
+        })
     }
 
     fn get_next_plan_index_to_return(&self) -> usize {
@@ -39,7 +39,7 @@ impl MergeUnionScanStep {
     }
 }
 
-impl PlanStep for MergeUnionScanStep {
+impl PlanStepTrait for MergeUnionStep {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         while !self.plans.is_empty() {
             let current_plan_index = self.get_next_plan_index_to_return();
@@ -61,5 +61,11 @@ impl PlanStep for MergeUnionScanStep {
 
         //Both plans are empty
         return Ok(None);
+    }
+
+    fn desc(&self) -> PlanStepDesc {
+        let right = self.plans[1].desc();
+        let left = self.plans[0].desc();
+        PlanStepDesc::MergeUnion(Box::new(left), Box::new(right))
     }
 }

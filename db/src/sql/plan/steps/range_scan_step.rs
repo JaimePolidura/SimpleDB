@@ -1,13 +1,13 @@
-use std::sync::Arc;
-use shared::SimpleDbError;
-use storage::SimpleDbStorageIterator;
-use storage::transactions::transaction::Transaction;
-use crate::{Row};
 use crate::selection::Selection;
-use crate::sql::plan::plan_step::{Plan, PlanStep};
+use crate::sql::plan::plan_step::{PlanStepDesc, PlanStepTrait};
 use crate::sql::plan::scan_type::{RangeKeyPosition, RangeScan};
 use crate::table::table::Table;
 use crate::table::table_iterator::TableIterator;
+use crate::Row;
+use shared::SimpleDbError;
+use std::sync::Arc;
+use storage::transactions::transaction::Transaction;
+use storage::SimpleDbStorageIterator;
 
 pub struct RangeScanStep {
     range: RangeScan,
@@ -15,12 +15,12 @@ pub struct RangeScanStep {
 }
 
 impl RangeScanStep {
-    pub fn create(
+    pub(crate) fn create(
         table: Arc<Table>,
         selection: Selection,
         transaction: &Transaction,
         range: RangeScan
-    ) -> Result<Plan, SimpleDbError> {
+    ) -> Result<RangeScanStep, SimpleDbError> {
         let iterator = if let Some(star_range_key_expr) = range.start() {
             let star_range_key_bytes = star_range_key_expr.serialize();
             table.scan_from_key(&star_range_key_bytes, range.is_start_inclusive(), transaction, &selection)
@@ -28,14 +28,14 @@ impl RangeScanStep {
             table.scan_all(transaction, selection)
         }?;
 
-        Ok(Box::new(RangeScanStep{
+        Ok(RangeScanStep{
             iterator,
             range,
-        }))
+        })
     }
 }
 
-impl PlanStep for RangeScanStep {
+impl PlanStepTrait for RangeScanStep {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         if self.iterator.next() {
             let current_row = self.iterator.row();
@@ -50,5 +50,9 @@ impl PlanStep for RangeScanStep {
         } else {
             Ok(None)
         }
+    }
+
+    fn desc(&self) -> PlanStepDesc {
+        PlanStepDesc::RangeScan(self.range.clone())
     }
 }

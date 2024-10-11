@@ -9,12 +9,13 @@ use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStateme
 use crate::sql::validator::StatementValidator;
 use crate::table::table::Table;
 use crate::value::Value;
-use crate::{ColumnDescriptor, CreateIndexStatement};
+use crate::{CreateIndexStatement, IndexType};
 use bytes::Bytes;
 use shared::SimpleDbError::MalformedQuery;
 use shared::SimpleDbError;
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::table::schema::Column;
 
 pub struct StatementExecutor {
     databases: Arc<Databases>,
@@ -66,10 +67,9 @@ impl StatementExecutor {
     ) -> Result<StatementResult, SimpleDbError> {
         let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table_or_err(&select_statement.table_name)?;
-        let columns_desc = self.get_column_desc_by_selection(&select_statement.selection, &table);
         let select_plan = self.planner.plan_select(&table, select_statement, transaction)?;
 
-        Ok(StatementResult::Data(QueryIterator::create(select_plan, columns_desc)))
+        Ok(StatementResult::Data(QueryIterator::create(select_plan, table.get_schema().clone())))
     }
 
     fn update(
@@ -224,16 +224,23 @@ impl StatementExecutor {
     fn show_indexes(&self, table_name: String, context: &Context) -> Result<StatementResult, SimpleDbError> {
         let databases = self.databases.get_database_or_err(context.database())?;
         let table = databases.get_table_or_err(&table_name)?;
-        Ok(StatementResult::Indexes(table.get_indexed_columns()))
+
+        let schema = table.get_schema();
+        let indexed_columns = schema.get_secondary_indexed_columns();
+        let mut indexed_columns_to_return = Vec::new();
+        for indexed_column in indexed_columns {
+            let index_type = if indexed_column.is_primary { IndexType::Primary } else { IndexType::Secondary };
+            indexed_columns_to_return.push((indexed_column.column_name, index_type));
+        }
+
+        Ok(StatementResult::Indexes(indexed_columns_to_return))
     }
 
     fn describe_table(&self, table_name: &str, context: &Context) -> Result<StatementResult, SimpleDbError> {
         let databases = self.databases.get_database_or_err(context.database())?;
         let table = databases.get_table_or_err(table_name)?;
-        let column_descriptors = table.get_columns().values()
-            .map(|entry| entry.clone())
-            .collect();
-        Ok(StatementResult::Describe(column_descriptors))
+        let columns = table.get_schema().get_columns();
+        Ok(StatementResult::Describe(columns))
     }
 
     fn serialize_column_values(
@@ -279,17 +286,17 @@ impl StatementExecutor {
         &self,
         selection: &Selection,
         table: &Arc<Table>,
-    ) -> Vec<ColumnDescriptor> {
+    ) -> Vec<Column> {
         match selection {
             Selection::Some(columns) => {
                 let mut columns_desc = Vec::new();
                 for column_name in columns {
-                    columns_desc.push(table.get_column_desc(column_name).unwrap().clone());
+                    columns_desc.push(table.get_column(column_name).unwrap().clone());
                 }
                 columns_desc
             },
             Selection::All => {
-                table.get_columns().values()
+                table.get_schema().get_columns().iter()
                     .map(|it| it.clone())
                     .collect()
             }

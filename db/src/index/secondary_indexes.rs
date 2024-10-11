@@ -12,6 +12,7 @@ use shared::{ColumnId, KeyspaceId, SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use storage::{SimpleDbStorageIterator, Storage};
+use crate::table::schema::Schema;
 
 pub struct SecondaryIndexes {
     secondary_index_by_column_id: SkipMap<ColumnId, Arc<SecondaryIndex>>,
@@ -40,33 +41,34 @@ impl SecondaryIndexes {
     }
 
     pub fn load_secondary_indexes(
-        table_descriptor: &TableDescriptor,
-        storage: Arc<Storage>
+        storage: Arc<Storage>,
+        table_name: String,
+        schema: Schema,
     ) -> SecondaryIndexes {
-        logger().info(DB(table_descriptor.table_name.clone()), "Loading secondary indexes");
+        logger().info(DB(table_name.clone()), "Loading secondary indexes");
 
         let secondary_indexes = SkipMap::new();
-        for entry in table_descriptor.columns.iter() {
-            let column_descriptor = entry.value();
+        let columns = schema.get_columns();
 
-            if let Some(secondary_index_keyspace_id) = column_descriptor.secondary_index_keyspace_id {
+        for column in columns {
+            if let Some(secondary_index_keyspace_id) = column.secondary_index_keyspace_id {
                 let secondary_index = Arc::new(SecondaryIndex::create(
                     storage.clone(),
                     SecondaryIndexState::Active,
                     secondary_index_keyspace_id,
-                    table_descriptor.table_name.clone()
+                    table_name.clone()
                 ));
-                secondary_indexes.insert(column_descriptor.column_id, secondary_index);
+                secondary_indexes.insert(column.column_id, secondary_index);
             }
         }
 
-        logger().info(DB(table_descriptor.table_name.clone()), &format!(
+        logger().info(DB(table_name.clone()), &format!(
             "Loaded {} secondary indexes", secondary_indexes.len())
         );
 
         SecondaryIndexes {
-            table_name: table_descriptor.table_name.clone(),
             secondary_index_by_column_id: secondary_indexes,
+            table_name: table_name.clone(),
             storage
         }
     }

@@ -24,8 +24,14 @@ impl Parser {
     pub fn next_statement(
         &mut self,
     ) -> Result<Option<Statement>, SimpleDbError> {
-        let query = match self.tokenizer.next_token()? {
-            Token::Select => self.select(),
+        let mut first_token = self.tokenizer.next_token()?;
+        let is_explain = matches!(first_token, Token::Explain);
+        if is_explain {
+            first_token = self.tokenizer.next_token()?;
+        }
+
+        let query = match first_token {
+            Token::Select => self.select(is_explain),
             Token::Update => self.update(),
             Token::Delete => self.delete(),
             Token::Insert => self.insert(),
@@ -48,7 +54,7 @@ impl Parser {
         self.expression(0)
     }
 
-    fn select(&mut self) -> Result<Statement, SimpleDbError> {
+    fn select(&mut self, explain: bool) -> Result<Statement, SimpleDbError> {
         self.advance()?;
         let selection = self.selection()?;
         self.expect_token(Token::From)?;
@@ -70,6 +76,7 @@ impl Parser {
             where_expr: expression,
             table_name,
             selection,
+            explain,
             limit
         }))
     }
@@ -528,6 +535,18 @@ mod test {
             Box::new(Expression::Identifier(String::from("dinero"))),
             Box::new(Expression::Literal(Value::I64(10))),
         ));
+    }
+
+    #[test]
+    fn select_explain() {
+        let mut parser = Parser::create(String::from("EXPLAIN SELECT dinero FROM personas WHERE dinero > 10 LIMIT 10;"));
+        let statement = parser.next_statement().unwrap().unwrap();
+        assert!(matches!(statement, Statement::Select(_)));
+
+        let select_statement = match statement {
+            Statement::Select(s) => s, _ => panic!(),
+        };
+        assert!(select_statement.explain);
     }
 
     #[test]

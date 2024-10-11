@@ -39,7 +39,7 @@ impl TransactionLog {
 
     pub fn create_mock(options: Arc<shared::SimpleDbOptions>) -> TransactionLog {
         TransactionLog {
-            log_file: shared::SimpleDbFileWrapper {file: UnsafeCell::new(shared::SimpleDbFile::mock())},
+            log_file: shared::SimpleDbFileWrapper {file: UnsafeCell::new(shared::SimpleDbFile::create_mock())},
             options
         }
     }

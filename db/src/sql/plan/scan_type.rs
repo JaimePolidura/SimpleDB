@@ -22,11 +22,11 @@ pub enum ScanType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RangeScan {
-    pub(crate) column_name: String,
-    pub(crate) start: Option<Expression>,
-    pub(crate) start_inclusive: bool,
-    pub(crate) end: Option<Expression>,
-    pub(crate) end_inclusive: bool,
+    pub column_name: String,
+    pub start: Option<Expression>,
+    pub start_inclusive: bool,
+    pub end: Option<Expression>,
+    pub end_inclusive: bool,
 }
 
 pub enum RangeKeyPosition {

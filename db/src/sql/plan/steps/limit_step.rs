@@ -1,29 +1,29 @@
 use shared::SimpleDbError;
 use crate::Row;
-use crate::sql::plan::plan_step::{Plan, PlanStep};
+use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc, PlanStepTrait};
 use crate::sql::statement::Limit;
 
 pub struct LimitStep {
     limit: Limit,
-    source: Plan,
+    source: PlanStep,
 
     count: usize
 }
 
 impl LimitStep {
-    pub fn create(
+    pub(crate) fn create(
         limit: Limit,
-        source: Plan
-    ) -> Plan {
-        Box::new(LimitStep {
+        source: PlanStep
+    ) -> LimitStep {
+        LimitStep {
             count: 0,
             source,
             limit,
-        })
+        }
     }
 }
 
-impl PlanStep for LimitStep {
+impl PlanStepTrait for LimitStep {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         match self.limit {
             Limit::Some(limit) => {
@@ -38,5 +38,12 @@ impl PlanStep for LimitStep {
             },
             Limit::None => self.source.next(),
         }
+    }
+
+    fn desc(&self) -> PlanStepDesc {
+        PlanStepDesc::Limit(
+            self.limit.clone(),
+            Box::new(self.source.desc())
+        )
     }
 }

@@ -38,7 +38,7 @@ impl Wal {
         memtable_id: shared::MemtableId
     ) -> Result<Wal, shared::SimpleDbError> {
         Ok(Wal {
-            file: shared::SimpleDbFile::mock(),
+            file: shared::SimpleDbFile::create_mock(),
             keyspace_id: 0,
             options,
             memtable_id,

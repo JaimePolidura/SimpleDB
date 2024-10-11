@@ -33,7 +33,7 @@ unsafe impl Sync for SimpleDbFileWrapper {}
 
 impl SimpleDbFile {
     //Only used for testing purposes
-    pub fn mock() -> SimpleDbFile {
+    pub fn create_mock() -> SimpleDbFile {
         SimpleDbFile {
             mode: SimpleDbFileMode::Mock,
             size_bytes: 0,

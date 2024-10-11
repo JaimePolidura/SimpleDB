@@ -1,13 +1,12 @@
-use crate::value::Type;
-use crate::value::Type::I64;
+use crate::table::schema::{Column, Schema};
+use crate::Type;
 use bytes::{Buf, BufMut};
-use crossbeam_skiplist::SkipMap;
+use shared::SimpleDbError::CannotWriteTableDescriptor;
 use shared::{ColumnId, KeyspaceId, SimpleDbError, SimpleDbFile};
 use std::path::PathBuf;
-use std::sync::Arc;
-
-const NO_INDEX: KeyspaceId = 0xFFFFFFFFFFFFFFFF;
-
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::Relaxed;
+use std::sync::{Arc, Mutex};
 //Maintains information about column ID with its column name, column type, is_primary etc.
 //This file is stored in binary format
 //There is one file of these for each table
@@ -15,18 +14,11 @@ const NO_INDEX: KeyspaceId = 0xFFFFFFFFFFFFFFFF;
 // Flags (u64) | Table name length (u16) | Table name bytes...
 // [ Column ID (u16) | Column type (u8) | Is primary (u8) | index keyspace ID (u64) | name length (u32) | name bytes... ]
 pub struct TableDescriptor {
-    pub(crate) columns: SkipMap<ColumnId, ColumnDescriptor>,
+    pub(crate) file: Mutex<SimpleDbFile>,
     pub(crate) table_name: String,
-    pub(crate) primary_column_id: ColumnId,
-}
-
-#[derive(Clone, Debug, PartialOrd, PartialEq)]
-pub struct ColumnDescriptor {
-    pub(crate) column_id: ColumnId,
-    pub(crate) column_type: Type,
-    pub(crate) column_name: String,
-    pub(crate) is_primary: bool,
-    pub(crate) secondary_index_keyspace_id: Option<KeyspaceId>,
+    pub(crate) schema: Schema,
+    pub(crate) next_column_id: AtomicUsize,
+    pub(crate) storage_keyspace_id: KeyspaceId
 }
 
 impl TableDescriptor {
@@ -34,8 +26,16 @@ impl TableDescriptor {
         keyspace_id: KeyspaceId,
         options: &Arc<shared::SimpleDbOptions>,
         table_name: &str,
-    ) -> Result<(TableDescriptor, SimpleDbFile), SimpleDbError> {
-        let table_descriptor_file_bytes: Vec<u8> = Self::serialize(Vec::new(), table_name);
+    ) -> Result<TableDescriptor, SimpleDbError> {
+        let emtpy_table_descriptor = TableDescriptor {
+            file: Mutex::new(SimpleDbFile::create_mock()),
+            next_column_id: AtomicUsize::new(0),
+            table_name: table_name.to_string(),
+            schema: Schema::emtpy(),
+            storage_keyspace_id: keyspace_id
+        };
+
+        let table_descriptor_file_bytes: Vec<u8> = emtpy_table_descriptor.serialize();
 
         let table_descriptor_file = SimpleDbFile::create(
             Self::table_descriptor_file_path(options, keyspace_id).as_path(),
@@ -43,17 +43,29 @@ impl TableDescriptor {
             shared::SimpleDbFileMode::AppendOnly
         ).map_err(|e| SimpleDbError::CannotCreateTableDescriptor(keyspace_id, e))?;
 
-        Ok((TableDescriptor {
+        Ok(TableDescriptor {
+            file: Mutex::new(table_descriptor_file),
+            next_column_id: AtomicUsize::new(1),
             table_name: table_name.to_string(),
-            primary_column_id: 0,
-            columns: SkipMap::new(),
-        }, table_descriptor_file))
+            schema: Schema::emtpy(),
+            storage_keyspace_id: keyspace_id
+        })
+    }
+
+    pub fn create_mock(columns: Vec<Column>) -> TableDescriptor {
+        TableDescriptor {
+            file: Mutex::new(SimpleDbFile::create_mock()),
+            table_name: String::from(""),
+            schema: Schema::create(columns),
+            next_column_id: AtomicUsize::new(10),
+            storage_keyspace_id: 0,
+        }
     }
 
     pub fn load_from_disk(
         options: &Arc<shared::SimpleDbOptions>,
         keyspace_id: KeyspaceId
-    ) -> Result<(TableDescriptor, SimpleDbFile), SimpleDbError> {
+    ) -> Result<TableDescriptor, SimpleDbError> {
         let path = Self::table_descriptor_file_path(options, keyspace_id);
         let table_descriptor_file = SimpleDbFile::open(
             path.as_path(),
@@ -62,85 +74,106 @@ impl TableDescriptor {
 
         let table_descriptor_bytes = table_descriptor_file.read_all()
             .map_err(|e| SimpleDbError::CannotReadTableDescriptor(keyspace_id, e))?;
-        let (table_name, mut column_descriptors, primary_column_id) = Self::deserialize_table_descriptor_bytes(
+        let mut table_descriptor = Self::deserialize(
             keyspace_id,
             &table_descriptor_bytes
         )?;
+        table_descriptor.file = Mutex::new(table_descriptor_file);
 
-        Ok((TableDescriptor {
-            columns: Self::index_by_column_name(&mut column_descriptors),
-            primary_column_id,
-            table_name,
-        }, table_descriptor_file))
+        Ok(table_descriptor)
+    }
+
+    pub fn get_schema(&self) -> &Schema {
+        &self.schema
+    }
+
+    pub fn add_column(
+        &self,
+        name: &str,
+        column_type: Type,
+        is_primary: bool
+    ) -> Result<(), SimpleDbError> {
+        let column = Column {
+            column_id: self.next_column_id.fetch_add(1, Relaxed) as ColumnId,
+            secondary_index_keyspace_id: None,
+            column_name: name.to_string(),
+            column_type,
+            is_primary,
+        };
+
+        let mut file = self.file.lock().unwrap();
+        file.write(&column.serialize())
+            .map_err(|e| SimpleDbError::CannotWriteTableDescriptor(self.storage_keyspace_id, e))?;
+
+        self.schema.add_column(column);
+
+        Ok(())
+    }
+
+    pub fn update_column_secondary_index(
+        &self,
+        column_id_indexed: ColumnId,
+        keyspace_id: KeyspaceId
+    ) -> Result<(), SimpleDbError> {
+        let mut file_lock = self.file.lock().unwrap();
+        let mut new_columns = Vec::new();
+        let columns = self.schema.get_columns();
+        for current in columns {
+            if current.column_id == column_id_indexed {
+                let mut updated_column = current.clone();
+                updated_column.secondary_index_keyspace_id = Some(keyspace_id);
+                new_columns.push(updated_column);
+            } else {
+                new_columns.push(current);
+            }
+        }
+
+        self.schema.update_column_secondary_index(
+            column_id_indexed,
+            keyspace_id
+        );
+
+        let serialized = self.serialize();
+        file_lock.safe_replace(&serialized)
+            .map_err(|io_error| CannotWriteTableDescriptor(self.storage_keyspace_id, io_error))?;
+
+
+        Ok(())
     }
 
     pub fn serialize(
-        columns: Vec<ColumnDescriptor>,
-        table_name: &str
+        &self
     ) -> Vec<u8> {
         let mut serialized: Vec<u8> = Vec::new();
-        let table_name_bytes = table_name.bytes();
+        let table_name_bytes = self.table_name.bytes();
         serialized.put_u32_le(table_name_bytes.len() as u32);
         serialized.extend(table_name_bytes);
-        for column in columns {
-            serialized.extend(column.serialize());
-        }
+        serialized.extend(self.schema.serialize());
 
         serialized
     }
 
-    pub fn get_max_column_id(&self) -> ColumnId {
-        if let Some(entry) = self.columns.back() {
-            *entry.key()
-        } else {
-            0
-        }
-    }
-
-    pub fn get_primary_column_name(&self) -> String {
-        self.columns.get(&self.primary_column_id).unwrap()
-            .value()
-            .column_name
-            .clone()
-    }
-
-    fn deserialize_table_descriptor_bytes(
-        keyspace_id: KeyspaceId,
+    fn deserialize(
+        storage_keyspace_id: KeyspaceId,
         bytes: &Vec<u8>,
-    ) -> Result<(String, Vec<ColumnDescriptor>, ColumnId), SimpleDbError> {
+    ) -> Result<TableDescriptor, SimpleDbError> {
         let mut current_ptr = bytes.as_slice();
-        let mut columns_descriptor = Vec::new();
 
         //Table name
         let table_name_length = current_ptr.get_u32_le() as usize;
         let name_bytes = &current_ptr[..table_name_length];
         current_ptr.advance(table_name_length);
-        let table_name = decode_string(name_bytes, keyspace_id, 0)?;
-        let mut primary_column_id = 0;
+        let table_name = decode_string(name_bytes, storage_keyspace_id, 0)?;
 
-        while current_ptr.has_remaining() {
-            let column_descriptor = ColumnDescriptor::deserialize(
-                keyspace_id, columns_descriptor.len(), &mut current_ptr
-            )?;
+        let schema = Schema::deserialize(&mut current_ptr, storage_keyspace_id)?;
 
-            if column_descriptor.is_primary {
-                primary_column_id = column_descriptor.column_id;
-            }
-
-            columns_descriptor.push(column_descriptor);
-        }
-
-        Ok((table_name, columns_descriptor, primary_column_id))
-    }
-
-    fn index_by_column_name(column_descriptors: &mut Vec<ColumnDescriptor>) -> SkipMap<shared::ColumnId, ColumnDescriptor> {
-        let indexed = SkipMap::new();
-
-        while let Some(column_descriptor) = column_descriptors.pop() {
-            indexed.insert(column_descriptor.column_id, column_descriptor);
-        }
-
-        indexed
+        Ok(TableDescriptor {
+            next_column_id: AtomicUsize::new(schema.get_max_column_id() as usize + 1),
+            file: Mutex::new(SimpleDbFile::create_mock()), //Temporal
+            storage_keyspace_id,
+            table_name,
+            schema
+        })
     }
 
     fn table_descriptor_file_path(
@@ -151,94 +184,6 @@ impl TableDescriptor {
         let filename = format!("{}.desc", keyspace_id);
         path.push(filename);
         path
-    }
-}
-
-impl ColumnDescriptor {
-    pub fn create_primary(name: &str) -> ColumnDescriptor {
-        ColumnDescriptor {
-            column_id: 0,
-            column_type: I64,
-            column_name: name.to_string(),
-            is_primary: true,
-            secondary_index_keyspace_id: None
-        }
-    }
-
-    pub fn create_secondary(name: &str, column_id: ColumnId) -> ColumnDescriptor {
-        ColumnDescriptor {
-            column_id,
-            column_type: I64,
-            column_name: name.to_string(),
-            is_primary: false,
-            secondary_index_keyspace_id: Some(1)
-        }
-    }
-
-    pub fn create(name: &str, column_id: ColumnId) -> ColumnDescriptor {
-        ColumnDescriptor {
-            secondary_index_keyspace_id: None,
-            column_name: name.to_string(),
-            is_primary: false,
-            column_type: I64,
-            column_id,
-        }
-    }
-
-    pub fn deserialize(
-        keyspace_id: KeyspaceId,
-        n_column: usize,
-        current_ptr: &mut &[u8]
-    ) -> Result<ColumnDescriptor, SimpleDbError> {
-        let column_id = current_ptr.get_u16_le() as shared::ColumnId;
-        let column_type = Type::deserialize(current_ptr.get_u8())
-            .map_err(|unknown_flag| SimpleDbError::CannotDecodeTableDescriptor(keyspace_id, shared::DecodeError {
-                error_type: shared::DecodeErrorType::UnknownFlag(unknown_flag as usize),
-                index: n_column,
-                offset: 0,
-            }))?;
-        let is_primary = current_ptr.get_u8() != 0;
-        let secondary_index_keyspace_id = Self::get_secondary_index_keyspace_id(current_ptr.get_u64_le());
-        let column_name_bytes_length = current_ptr.get_u32_le() as usize;
-        let column_bytes = &current_ptr[..column_name_bytes_length];
-        let column_name = decode_string(column_bytes, keyspace_id, n_column)?;
-        current_ptr.advance(column_name_bytes_length);
-
-        Ok(ColumnDescriptor{
-            secondary_index_keyspace_id,
-            column_name,
-            column_type,
-            is_primary,
-            column_id,
-        })
-    }
-
-    pub fn serialize(&self) -> Vec<u8> {
-        let mut serialized = Vec::new();
-        serialized.put_u16_le(self.column_id);
-        serialized.put_u8(self.column_type.serialize());
-        serialized.put_u8(self.is_primary as u8);
-        serialized.put_u64_le(self.get_index_keyspace() as u64);
-        let name_bytes = self.column_name.bytes();
-        serialized.put_u32_le(name_bytes.len() as u32);
-        serialized.extend(name_bytes);
-        serialized
-    }
-
-    pub fn get_secondary_index_keyspace_id(value: u64) -> Option<KeyspaceId> {
-        if value as KeyspaceId != NO_INDEX {
-            Some(value as KeyspaceId)
-        } else {
-            None
-        }
-    }
-
-    pub fn get_index_keyspace(&self) -> KeyspaceId {
-        self.secondary_index_keyspace_id.unwrap_or_else(|| NO_INDEX as KeyspaceId)
-    }
-
-    pub fn is_secondary_indexed(&self) -> bool {
-        self.secondary_index_keyspace_id.is_some()
     }
 }
 

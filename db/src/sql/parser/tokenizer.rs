@@ -105,6 +105,7 @@ impl Tokenizer {
             },
             'K' => self.match_string_or_other_identifier("EY", Token::Key, 1),
             'P' => self.match_string_or_other_identifier("RIMARY", Token::Primary, 1),
+            'E' => self.match_string_or_other_identifier("XPLAIN", Token::Explain, 1),
             'O' => {
                 if self.advance_if_next_string_eq("R") {
                     Ok(Token::Or)

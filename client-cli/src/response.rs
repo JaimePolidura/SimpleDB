@@ -26,6 +26,7 @@ pub enum StatementResponse {
 pub struct QueryDataResponse {
     pub columns_desc: Vec<ColumnDescriptor>,
     pub rows: Vec<Row>,
+    pub explanation: Option<String>,
 }
 
 pub struct Row {

@@ -29,6 +29,7 @@ pub struct SelectStatement {
     pub(crate) where_expr: Option<Expression>,
     pub(crate) selection: Selection,
     pub(crate) table_name: String,
+    pub(crate) explain: bool,
     pub(crate) limit: Limit,
 }
 
@@ -126,6 +127,13 @@ impl Statement {
 
     pub fn requires_database(&self) -> bool {
         self.get_descriptor().requires_database()
+    }
+
+    pub fn is_explained(&self) -> bool {
+        match self {
+            Statement::Select(select) => select.explain,
+            _ => false,
+        }
     }
 
     pub fn get_descriptor(&self) -> StatementDescriptor {

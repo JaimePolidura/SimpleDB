@@ -48,6 +48,7 @@ pub enum Token {
     Index,
     Async,
     On,
+    Explain,
 
     Identifier(String), //Ohter identifier, like table or column names
     ColumnType(Type),

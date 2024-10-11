@@ -19,7 +19,7 @@ impl DatabaseDescriptor {
     pub fn mock() -> DatabaseDescriptor {
         DatabaseDescriptor {
             keyspace_id_by_table_name: SkipMap::new(),
-            file: SimpleDbFile::mock()
+            file: SimpleDbFile::create_mock()
         }
     }
 

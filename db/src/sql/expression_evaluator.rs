@@ -229,7 +229,7 @@ mod test {
         }
 
         let mut table = Table {
-            table_descriptor_file: Mutex::new(SimpleDbFile::mock()),
+            table_descriptor_file: Mutex::new(SimpleDbFile::create_mock()),
             storage: Arc::new(Storage::create_mock(&Arc::new(SimpleDbOptions::default()))),
             primary_column_name: String::from("id"),
             table_name: String::from("personas"),
@@ -250,7 +250,7 @@ mod test {
         Row {
             key_bytes: Bytes::copy_from_slice(id.to_le_bytes().as_slice()),
             storage_engine_record: record.build(),
-            table: Arc::new(table),
+            schema: Arc::new(table),
         }
     }
 }

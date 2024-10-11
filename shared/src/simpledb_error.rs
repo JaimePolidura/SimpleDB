@@ -45,7 +45,7 @@ pub enum SimpleDbError {
     FullScanNotAllowed(),
     RangeScanNotAllowed(),
     InvalidContext(&'static str),
-    ColumnNotFound(types::KeyspaceId, String),
+    ColumnNotFound(String),
     TableNotFound(String),
     TableAlreadyExists(String),
     PrimaryColumnNotIncluded(),
@@ -227,8 +227,8 @@ impl Debug for SimpleDbError {
             SimpleDbError::CannotWriteTableDescriptor(keyspace_id, io_error) => {
                 write!(f, "Cannot write table descriptor. IO Error: {}. Keyspace ID: {}", io_error, keyspace_id)
             }
-            SimpleDbError::ColumnNotFound(keyspace_id, column_nmae) => {
-                write!(f, "Column {} not found. KeyspaceID: {}", column_nmae, keyspace_id)
+            SimpleDbError::ColumnNotFound(column_name) => {
+                write!(f, "Column {} not found.", column_name,)
             }
             SimpleDbError::TableNotFound(table_name) => {
                 write!(f, "Table with name: {} not found", table_name)
@@ -305,7 +305,7 @@ impl SimpleDbError {
             SimpleDbError::MalformedQuery(_) => 4,
             SimpleDbError::FullScanNotAllowed() => 5,
             SimpleDbError::InvalidContext(_) => 6,
-            SimpleDbError::ColumnNotFound(_, _) => 7,
+            SimpleDbError::ColumnNotFound(_) => 7,
             SimpleDbError::TableNotFound(_) => 8,
             SimpleDbError::TableAlreadyExists(_) => 9,
             SimpleDbError::PrimaryColumnNotIncluded() => 10,

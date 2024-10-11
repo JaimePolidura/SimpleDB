@@ -102,6 +102,7 @@ impl Record {
     }
 }
 
+ #[derive(Clone)]
 pub struct RecordBuilder {
     data_records: Vec<(ColumnId, Bytes)>
 }

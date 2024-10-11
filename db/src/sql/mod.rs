@@ -5,5 +5,5 @@ pub mod parser;
 pub mod query_iterator;
 
 mod expression;
-mod plan;
+pub mod plan;
 mod expression_evaluator;

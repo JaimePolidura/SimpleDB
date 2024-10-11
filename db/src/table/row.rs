@@ -1,31 +1,30 @@
 use crate::table::record::Record;
-use crate::table::table::Table;
+use crate::table::schema::Schema;
 use crate::value::{Type, Value};
 use bytes::{BufMut, Bytes};
 use shared::SimpleDbError::CannotDecodeColumn;
 use shared::{utils, SimpleDbError};
 use std::fmt;
 use std::fmt::Formatter;
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct Row {
     pub(crate) storage_engine_record: Record,
     pub(crate) key_bytes: Bytes,
 
-    pub(crate) table: Arc<Table>
+    pub(crate) schema: Schema
 }
 
 impl Row {
     pub(crate) fn create(
         storage_engine_record: Record,
-        table: &Arc<Table>,
-        key_bytes: Bytes
+        key_bytes: Bytes,
+        schema: Schema,
     ) -> Row {
         Row {
             storage_engine_record,
-            table: table.clone(),
-            key_bytes
+            key_bytes,
+            schema,
         }
     }
 
@@ -36,8 +35,8 @@ impl Row {
     //Expect column_name to have been validated before calling this function
     //If emtpy, value will contain Value::Null
     pub fn get_column_value(&self, column_name: &str) -> Result<Value, SimpleDbError> {
-        let column_data = self.table.get_column_desc(column_name)
-            .ok_or(SimpleDbError::ColumnNotFound(self.table.storage_keyspace_id, column_name.to_string()))?;
+        let column_data = self.schema.get_column(column_name)
+            .ok_or(SimpleDbError::ColumnNotFound(column_name.to_string()))?;
 
         match self.storage_engine_record.get_value(column_data.column_id) {
             Some(column_bytes) => Value::deserialize(column_bytes.clone(), column_data.column_type)
@@ -57,17 +56,19 @@ impl Row {
 impl fmt::Display for Row {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut string = String::from("Row [");
-        let n_columns = self.table.get_columns().len();
+        let columns = self.schema.get_columns();
+        let n_columns = columns.len();
         let mut count = 0;
 
-        let columns = self.table.get_columns();
-        let mut column_names: Vec<_> = columns.keys().collect();
+        let mut column_names: Vec<_> = columns.iter()
+            .map(|column| column.column_name.clone())
+            .collect();
         column_names.sort_by(|a, b| {
             (*a).cmp(b)
         });
 
         for column in column_names {
-            let column = self.table.get_column_desc(column).unwrap();
+            let column = self.schema.get_column(&column).unwrap();
             if let Some(column_value) = self.storage_engine_record.get_value(column.column_id) {
                 string.push_str(&column.column_name);
                 string.push_str(" = ");

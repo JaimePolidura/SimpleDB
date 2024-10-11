@@ -1,17 +1,18 @@
 use shared::SimpleDbError;
-use crate::{ColumnDescriptor, Row};
-use crate::sql::plan::plan_step::Plan;
+use crate::{Row};
+use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc};
+use crate::table::schema::Schema;
 
-//This will be returned to the user of SimpleDb when it queryes data
+//This will be returned to the user of SimpleDb when it queries data
 //This is simple wrapper around a Plan
 pub struct QueryIterator {
-    plan: Plan,
-    columns_descriptor_selection: Vec<ColumnDescriptor>
+    plan: PlanStep,
+    schema: Schema
 }
 
 impl QueryIterator {
-    pub fn create(plan: Plan, columns_descriptor_selection: Vec<ColumnDescriptor>) -> QueryIterator {
-        QueryIterator { plan, columns_descriptor_selection }
+    pub fn create(plan: PlanStep, columns_descriptor_selection: Schema) -> QueryIterator {
+        QueryIterator { plan, schema: columns_descriptor_selection }
     }
 
     pub fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
@@ -41,7 +42,11 @@ impl QueryIterator {
         Ok(results)
     }
 
-    pub fn columns_descriptor_selection(&self) -> &Vec<ColumnDescriptor> {
-        &self.columns_descriptor_selection
+    pub fn schema(&self) -> &Schema {
+        &self.schema
+    }
+
+    pub fn get_plan_desc(&self) -> PlanStepDesc {
+        self.plan.desc()
     }
 }

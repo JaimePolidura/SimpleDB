@@ -2,28 +2,28 @@ use std::collections::HashMap;
 use bytes::Bytes;
 use shared::SimpleDbError;
 use crate::Row;
-use crate::sql::plan::plan_step::{Plan, PlanStep};
+use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc, PlanStepTrait};
 
-pub struct MergeIntersectionScanType {
-    plans: Vec<Plan>,
+pub struct MergeIntersectionStep {
+    plans: Vec<PlanStep>,
     rows_not_intersected: HashMap<Bytes, Row>,
     prev_plan_index: usize,
 }
 
-impl MergeIntersectionScanType {
-    pub fn create(
-        a: Plan,
-        b: Plan,
-    ) -> Result<Plan, SimpleDbError> {
+impl MergeIntersectionStep {
+    pub(crate) fn create(
+        a: PlanStep,
+        b: PlanStep,
+    ) -> Result<MergeIntersectionStep, SimpleDbError> {
         let mut plans = Vec::new();
         plans.push(a);
         plans.push(b);
 
-        Ok(Box::new(MergeIntersectionScanType {
+        Ok(MergeIntersectionStep {
             rows_not_intersected: HashMap::new(),
             prev_plan_index: 0,
             plans,
-        }))
+        })
     }
 
     fn get_next_index(&self, prev_index: usize) -> usize {
@@ -35,7 +35,7 @@ impl MergeIntersectionScanType {
     }
 }
 
-impl PlanStep for MergeIntersectionScanType {
+impl PlanStepTrait for MergeIntersectionStep {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         let mut current_index = self.prev_plan_index;
 
@@ -60,5 +60,11 @@ impl PlanStep for MergeIntersectionScanType {
         }
 
         Ok(None)
+    }
+
+    fn desc(&self) -> PlanStepDesc {
+        let right = self.plans[1].desc();
+        let left = self.plans[0].desc();
+        PlanStepDesc::MergeIntersection(Box::new(left), Box::new(right))
     }
 }

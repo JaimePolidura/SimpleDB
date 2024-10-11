@@ -60,7 +60,7 @@ impl<I: StorageIterator> TableIterator<I> {
         let row_in_reassembling = self.rows_reassembling.remove(0);
         let key_bytes = row_in_reassembling.key.clone();
         let row_record_reassembled = row_in_reassembling.build();
-        self.current_row = Some(Row::create(row_record_reassembled, &self.table, key_bytes));
+        self.current_row = Some(Row::create(row_record_reassembled, key_bytes, self.table.get_schema().clone()));
 
         true
     }
@@ -70,11 +70,13 @@ impl<I: StorageIterator> TableIterator<I> {
     }
 
     fn reassemble_row(&mut self, key: Bytes, record: Record) {
+        let schema = self.table.get_schema();
+
         let row_reassemble_index = match self.find_row_reassemble_index(&key) {
             Some(row_reassemble_index) => row_reassemble_index,
             None => {
                 let mut record_builder = Record::builder();
-                record_builder.add_column(self.table.get_primary_column_data().unwrap().column_id, key.clone());
+                record_builder.add_column(schema.get_primary_column().column_id, key.clone());
 
                 self.rows_reassembling.push(RowReassemble {
                     selection: self.selection.clone(),
@@ -136,6 +138,7 @@ mod test {
     use shared::iterators::mock_iterator::MockIterator;
     use shared::ColumnId;
     use crate::ColumnDescriptor;
+    use crate::table::schema::Column;
     use crate::value::{Type, Value};
     //Given records:
     //1 -> (1, 100)
@@ -164,10 +167,10 @@ mod test {
             ]),
             vec![2, 3],
             Table::create_mock(vec![
-                ColumnDescriptor{column_id: 1, column_type: Type::I64, column_name: String::from("ID"), is_primary: true, secondary_index_keyspace_id: None },
-                ColumnDescriptor{column_id: 2, column_type: Type::String, column_name: String::from("Money"), is_primary: false, secondary_index_keyspace_id: None },
-                ColumnDescriptor{column_id: 3, column_type: Type::String, column_name: String::from("Desc"), is_primary: false, secondary_index_keyspace_id: None },
-                ColumnDescriptor{column_id: 4, column_type: Type::String, column_name: String::from("Fecha"), is_primary: false, secondary_index_keyspace_id: None },
+                Column{column_id: 1, column_type: Type::I64, column_name: String::from("ID"), is_primary: true, secondary_index_keyspace_id: None },
+                Column{column_id: 2, column_type: Type::String, column_name: String::from("Money"), is_primary: false, secondary_index_keyspace_id: None },
+                Column{column_id: 3, column_type: Type::String, column_name: String::from("Desc"), is_primary: false, secondary_index_keyspace_id: None },
+                Column{column_id: 4, column_type: Type::String, column_name: String::from("Fecha"), is_primary: false, secondary_index_keyspace_id: None },
             ])
         );
 
