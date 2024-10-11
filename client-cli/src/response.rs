@@ -16,24 +16,24 @@ pub enum Response {
 
 pub enum StatementResponse {
     Ok(usize),
-    Data(QueryDataResponse),
+    Rows(RowsResponse),
     Databases(Vec<String>),
     Tables(Vec<String>),
-    Describe(Vec<ColumnDescriptor>),
+    Describe(Vec<Column>),
     Indexes(Vec<(String, IndexType)>),
+    Explain(Vec<String>)
 }
 
-pub struct QueryDataResponse {
-    pub columns_desc: Vec<ColumnDescriptor>,
+pub struct RowsResponse {
+    pub columns_desc: Vec<Column>,
     pub rows: Vec<Row>,
-    pub explanation: Option<String>,
 }
 
 pub struct Row {
     pub columns: HashMap<ColumnId, Bytes>,
 }
 
-pub struct ColumnDescriptor {
+pub struct Column {
     pub column_id: ColumnId,
     pub column_type: ColumnType,
     pub column_name: String,
@@ -64,11 +64,12 @@ impl Response {
             1 => {
                 Response::Statement(match connection.read_u8().expect("Cannot read response statement type ID") {
                     1 => StatementResponse::Ok(connection.read_u64().expect("Cannot read Nº Affected rows") as usize),
-                    2 => StatementResponse::Data(Self::deserialize_query_response(connection)),
+                    2 => StatementResponse::Rows(Self::deserialize_query_response(connection)),
                     3 => StatementResponse::Databases(Self::deserialize_string_vec(connection)),
                     4 => StatementResponse::Tables(Self::deserialize_string_vec(connection)),
                     5 => StatementResponse::Describe(Self::deserialize_column_dec(connection)),
                     6 => StatementResponse::Indexes(Self::deserialize_indexes(connection)),
+                    7 => StatementResponse::Explain(Self::deserialize_explain(connection)),
                     _ => panic!("Invalid statement response type Id")
                 })
             },
@@ -76,6 +77,19 @@ impl Response {
             3 => Response::Ok,
             _ => panic!("Invalid server response type Id")
         }
+    }
+
+    fn deserialize_explain(connection: &mut Connection) -> Vec<String> {
+        let n_lines = connection.read_u32().expect("Cannot read n lines");
+        let mut lines = Vec::new();
+
+        for _ in 0..n_lines {
+            let line_length = connection.read_u32().expect("Cannot read line length");
+            let line_bytes = connection.read_n(line_length as usize).expect("Cannot read line bytes");
+            lines.push(String::from_utf8(line_bytes).expect("Cannot convert line to UTF-8 string"));
+        }
+
+        lines
     }
 
     fn deserialize_indexes(connection: &mut Connection) -> Vec<(String, IndexType)> {
@@ -100,9 +114,9 @@ impl Response {
         indexes
     }
 
-    fn deserialize_column_dec(connection: &mut Connection) -> Vec<ColumnDescriptor> {
+    fn deserialize_column_dec(connection: &mut Connection) -> Vec<Column> {
         let n_items = connection.read_u32().expect("Cannot read columns desc Nº entries");
-        let mut vec: Vec<ColumnDescriptor> = Vec::with_capacity(n_items as usize);
+        let mut vec: Vec<Column> = Vec::with_capacity(n_items as usize);
 
         for _ in 0..n_items {
             let column_id = connection.read_u16().expect("Cannot read columns ID");
@@ -114,7 +128,7 @@ impl Response {
             let column_name_string = String::from_utf8(column_name_bytes)
                 .expect("Cannot convert column name to UTF-8 string");
 
-            vec.push(ColumnDescriptor {
+            vec.push(Column {
                 column_type: ColumnType::deserialize(column_type),
                 column_name: column_name_string,
                 is_indexed,
@@ -126,7 +140,7 @@ impl Response {
         vec
     }
 
-    fn deserialize_query_response(connection: &mut Connection) -> QueryDataResponse {
+    fn deserialize_query_response(connection: &mut Connection) -> RowsResponse {
         let columns_desc = Self::deserialize_column_dec(connection);
         let n_rows = connection.read_u32().expect("Cannot read Nº rows");
         let mut rows = Vec::with_capacity(n_rows as usize);
@@ -147,7 +161,7 @@ impl Response {
             rows.push(Row { columns });
         }
 
-        QueryDataResponse {
+        RowsResponse {
             columns_desc,
             rows
         }

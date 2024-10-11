@@ -1,5 +1,6 @@
 use bytes::BufMut;
-use db::{Column, IndexType, Limit, PlanStepDesc, QueryIterator, RangeScan, Row, Type, Value};
+use serde::Serialize;
+use db::{Column, IndexType, Limit, PlanStepDesc, RangeScan, Row, Schema, Type, Value};
 use shared::{ErrorTypeId, SimpleDbError};
 
 pub enum Response {
@@ -15,7 +16,7 @@ pub enum StatementResponse {
     Tables(Vec<String>),
     Indexes(Vec<(String, IndexType)>),
     Describe(Vec<Column>),
-    Explanation(QueryIterator)
+    Explain(PlanStepDesc, Schema)
 }
 
 pub struct RowsResponse {
@@ -94,8 +95,8 @@ impl StatementResponse {
         serialized.put_u8(self.statement_response_type_id());
 
         match self {
+            StatementResponse::Explain(explanation, schema) => serialized.extend(Self::serialize_explanation(explanation, schema.clone())),
             StatementResponse::Describe(columns_desc) => serialized.extend(Self::serialize_columns_desc(columns_desc)),
-            StatementResponse::Explanation(explanation) => serialized.extend(Self::serialize_explanation(explanation)),
             StatementResponse::Databases(databases) => serialized.extend(Self::serialize_string_vec(databases)),
             StatementResponse::Indexes(indexes) => serialized.extend(Self::serialize_show_indexes(indexes)),
             StatementResponse::Rows(data) => serialized.extend(Self::serialize_query_data(data)),
@@ -169,67 +170,81 @@ impl StatementResponse {
             StatementResponse::Tables(_) => 4,
             StatementResponse::Describe(_) => 5,
             StatementResponse::Indexes(_) => 6,
-            StatementResponse::Explanation(_) => 7
+            StatementResponse::Explain(_, _) => 7
         }
     }
 
     fn serialize_explanation(
-        explanation: &QueryIterator,
+        explanation: &PlanStepDesc,
+        schema: Schema
     ) -> Vec<u8> {
-        let plan = explanation.get_plan_desc();
-        let schema = explanation.schema();
+        let lines = Self::plan_to_explain_lines(explanation, schema);
 
+        let mut serialized: Vec<u8> = Vec::new();
+        serialized.put_u32_le(lines.len() as u32);
+        for line in lines {
+            serialized.put_u32_le(line.len() as u32);
+            serialized.extend(line.as_bytes());
+        }
+
+        serialized
+    }
+
+    fn plan_to_explain_lines(
+        explanation: &PlanStepDesc,
+        schema: Schema
+    ) -> Vec<String> {
         //Since the plan steps desc follows a tre structure, it wil be very complicated to create,
         //a binary format for it. Instead, we will convert it to a string which will be displayed by the cli.
         let mut pending = Vec::new();
-        // let mut strings = Vec::new();
-        pending.push((0, explanation.clone()));
+        let mut strings = Vec::new();
+        pending.push((0, explanation));
 
-        // while let Some((depth, current_step)) = pending.pop() {
-        //     match current_step {
-        //         PlanStepDesc::Limit(limit, source) => {
-        //             pending.push((depth, source.clone()));
-        //             strings.push(Self::limit_plan_desc_to_string(depth, limit));
-        //         }
-        //         PlanStepDesc::Filter(source) => {
-        //             pending.push((depth, source.clone()));
-        //             strings.push(Self::filter_plan_desc_to_string(depth));
-        //         },
-        //         PlanStepDesc::MergeIntersection(left, right) => {
-        //             pending.push((depth + 1, left.clone()));
-        //             pending.push((depth + 1, right.clone()));
-        //             strings.push(Self::intersection_plan_desc_to_string(depth));
-        //         }
-        //         PlanStepDesc::MergeUnion(left, right) => {
-        //             pending.push((depth + 1, left.clone()));
-        //             pending.push((depth + 1, right.clone()));
-        //             strings.push(Self::union_plan_desc_to_string(depth));
-        //         }
-        //         PlanStepDesc::FullScan => {
-        //             strings.push(Self::full_scan_to_string(depth));
-        //         }
-        //         PlanStepDesc::RangeScan(range) => {
-        //             strings.push(Self::range_scan_plan_desc_to_string(depth, range));
-        //         }
-        //         PlanStepDesc::PrimaryExactScan(primary_column_value_bytes) => {
-        //             let primary_column = schema.get_primary_column();
-        //             let primary_column_type = primary_column.column_type;
-        //             let primary_column_value = Value::deserialize(primary_column_value_bytes.clone(), primary_column_type)
-        //                 .unwrap();
-        //
-        //             strings.push(Self::exact_primary_scan_plan_desc_to_string(depth, primary_column_value));
-        //         }
-        //         PlanStepDesc::SecondaryExactExactScan(secondary_column_name, secondary_column_value) => {
-        //             let secondary_column = schema.get_column_or_err(&secondary_column_name).unwrap();
-        //             let secondary_column_type = secondary_column.column_type;
-        //             let secondary_column_value = Value::deserialize(secondary_column_value.clone(), secondary_column_type)
-        //                 .unwrap();
-        //             strings.push(Self::exact_secondary_scan_plan_desc_to_string(depth, secondary_column_name, secondary_column_value));
-        //         }
-        //     };
-        // }
+        while let Some((depth, current_step)) = pending.pop() {
+            match current_step {
+                PlanStepDesc::Limit(limit, source) => {
+                    pending.push((depth, source.clone()));
+                    strings.push(Self::limit_plan_desc_to_string(depth, limit));
+                },
+                PlanStepDesc::Filter(source) => {
+                    pending.push((depth, source.clone()));
+                    strings.push(Self::filter_plan_desc_to_string(depth));
+                },
+                PlanStepDesc::MergeIntersection(left, right) => {
+                    pending.push((depth + 1, left.clone()));
+                    pending.push((depth + 1, right.clone()));
+                    strings.push(Self::intersection_plan_desc_to_string(depth));
+                }
+                PlanStepDesc::MergeUnion(left, right) => {
+                    pending.push((depth + 1, left.clone()));
+                    pending.push((depth + 1, right.clone()));
+                    strings.push(Self::union_plan_desc_to_string(depth));
+                }
+                PlanStepDesc::FullScan => {
+                    strings.push(Self::full_scan_to_string(depth));
+                }
+                PlanStepDesc::RangeScan(range) => {
+                    strings.push(Self::range_scan_plan_desc_to_string(depth, range));
+                }
+                PlanStepDesc::PrimaryExactScan(primary_column_value_bytes) => {
+                    let primary_column = schema.get_primary_column();
+                    let primary_column_type = primary_column.column_type;
+                    let primary_column_value = Value::deserialize(primary_column_value_bytes.clone(), primary_column_type)
+                        .unwrap();
 
-        vec![]
+                    strings.push(Self::exact_primary_scan_plan_desc_to_string(depth, primary_column_value));
+                }
+                PlanStepDesc::SecondaryExactExactScan(secondary_column_name, secondary_column_value) => {
+                    let secondary_column = schema.get_column_or_err(&secondary_column_name).unwrap();
+                    let secondary_column_type = secondary_column.column_type;
+                    let secondary_column_value = Value::deserialize(secondary_column_value.clone(), secondary_column_type)
+                        .unwrap();
+                    strings.push(Self::exact_secondary_scan_plan_desc_to_string(depth, secondary_column_name, secondary_column_value));
+                }
+            };
+        }
+
+        strings
     }
 
     fn limit_plan_desc_to_string(

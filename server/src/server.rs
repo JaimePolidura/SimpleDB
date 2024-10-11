@@ -240,19 +240,16 @@ impl Server {
                         "Executed query request request Connection ID: {} Rows returned: {} Statement: {}",
                         connection_id, rows.len(), statement
                     ));
-                    // Ok(StatementResponse::Rows(RowsResponse::create(
-                    //     query_iterator.schema().clone(),
-                    //     rows
-                    // )))
-                    Ok(StatementResponse::Ok(1))
+                    Ok(StatementResponse::Rows(RowsResponse::create(
+                        query_iterator.schema().get_columns(),
+                        rows
+                    )))
                 } else {
-                    let explanation = query_iterator.get_plan_desc();
                     logger().debug(SimpleDbLayer::Server, &format!(
                         "Executed query explain request request Connection ID: {} Statement: {}",
                         connection_id, statement
                     ));
-                    // Ok(StatementResponse::Rows(QueryResponse::Explanation()))
-                    Ok(StatementResponse::Ok(1))
+                    Ok(StatementResponse::Explain(query_iterator.get_plan_desc(), query_iterator.schema().clone()))
                 }
             }
         }

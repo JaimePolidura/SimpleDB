@@ -1,5 +1,5 @@
 use crate::request::Request;
-use crate::response::{ColumnDescriptor, IndexType, QueryDataResponse, Response, StatementResponse};
+use crate::response::{Column, IndexType, RowsResponse, Response, StatementResponse};
 use crate::simpledb_server::SimpleDbServer;
 use crate::table_print::TablePrint;
 use std::cmp::Ordering;
@@ -65,9 +65,10 @@ impl SimpleDbCli {
             Response::Statement(statement_result) => {
                 match statement_result {
                     StatementResponse::Ok(n_rows_affected) => println!("{} rows affected! ({})", n_rows_affected, duration_to_string(duration)),
-                    StatementResponse::Data(data) => self.print_query_data(data, duration),
+                    StatementResponse::Rows(data) => self.print_query_data(data, duration),
                     StatementResponse::Databases(databases) => self.print_vec_string_as_table("Databases", databases, duration),
                     StatementResponse::Tables(tables) => self.print_vec_string_as_table("Tables", tables, duration),
+                    StatementResponse::Explain(explain_lines) => self.print_explain_lines(explain_lines, duration),
                     StatementResponse::Describe(desc) => self.print_table_describe(&desc, duration),
                     StatementResponse::Indexes(indexes) => self.print_show_indexes(indexes, duration),
                 };
@@ -81,6 +82,17 @@ impl SimpleDbCli {
         };
 
         print!("\n");
+    }
+
+    fn print_explain_lines(&self, lines: Vec<String>, duration: Duration) {
+        let mut table = TablePrint::create(1);
+        table.add_header("Step");
+
+        for line in lines {
+            table.add_column_value(line);
+        }
+
+        table.print(duration)
     }
 
     fn print_show_indexes(&self, mut indexes: Vec<(String, IndexType)>, duration: Duration) {
@@ -99,7 +111,7 @@ impl SimpleDbCli {
         table.print(duration);
     }
 
-    fn print_query_data(&self, query_data: QueryDataResponse, duration: Duration) {
+    fn print_query_data(&self, query_data: RowsResponse, duration: Duration) {
         let mut columns_desc = query_data.columns_desc;
         columns_desc.sort_by(|a, b| {
             if a.is_primary {
@@ -131,7 +143,7 @@ impl SimpleDbCli {
 
     fn print_table_describe(
         &self,
-        columns_desc: &Vec<ColumnDescriptor>,
+        columns_desc: &Vec<Column>,
         duration: Duration
     ) {
         let mut table = TablePrint::create(4);
