@@ -53,7 +53,7 @@ impl SecondaryRangeScanStep {
 
 impl PlanStepTrait for SecondaryRangeScanStep {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
-        if let Some((secondary_value, primary_key)) = self.secondary_iterator.next() {
+        if let Some((primary_key, secondary_value)) = self.secondary_iterator.next() {
             match self.range.get_position(secondary_value.as_bytes()) {
                 RangeKeyPosition::Inside => self.get_row_by_primary(primary_key),
                 RangeKeyPosition::Above => Ok(None),

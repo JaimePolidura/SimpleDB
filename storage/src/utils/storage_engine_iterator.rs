@@ -166,8 +166,12 @@ impl<I: StorageIterator> StorageEngineIterator<I> {
 impl<I: StorageIterator> StorageIterator for StorageEngineIterator<I> {
     fn next(&mut self) -> bool {
         if self.first_iteration {
-            self.inner_iterator.next();
             self.first_iteration = false;
+
+            if !self.inner_iterator.next() {
+                self.is_finished = true;
+                return false;
+            }
         }
 
         self.do_do_next()

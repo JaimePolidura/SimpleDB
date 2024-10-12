@@ -187,6 +187,7 @@ impl Table {
         let schema = self.get_schema();
         let column_id = schema.get_column_or_err(column_name)?
             .column_id;
+
         let mut iterator = self.secondary_indexes.scan_all(transaction, column_id)?;
         iterator.seek(key, inclusive);
         Ok(iterator)
@@ -219,7 +220,7 @@ impl Table {
         fence(Ordering::Release);
 
         let (task, receiver) = IndexCreationTask::create(
-            column.column_id,
+            column.clone(),
             index_keyspace_id,
             self.storage_keyspace_id,
             self.database.clone(),

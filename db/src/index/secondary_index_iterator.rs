@@ -48,7 +48,7 @@ impl<I: StorageIterator> SecondaryIndexIterator<I> {
             if !next_entry.is_present {
                 self.deleted_entries.insert(next_entry.primary_key.txn_id());
             } else {
-                return Some((next_entry.primary_key.clone(), secondary_value));
+                return Some((secondary_value, next_entry.primary_key.clone()));
             }
         }
     }
@@ -105,6 +105,17 @@ mod test  {
     use shared::key::Key;
     use storage::transactions::transaction::Transaction;
 
+    #[test]
+    fn iterator_empty() {
+        let mut secondary_index_iterator = SecondaryIndexIterator::create(
+            &Transaction::none(),
+            MockIterator::create(),
+        );
+        secondary_index_iterator.seek(&Bytes::from("A".as_bytes()), true);
+
+        assert!(secondary_index_iterator.next().is_none());
+    }
+
     /**
     primary key -> [ ( key, txnid, is_present ) ]
     1 -> [ (Jaime, 1, true), (Molon, 2, true), (Wili, 3, false) ]
@@ -116,9 +127,9 @@ mod test  {
         let mut secondary_index_iterator = create_secondary_index_iterator();
         secondary_index_iterator.seek(&Bytes::from("2".as_bytes().to_vec()), true);
 
-        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Wili", 4), Key::create_from_str("2", 1))));
-        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Walo", 2), Key::create_from_str("2", 1))));
-        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Alvaro", 2), Key::create_from_str("3", 1))));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("2", 1), Key::create_from_str("Wili", 4))));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("2", 1), Key::create_from_str("Walo", 2))));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("3", 1), Key::create_from_str("Alvaro", 2))));
         assert_eq!(secondary_index_iterator.next(), None);
     }
 
@@ -132,11 +143,11 @@ mod test  {
     fn iterator() {
         let mut secondary_index_iterator = create_secondary_index_iterator();
 
-        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Jaime", 1), Key::create_from_str("1", 1))));
-        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Molon", 2), Key::create_from_str("1", 1))));
-        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Wili", 4), Key::create_from_str("2", 1))));
-        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Walo", 2), Key::create_from_str("2", 1))));
-        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Alvaro", 2), Key::create_from_str("3", 1))));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("1", 1), Key::create_from_str("Jaime", 1))));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("1", 1), Key::create_from_str("Molon", 2))));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("2", 1), Key::create_from_str("Wili", 4))));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("2", 1), Key::create_from_str("Walo", 2))));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("3", 1), Key::create_from_str("Alvaro", 2))));
         assert_eq!(secondary_index_iterator.next(), None);
     }
 

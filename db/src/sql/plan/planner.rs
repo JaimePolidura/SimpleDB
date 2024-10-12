@@ -10,7 +10,7 @@ use crate::sql::plan::steps::merge_intersection_scan_step::MergeIntersectionStep
 use crate::sql::plan::steps::merge_union_scan_step::MergeUnionStep;
 use crate::sql::plan::steps::primary_exact_scan_step::PrimaryExactScanStep;
 use crate::sql::plan::steps::primary_range_scan_step::PrimaryRangeScanStep;
-use crate::sql::plan::steps::secondary_exact_scan_type::SecondaryExactScanStep;
+use crate::sql::plan::steps::secondary_exact_scan_step::SecondaryExactScanStep;
 use crate::sql::statement::{DeleteStatement, Limit, SelectStatement, UpdateStatement};
 use crate::table::table::Table;
 use shared::SimpleDbError;

@@ -62,6 +62,10 @@ impl Type {
         }
     }
 
+    pub fn to_value(&self, bytes: Bytes) -> Result<Value, ()> {
+        Value::deserialize(bytes, self.clone())
+    }
+
     pub fn can_be_casted(&self, other: &Type) -> bool {
         if self.is_fp_number() && other.is_fp_number() {
             true
@@ -284,8 +288,8 @@ impl Value {
             Value::I32(value) => value.to_string(),
             Value::U64(value) => value.to_string(),
             Value::I64(value) => value.to_string(),
-            Value::F32(value) => format!("{:.2}", value.to_string()),
-            Value::F64(value) => format!("{:.2}", value.to_string()),
+            Value::F32(value) => format!("{}", value.to_string()),
+            Value::F64(value) => format!("{}", value.to_string()),
             Value::Boolean(value) => if *value { String::from("false") } else { String::from("true") }
             Value::String(value) => value.clone(),
             Value::Date => todo!(),

@@ -10,6 +10,7 @@ use shared::iterators::storage_iterator::StorageIterator;
 use shared::logger::logger;
 use shared::logger::SimpleDbLayer::DB;
 use storage::Storage;
+use crate::{Column, Value};
 use crate::database::database::Database;
 use crate::index::posting_list::PostingList;
 
@@ -17,17 +18,18 @@ pub struct IndexCreationTask {
     table: Arc<Table>,
     database: Arc<Database>,
 
-    indexed_column_id: ColumnId,
     index_keyspace_id: KeyspaceId,
     table_keyspace_id: KeyspaceId,
     storage: Arc<Storage>,
+
+    secondary_indexed_column: Column,
 
     n_affected_rows_sender: Sender<Result<usize, SimpleDbError>>
 }
 
 impl IndexCreationTask {
     pub fn create(
-        indexed_column_id: ColumnId,
+        secondary_indexed_column: Column,
         index_keyspace_id: KeyspaceId,
         table_keyspace_id: KeyspaceId,
         database: Arc<Database>,
@@ -37,10 +39,10 @@ impl IndexCreationTask {
         let (send, receiver) = mpsc::channel();
 
         let index = IndexCreationTask {
+            secondary_indexed_column,
             n_affected_rows_sender: send,
             index_keyspace_id,
             table_keyspace_id,
-            indexed_column_id,
             database,
             storage,
             table,
@@ -50,7 +52,10 @@ impl IndexCreationTask {
     }
 
     pub fn start(&self) {
+        let primary_column_type = &self.table.get_schema().get_primary_column().column_type;
+        let secondary_column_type = &self.secondary_indexed_column.column_type;
         let mut n_affected_rows = 0;
+
         let mut iterator = self.storage.scan_all_with_transaction(
             &Transaction::none(),
             self.table_keyspace_id,
@@ -69,9 +74,16 @@ impl IndexCreationTask {
             let record_bytes = iterator.value();
             let mut record = Record::deserialize(record_bytes.to_vec());
 
-            if let Some(value_to_be_indexed) = record.take_value(self.indexed_column_id) {
+            if let Some(value_to_be_indexed) = record.take_value(self.secondary_indexed_column.column_id) {
                 let posting_list = PostingList::crate_only_one_entry(primary_key);
                 n_affected_rows += 1;
+
+                logger().debug(DB(self.table.table_name.clone()), &format!(
+                    "Adding secondary index entry. Table: {} Primary key: {:?} Secondary key: {}",
+                    self.table.table_name,
+                    primary_column_type.to_value(primary_key.as_bytes().clone()).unwrap().to_string(),
+                    secondary_column_type.to_value(value_to_be_indexed.clone()).unwrap().to_string()
+                ));
 
                 if let Err(error) = self.storage.set_with_transaction(
                     self.index_keyspace_id,

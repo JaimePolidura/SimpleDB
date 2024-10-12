@@ -101,7 +101,6 @@ impl TableDescriptor {
         });
 
         let mut file = self.file.lock().unwrap();
-
         file.safe_replace(&self.serialize())
             .map_err(|e| SimpleDbError::CannotWriteTableDescriptor(self.storage_keyspace_id, e))?;
 
