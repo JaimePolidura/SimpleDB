@@ -1,6 +1,6 @@
 use bytes::{Buf, BufMut, Bytes};
 use shared::key::Key;
-use shared::TxnId;
+use shared::{KeyspaceId, TxnId};
 use storage::transactions::transaction::Transaction;
 
 #[derive(Clone, Debug, PartialOrd, PartialEq)]
@@ -29,6 +29,16 @@ impl PostingList {
                 is_present: false,
             }]
         }
+    }
+
+    pub fn crate_only_one_entry(primary_key: &Key) -> PostingList {
+        let mut entries = Vec::new();
+        entries.push(PostingListEntry {
+            primary_key: primary_key.clone(),
+            is_present: true,
+        });
+
+        PostingList { entries }
     }
 
     //Used for testing

@@ -7,12 +7,10 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, Mutex};
+
 //Maintains information about column ID with its column name, column type, is_primary etc.
 //This file is stored in binary format
 //There is one file of these for each table
-
-// Flags (u64) | Table name length (u16) | Table name bytes...
-// [ Column ID (u16) | Column type (u8) | Is primary (u8) | index keyspace ID (u64) | name length (u32) | name bytes... ]
 pub struct TableDescriptor {
     pub(crate) file: Mutex<SimpleDbFile>,
     pub(crate) table_name: String,
@@ -40,7 +38,7 @@ impl TableDescriptor {
         let table_descriptor_file = SimpleDbFile::create(
             Self::table_descriptor_file_path(options, keyspace_id).as_path(),
             &table_descriptor_file_bytes,
-            shared::SimpleDbFileMode::AppendOnly
+            shared::SimpleDbFileMode::RandomWrites
         ).map_err(|e| SimpleDbError::CannotCreateTableDescriptor(keyspace_id, e))?;
 
         Ok(TableDescriptor {
@@ -69,11 +67,12 @@ impl TableDescriptor {
         let path = Self::table_descriptor_file_path(options, keyspace_id);
         let table_descriptor_file = SimpleDbFile::open(
             path.as_path(),
-            shared::SimpleDbFileMode::AppendOnly
+            shared::SimpleDbFileMode::RandomWrites
         ).map_err(|e| SimpleDbError::CannotOpenTableDescriptor(keyspace_id, e))?;
 
         let table_descriptor_bytes = table_descriptor_file.read_all()
             .map_err(|e| SimpleDbError::CannotReadTableDescriptor(keyspace_id, e))?;
+
         let mut table_descriptor = Self::deserialize(
             keyspace_id,
             &table_descriptor_bytes
@@ -93,19 +92,18 @@ impl TableDescriptor {
         column_type: Type,
         is_primary: bool
     ) -> Result<(), SimpleDbError> {
-        let column = Column {
+        self.schema.add_column(Column {
             column_id: self.next_column_id.fetch_add(1, Relaxed) as ColumnId,
             secondary_index_keyspace_id: None,
             column_name: name.to_string(),
             column_type,
             is_primary,
-        };
+        });
 
         let mut file = self.file.lock().unwrap();
-        file.write(&column.serialize())
-            .map_err(|e| SimpleDbError::CannotWriteTableDescriptor(self.storage_keyspace_id, e))?;
 
-        self.schema.add_column(column);
+        file.safe_replace(&self.serialize())
+            .map_err(|e| SimpleDbError::CannotWriteTableDescriptor(self.storage_keyspace_id, e))?;
 
         Ok(())
     }

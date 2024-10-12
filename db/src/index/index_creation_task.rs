@@ -1,14 +1,17 @@
+use std::io::Read;
 use crate::table::record::Record;
 use crate::table::table::Table;
 use shared::{ColumnId, KeyspaceId, SimpleDbError};
 use std::sync::{mpsc, Arc};
 use std::sync::mpsc::{Receiver, Sender};
+use bytes::Bytes;
 use storage::transactions::transaction::Transaction;
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::logger::logger;
 use shared::logger::SimpleDbLayer::DB;
 use storage::Storage;
 use crate::database::database::Database;
+use crate::index::posting_list::PostingList;
 
 pub struct IndexCreationTask {
     table: Arc<Table>,
@@ -62,18 +65,19 @@ impl IndexCreationTask {
         let lock = self.database.lock_rollbacks();
 
         while iterator.next() {
-            let key = iterator.key();
-            let value = iterator.value();
-            let mut record = Record::deserialize(value.to_vec());
+            let primary_key = iterator.key();
+            let record_bytes = iterator.value();
+            let mut record = Record::deserialize(record_bytes.to_vec());
 
             if let Some(value_to_be_indexed) = record.take_value(self.indexed_column_id) {
+                let posting_list = PostingList::crate_only_one_entry(primary_key);
                 n_affected_rows += 1;
 
                 if let Err(error) = self.storage.set_with_transaction(
                     self.index_keyspace_id,
-                    &Transaction::create(key.txn_id()),
+                    &Transaction::create(primary_key.txn_id()),
                     value_to_be_indexed,
-                    key.as_bytes()
+                    &Bytes::from(posting_list.serialize())
                 ) {
                     self.n_affected_rows_sender.send(Err(error)).unwrap();
                     return;

@@ -92,12 +92,6 @@ impl Database {
         table_name: &str,
         columns: Vec<(String, Type, bool)>,
     ) -> Result<Arc<Table>, SimpleDbError> {
-        let primary_column_name = columns.iter()
-            .filter(|(_, _, is_primary)| *is_primary)
-            .map(|(name,_, _)| name.clone())
-            .find(|_| true) //Find first
-            .ok_or(PrimaryColumnNotIncluded())?;
-
         let table = Table::create(
             table_name,
             &self.options,

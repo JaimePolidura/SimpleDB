@@ -59,6 +59,10 @@ impl Schema {
         &self,
         column: Column,
     ) {
+        if column.is_primary {
+            self.primary_column_id.store(column.column_id as usize, Relaxed);
+        }
+
         self.columns_by_id.insert(column.column_id, column.clone());
         self.columns_id_by_name.insert(column.column_name, column.column_id);
     }
@@ -155,7 +159,9 @@ impl Schema {
 
     pub fn deserialize(ptr: &mut &[u8], keyspace_id: KeyspaceId) -> Result<Schema, SimpleDbError> {
         let mut columns = Vec::new();
-        while ptr.has_remaining() {
+        let n_entries = ptr.get_u32_le();
+
+        for _ in 0..n_entries {
             columns.push(Column::deserialize(keyspace_id, columns.len(), ptr)?);
         }
 
@@ -264,5 +270,46 @@ impl Column {
 
     pub fn is_secondary_indexed(&self) -> bool {
         self.secondary_index_keyspace_id.is_some()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::atomic::Ordering::Relaxed;
+    use crate::{Column, Schema, Type};
+
+    #[test]
+    fn serialize_deserialize() {
+        let schema_to_be_serialized = Schema::create(vec![
+            Column{ column_id: 1, column_type: Type::I64, column_name: String::from("a"), is_primary: true, secondary_index_keyspace_id: None },
+            Column{ column_id: 2, column_type: Type::String, column_name: String::from("b"), is_primary: false, secondary_index_keyspace_id: None },
+            Column{ column_id: 3, column_type: Type::Boolean, column_name: String::from("c"), is_primary: false, secondary_index_keyspace_id: Some(1) }
+        ]);
+        let serialized = schema_to_be_serialized.serialize();
+        let schema_deserialized = Schema::deserialize(&mut serialized.as_slice(), 1)
+            .unwrap();
+
+        assert_eq!(schema_deserialized.primary_column_id.load(Relaxed), 1);
+        assert_eq!(schema_deserialized.get_column("a").unwrap(), Column{
+            column_id: 1,
+            column_type: Type::I64,
+            column_name: String::from("a"),
+            is_primary: true,
+            secondary_index_keyspace_id: None }
+        );
+        assert_eq!(schema_deserialized.get_column("b").unwrap(), Column{
+            column_id: 2,
+            column_type: Type::String,
+            column_name: String::from("b"),
+            is_primary: false,
+            secondary_index_keyspace_id: None }
+        );
+        assert_eq!(schema_deserialized.get_column("c").unwrap(), Column{
+            column_id: 3,
+            column_type: Type::Boolean,
+            column_name: String::from("c"),
+            is_primary: false,
+            secondary_index_keyspace_id: Some(1) }
+        );
     }
 }
