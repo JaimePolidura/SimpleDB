@@ -9,13 +9,14 @@ use crate::sql::plan::steps::limit_step::LimitStep;
 use crate::sql::plan::steps::merge_intersection_scan_step::MergeIntersectionStep;
 use crate::sql::plan::steps::merge_union_scan_step::MergeUnionStep;
 use crate::sql::plan::steps::primary_exact_scan_step::PrimaryExactScanStep;
-use crate::sql::plan::steps::range_scan_step::RangeScanStep;
+use crate::sql::plan::steps::primary_range_scan_step::PrimaryRangeScanStep;
 use crate::sql::plan::steps::secondary_exact_scan_type::SecondaryExactScanStep;
 use crate::sql::statement::{DeleteStatement, Limit, SelectStatement, UpdateStatement};
 use crate::table::table::Table;
 use shared::SimpleDbError;
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::sql::plan::steps::secondary_range_scan_step::SecondaryRangeScanStep;
 
 pub struct Planner {}
 
@@ -95,6 +96,8 @@ impl Planner {
         selection: Selection,
         table: &Arc<Table>,
     ) -> Result<PlanStep, SimpleDbError> {
+        let schema = table.get_schema();
+
         match scan_type {
             ScanType::ExactSecondary(column, exact_id_expr) => {
                 Ok(PlanStep::SecondaryExactExactScan(SecondaryExactScanStep::create(table.clone(), &column, exact_id_expr.serialize(), transaction, selection)?))
@@ -103,7 +106,15 @@ impl Planner {
                 Ok(PlanStep::PrimaryExactScan(PrimaryExactScanStep::create(table.clone(), exact_id_expr.serialize(), selection, transaction)?))
             },
             ScanType::Range(range) => {
-                Ok(PlanStep::RangeScan(RangeScanStep::create(table.clone(), selection, transaction, range)?))
+                if schema.is_secondary_indexed(&range.column_name) {
+                    Ok(PlanStep::SecondaryRangeScan(
+                        SecondaryRangeScanStep::create(table.clone(), selection, &range.column_name, transaction, range.clone())?
+                    ))
+                } else {
+                    Ok(PlanStep::PrimaryRangeScan(
+                        PrimaryRangeScanStep::create(table.clone(), selection, transaction, range)?
+                    ))
+                }
             },
             ScanType::Full => {
                 Ok(PlanStep::FullScan(FullScanStep::create(table.clone(), selection, transaction)?))

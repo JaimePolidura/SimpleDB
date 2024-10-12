@@ -1,14 +1,13 @@
-use crate::Type::I64;
 use crate::Type;
+use crate::Type::I64;
 use bytes::{Buf, BufMut};
 use crossbeam_skiplist::SkipMap;
+use shared::SimpleDbError::ColumnNotFound;
 use shared::{utils, ColumnId, KeyspaceId, SimpleDbError};
 use std::cmp::max;
 use std::hash::Hash;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
-use crossbeam_skiplist::map::Entry;
-use shared::SimpleDbError::ColumnNotFound;
 
 const NO_INDEX: KeyspaceId = 0xFFFFFFFFFFFFFFFF;
 
@@ -105,11 +104,11 @@ impl Schema {
         }
     }
 
-    pub fn get_secondary_indexed_columns(&self) -> Vec<Column> {
+    pub fn get_indexed_columns(&self) -> Vec<Column> {
         let mut columns = Vec::new();
         for column in self.columns_by_id.iter() {
             let column = column.value();
-            if column.is_secondary_indexed() && !column.is_primary {
+            if column.is_secondary_indexed() || column.is_primary {
                 columns.push(column.clone());
             }
         }

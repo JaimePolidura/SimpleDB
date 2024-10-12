@@ -226,7 +226,7 @@ impl StatementExecutor {
         let table = databases.get_table_or_err(&table_name)?;
 
         let schema = table.get_schema();
-        let indexed_columns = schema.get_secondary_indexed_columns();
+        let indexed_columns = schema.get_indexed_columns();
         let mut indexed_columns_to_return = Vec::new();
         for indexed_column in indexed_columns {
             let index_type = if indexed_column.is_primary { IndexType::Primary } else { IndexType::Secondary };

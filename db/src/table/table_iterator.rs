@@ -137,7 +137,6 @@ mod test {
     use bytes::Bytes;
     use shared::iterators::mock_iterator::MockIterator;
     use shared::ColumnId;
-    use crate::ColumnDescriptor;
     use crate::table::schema::Column;
     use crate::value::{Type, Value};
     //Given records:

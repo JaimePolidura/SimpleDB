@@ -28,6 +28,7 @@ impl SecondaryExactScanStep {
     ) -> Result<SecondaryExactScanStep, SimpleDbError> {
         let secondary_index_iterator = table.scan_from_key_secondary_index(
             &secondary_index_value,
+            true,
             transaction,
             secondary_column_name
         )?;
@@ -45,7 +46,7 @@ impl SecondaryExactScanStep {
 
 impl PlanStepTrait for SecondaryExactScanStep {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
-        while let Some(primary_key) = self.secondary_index_iterator.next() {
+        while let Some((_, primary_key)) = self.secondary_index_iterator.next() {
             let mut primary_key_iterator = self.table.scan_from_key(
                 &primary_key.as_bytes(),
                 true,

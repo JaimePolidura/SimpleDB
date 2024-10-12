@@ -64,8 +64,9 @@ impl ScanTypeAnalyzer {
             },
             BinaryOperator::GreaterEqual |
             BinaryOperator::Greater => {
-                if right.is_constant() && left.identifier_eq(&self.schema.get_primary_column().column_name) {
-                    Ok(ScanType::Range(RangeScan{
+                if right.is_constant() && (left.identifier_eq(&self.schema.get_primary_column().column_name) ||
+                    self.schema.is_secondary_indexed(&left.get_identifier()?)) {
+                    Ok(ScanType::Range(RangeScan {
                         column_name: left.get_identifier()?,
                         start: Some(*right.clone()),
                         start_inclusive: matches!(operator, BinaryOperator::GreaterEqual),
@@ -78,7 +79,9 @@ impl ScanTypeAnalyzer {
             },
             BinaryOperator::LessEqual |
             BinaryOperator::Less => {
-                if right.is_constant() && left.identifier_eq(&self.schema.get_primary_column().column_name){
+                if right.is_constant() && (left.identifier_eq(&self.schema.get_primary_column().column_name) ||
+                    self.schema.is_secondary_indexed(&left.get_identifier()?)) {
+
                     Ok(ScanType::Range(RangeScan{
                         column_name: left.get_identifier()?,
                         start: None,

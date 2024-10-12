@@ -5,11 +5,12 @@ use crate::sql::plan::steps::limit_step::LimitStep;
 use crate::sql::plan::steps::merge_intersection_scan_step::MergeIntersectionStep;
 use crate::sql::plan::steps::merge_union_scan_step::MergeUnionStep;
 use crate::sql::plan::steps::primary_exact_scan_step::PrimaryExactScanStep;
-use crate::sql::plan::steps::range_scan_step::RangeScanStep;
+use crate::sql::plan::steps::primary_range_scan_step::PrimaryRangeScanStep;
 use crate::sql::plan::steps::secondary_exact_scan_type::SecondaryExactScanStep;
 use crate::{Limit, Row};
 use bytes::Bytes;
 use shared::SimpleDbError;
+use crate::sql::plan::steps::secondary_range_scan_step::SecondaryRangeScanStep;
 
 pub(crate) trait PlanStepTrait {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError>;
@@ -24,7 +25,8 @@ pub enum PlanStep {
     MergeUnion(MergeUnionStep),
 
     FullScan(FullScanStep),
-    RangeScan(RangeScanStep),
+    PrimaryRangeScan(PrimaryRangeScanStep),
+    SecondaryRangeScan(SecondaryRangeScanStep),
     PrimaryExactScan(PrimaryExactScanStep),
     SecondaryExactExactScan(SecondaryExactScanStep),
 }
@@ -49,9 +51,10 @@ impl PlanStep {
             PlanStep::MergeIntersection(step) => step.next(),
             PlanStep::MergeUnion(step) => step.next(),
             PlanStep::FullScan(step) => step.next(),
-            PlanStep::RangeScan(step) => step.next(),
+            PlanStep::PrimaryRangeScan(step) => step.next(),
             PlanStep::PrimaryExactScan(step) => step.next(),
             PlanStep::SecondaryExactExactScan(step) => step.next(),
+            PlanStep::SecondaryRangeScan(step) => step.next(),
         }
     }
 
@@ -62,9 +65,10 @@ impl PlanStep {
             PlanStep::MergeIntersection(step) => step.desc(),
             PlanStep::MergeUnion(step) => step.desc(),
             PlanStep::FullScan(step) => step.desc(),
-            PlanStep::RangeScan(step) => step.desc(),
+            PlanStep::PrimaryRangeScan(step) => step.desc(),
             PlanStep::PrimaryExactScan(step) => step.desc(),
             PlanStep::SecondaryExactExactScan(step) => step.desc(),
+            PlanStep::SecondaryRangeScan(step) => step.desc()
         }
     }
 }

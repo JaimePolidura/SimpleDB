@@ -180,14 +180,15 @@ impl Table {
     pub fn scan_from_key_secondary_index(
         self: &Arc<Self>,
         key: &Bytes,
+        inclusive: bool,
         transaction: &Transaction,
-        column_name: &str
+        column_name: &str,
     ) -> Result<SecondaryIndexIterator<SimpleDbStorageIterator>, SimpleDbError> {
         let schema = self.get_schema();
         let column_id = schema.get_column_or_err(column_name)?
             .column_id;
         let mut iterator = self.secondary_indexes.scan_all(transaction, column_id)?;
-        iterator.seek(key, true);
+        iterator.seek(key, inclusive);
         Ok(iterator)
     }
 
@@ -351,11 +352,6 @@ impl Table {
         }
 
         Ok(())
-    }
-
-    pub fn get_secondary_indexed_columns(&self) -> Vec<Column> {
-        let schema = self.table_descriptor.get_schema();
-        schema.get_secondary_indexed_columns()
     }
 
     pub fn validate_selection(

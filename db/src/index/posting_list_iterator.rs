@@ -1,3 +1,4 @@
+use shared::key::Key;
 use crate::index::posting_list::{PostingList, PostingListEntry};
 use storage::transactions::transaction::Transaction;
 
@@ -6,16 +7,19 @@ use storage::transactions::transaction::Transaction;
 pub struct PostingListIterator {
     transaction: Transaction,
     posting_list: Vec<PostingListEntry>,
+    secondary_key_value: Key,
 }
 
 impl PostingListIterator {
     pub fn create(
+        secondary_key_value: Key,
         transaction: &Transaction,
         posting_list: PostingList,
     ) -> PostingListIterator {
         PostingListIterator {
             posting_list: posting_list.entries,
             transaction: transaction.clone(),
+            secondary_key_value
         }
     }
 
@@ -33,7 +37,8 @@ impl PostingListIterator {
         false
     }
 
-    pub fn next(&mut self) -> Option<PostingListEntry> {
+    //Returns posting list & secondary key value
+    pub fn next(&mut self) -> Option<(PostingListEntry, Key)> {
         loop {
             if self.posting_list.is_empty() {
                 return None;
@@ -41,7 +46,7 @@ impl PostingListIterator {
 
             let posting_list = self.posting_list.remove(0);
             if self.transaction.can_read(&posting_list.primary_key) {
-                return Some(posting_list);
+                return Some((posting_list, self.secondary_key_value.clone()));
             }
         }
     }
@@ -64,20 +69,33 @@ mod test {
         posting_list.entries.push(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("f", 2) });
         posting_list.entries.push(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("g", 8) });
 
-
-        let mut iterator = PostingListIterator::create(&Transaction::create(4), posting_list);
+        let mut iterator = PostingListIterator::create(
+            Key::create_from_str("a", 1), &Transaction::create(4), posting_list
+        );
         assert!(iterator.has_next());
 
-        assert_eq!(iterator.next(), Some(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("a", 1) }));
+        assert_eq!(iterator.next(), Some((
+            PostingListEntry{ is_present: true, primary_key: Key::create_from_str("a", 1) },
+            Key::create_from_str("a", 1)
+        )));
         assert!(iterator.has_next());
 
-        assert_eq!(iterator.next(), Some(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("b", 2) }));
+        assert_eq!(iterator.next(), Some((
+            PostingListEntry{ is_present: true, primary_key: Key::create_from_str("b", 2) },
+            Key::create_from_str("a", 1)
+        )));
         assert!(iterator.has_next());
 
-        assert_eq!(iterator.next(), Some(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("c", 3) }));
+        assert_eq!(iterator.next(), Some((
+            PostingListEntry{ is_present: true, primary_key: Key::create_from_str("c", 3) },
+            Key::create_from_str("a", 1)
+        )));
         assert!(iterator.has_next());
 
-        assert_eq!(iterator.next(), Some(PostingListEntry{ is_present: true, primary_key: Key::create_from_str("f", 2) }));
+        assert_eq!(iterator.next(), Some((
+            PostingListEntry{ is_present: true, primary_key: Key::create_from_str("f", 2) },
+            Key::create_from_str("a", 1)
+        )));
         assert!(!iterator.has_next());
     }
 }

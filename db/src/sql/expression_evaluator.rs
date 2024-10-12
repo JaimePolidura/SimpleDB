@@ -125,7 +125,7 @@ mod test {
     use crate::table::record::Record;
     use crate::table::table::Table;
     use crate::value::{Type, Value};
-    use crate::Row;
+    use crate::{Row, Schema};
     use bytes::Bytes;
     use crossbeam_skiplist::SkipMap;
     use shared::{SimpleDbFile, SimpleDbFileWrapper, SimpleDbOptions};
@@ -133,6 +133,7 @@ mod test {
     use std::sync::atomic::AtomicUsize;
     use std::sync::{Arc, Mutex};
     use storage::Storage;
+    use crate::table::table_descriptor::TableDescriptor;
 
     //Where id == 10 OR dinero > 100
     #[test]
@@ -229,14 +230,10 @@ mod test {
         }
 
         let mut table = Table {
-            table_descriptor_file: Mutex::new(SimpleDbFile::create_mock()),
+            table_descriptor: TableDescriptor::create_mock(vec![]),
             storage: Arc::new(Storage::create_mock(&Arc::new(SimpleDbOptions::default()))),
-            primary_column_name: String::from("id"),
             table_name: String::from("personas"),
-            next_column_id: AtomicUsize::new(0),
             storage_keyspace_id: 1,
-            columns_by_name: SkipMap::new(),
-            columns_by_id: SkipMap::new(),
             secondary_indexes: SecondaryIndexes::create_mock(Arc::new(SimpleDbOptions::default())),
             database: Database::create_mock(&Arc::new(SimpleDbOptions::default()))
         };
@@ -250,7 +247,7 @@ mod test {
         Row {
             key_bytes: Bytes::copy_from_slice(id.to_le_bytes().as_slice()),
             storage_engine_record: record.build(),
-            schema: Arc::new(table),
+            schema: Schema::create(vec![]),
         }
     }
 }

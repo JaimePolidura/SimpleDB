@@ -11,7 +11,7 @@ pub struct PostingList {
 #[derive(Clone, Debug, PartialOrd, PartialEq)]
 pub struct PostingListEntry {
     pub(crate) is_present: bool,
-    pub(crate) primary_key: Key
+    pub(crate) primary_key: Key,
 }
 
 impl PostingList {

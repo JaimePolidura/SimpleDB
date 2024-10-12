@@ -9,18 +9,18 @@ use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use storage::SimpleDbStorageIterator;
 
-pub struct RangeScanStep {
+pub struct PrimaryRangeScanStep {
     range: RangeScan,
     iterator: TableIterator<SimpleDbStorageIterator>
 }
 
-impl RangeScanStep {
+impl PrimaryRangeScanStep {
     pub(crate) fn create(
         table: Arc<Table>,
         selection: Selection,
         transaction: &Transaction,
         range: RangeScan
-    ) -> Result<RangeScanStep, SimpleDbError> {
+    ) -> Result<PrimaryRangeScanStep, SimpleDbError> {
         let iterator = if let Some(star_range_key_expr) = range.start() {
             let star_range_key_bytes = star_range_key_expr.serialize();
             table.scan_from_key(&star_range_key_bytes, range.is_start_inclusive(), transaction, &selection)
@@ -28,14 +28,14 @@ impl RangeScanStep {
             table.scan_all(transaction, selection)
         }?;
 
-        Ok(RangeScanStep{
+        Ok(PrimaryRangeScanStep {
             iterator,
             range,
         })
     }
 }
 
-impl PlanStepTrait for RangeScanStep {
+impl PlanStepTrait for PrimaryRangeScanStep {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         if self.iterator.next() {
             let current_row = self.iterator.row();

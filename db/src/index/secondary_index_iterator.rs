@@ -1,11 +1,11 @@
-use bytes::Bytes;
 use crate::index::posting_list::PostingList;
 use crate::index::posting_list_iterator::PostingListIterator;
+use bytes::Bytes;
 use crossbeam_skiplist::SkipSet;
-use shared::TxnId;
-use storage::transactions::transaction::Transaction;
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::key::Key;
+use shared::TxnId;
+use storage::transactions::transaction::Transaction;
 
 //This iterator will return the primary keys indexed::
 //  - These primary keys are readable by the transaction
@@ -32,13 +32,14 @@ impl<I: StorageIterator> SecondaryIndexIterator<I> {
         }
     }
 
-    pub fn next(&mut self) -> Option<Key> {
+    //Returns (secondary indexed value, primary key)
+    pub fn next(&mut self) -> Option<(Key, Key)> {
         loop {
             if !self.go_to_next() {
                 return None;
             }
 
-            let next_entry = self.posting_list_iterator
+            let (next_entry, secondary_value) = self.posting_list_iterator
                 .as_mut()
                 .unwrap()
                 .next()
@@ -47,18 +48,9 @@ impl<I: StorageIterator> SecondaryIndexIterator<I> {
             if !next_entry.is_present {
                 self.deleted_entries.insert(next_entry.primary_key.txn_id());
             } else {
-                return Some(next_entry.primary_key.clone());
+                return Some((next_entry.primary_key.clone(), secondary_value));
             }
         }
-    }
-
-    pub fn next_all(&mut self) -> Vec<Key> {
-        let mut items = Vec::new();
-        while let Some(item) = self.next() {
-            items.push(item);
-        }
-
-        items
     }
 
     //This function will set posting_list_iterator to point to the next available entry in the iterator
@@ -89,8 +81,13 @@ impl<I: StorageIterator> SecondaryIndexIterator<I> {
         }
 
         let posting_list_bytes = self.storage_iterator.value();
+        let posting_list_secondary_value = self.storage_iterator.key();
+
         let posting_list = PostingList::deserialize(&mut posting_list_bytes.clone());
-        self.posting_list_iterator = Some(PostingListIterator::create(&self.transaction, posting_list));
+        self.posting_list_iterator = Some(PostingListIterator::create(
+            posting_list_secondary_value.clone(), &self.transaction, posting_list
+        ));
+
         true
     }
 
@@ -104,12 +101,9 @@ mod test  {
     use crate::index::posting_list::PostingList;
     use crate::index::secondary_index_iterator::SecondaryIndexIterator;
     use bytes::Bytes;
-    use shared::SimpleDbOptions;
-    use std::sync::Arc;
     use shared::iterators::mock_iterator::MockIterator;
     use shared::key::Key;
     use storage::transactions::transaction::Transaction;
-    use storage::utils::storage_engine_iterator::StorageEngineIterator;
 
     /**
     primary key -> [ ( key, txnid, is_present ) ]
@@ -122,9 +116,9 @@ mod test  {
         let mut secondary_index_iterator = create_secondary_index_iterator();
         secondary_index_iterator.seek(&Bytes::from("2".as_bytes().to_vec()), true);
 
-        assert_eq!(secondary_index_iterator.next(), Some(Key::create_from_str("Wili", 4)));
-        assert_eq!(secondary_index_iterator.next(), Some(Key::create_from_str("Walo", 2)));
-        assert_eq!(secondary_index_iterator.next(), Some(Key::create_from_str("Alvaro", 2)));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Wili", 4), Key::create_from_str("2", 1))));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Walo", 2), Key::create_from_str("2", 1))));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Alvaro", 2), Key::create_from_str("3", 1))));
         assert_eq!(secondary_index_iterator.next(), None);
     }
 
@@ -138,15 +132,15 @@ mod test  {
     fn iterator() {
         let mut secondary_index_iterator = create_secondary_index_iterator();
 
-        assert_eq!(secondary_index_iterator.next(), Some(Key::create_from_str("Jaime", 1)));
-        assert_eq!(secondary_index_iterator.next(), Some(Key::create_from_str("Molon", 2)));
-        assert_eq!(secondary_index_iterator.next(), Some(Key::create_from_str("Wili", 4)));
-        assert_eq!(secondary_index_iterator.next(), Some(Key::create_from_str("Walo", 2)));
-        assert_eq!(secondary_index_iterator.next(), Some(Key::create_from_str("Alvaro", 2)));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Jaime", 1), Key::create_from_str("1", 1))));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Molon", 2), Key::create_from_str("1", 1))));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Wili", 4), Key::create_from_str("2", 1))));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Walo", 2), Key::create_from_str("2", 1))));
+        assert_eq!(secondary_index_iterator.next(), Some((Key::create_from_str("Alvaro", 2), Key::create_from_str("3", 1))));
         assert_eq!(secondary_index_iterator.next(), None);
     }
 
-    fn create_secondary_index_iterator() -> SecondaryIndexIterator<StorageEngineIterator<MockIterator>> {
+    fn create_secondary_index_iterator() -> SecondaryIndexIterator<MockIterator> {
         let mut inner_iterator = storage::MockIterator::create();
         inner_iterator.add_entry("1", 1, Bytes::from(PostingList::create(vec![
             ("Jaime", 1, true),
@@ -164,7 +158,7 @@ mod test  {
 
         SecondaryIndexIterator::create(
             &Transaction::create(5),
-            StorageEngineIterator::create(0, &Arc::new(SimpleDbOptions::default()), inner_iterator)
+            inner_iterator
         )
     }
 }
