@@ -288,7 +288,6 @@ mod test {
 
         let sstable = Arc::new(SSTable{
             keyspace_id: 0,
-            active_txn_ids_written: SkipSet::new(),
             sstable_id: 1,
             bloom_filter: BloomFilter::create(&Vec::new(), 8),
             file: SimpleDbFileWrapper{ file: UnsafeCell::new(shared::SimpleDbFile::create_mock()) },
