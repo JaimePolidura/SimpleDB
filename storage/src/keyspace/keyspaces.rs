@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
-use shared::Flag;
+use shared::{Flag, Type};
 
 pub struct Keyspaces {
     keyspaces: SkipMap<shared::KeyspaceId, Arc<Keyspace>>,
@@ -78,12 +78,17 @@ impl Keyspaces {
         }
     }
 
-    pub fn create_keyspace(&self, flags: Flag) -> Result<Arc<Keyspace>, shared::SimpleDbError> {
+    pub fn create_keyspace(&self, flags: Flag, key_type: Type) -> Result<Arc<Keyspace>, shared::SimpleDbError> {
         let keyspace_id = self.next_keyspace_id.fetch_add(1, Relaxed) as shared::KeyspaceId;
         let keyspace = Keyspace::create_new(
-            keyspace_id, self.transaction_manager.clone(), self.options.clone(), flags
+            keyspace_id,
+            self.transaction_manager.clone(),
+            self.options.clone(),
+            flags,
+            key_type
         )?;
         self.keyspaces.insert(keyspace_id, keyspace.clone());
+
         Ok(keyspace)
     }
 

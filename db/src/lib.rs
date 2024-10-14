@@ -4,7 +4,6 @@ mod selection;
 mod database;
 mod table;
 mod sql;
-mod value;
 mod index;
 
 pub use sql::plan::plan_step::PlanStepDesc;
@@ -16,4 +15,3 @@ pub use simple_db::Context;
 pub use sql::statement::*;
 pub use table::row::Row;
 pub use table::schema::*;
-pub use value::*;

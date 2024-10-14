@@ -1,8 +1,7 @@
 use crate::table::schema::{Column, Schema};
-use crate::Type;
 use bytes::{Buf, BufMut};
 use shared::SimpleDbError::CannotWriteTableDescriptor;
-use shared::{ColumnId, KeyspaceId, SimpleDbError, SimpleDbFile};
+use shared::{ColumnId, KeyspaceId, SimpleDbError, SimpleDbFile, Type};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;

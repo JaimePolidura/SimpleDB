@@ -1,12 +1,12 @@
 use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 use crate::selection::Selection;
 use crate::table::table::Table;
-use crate::{Row, Type, Value};
 use bytes::Bytes;
 use shared::SimpleDbError;
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use storage::SimpleDbStorageIterator;
+use crate::Row;
 use crate::sql::plan::plan_step::{PlanStepDesc, PlanStepTrait};
 
 pub struct SecondaryExactScanStep {

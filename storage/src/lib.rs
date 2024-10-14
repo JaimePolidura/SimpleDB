@@ -7,7 +7,6 @@ mod keyspace;
 pub mod transactions;
 pub mod storage;
 pub mod utils;
-mod value;
 
 pub use shared::iterators::storage_iterator::StorageIterator;
 pub use shared::iterators::mock_iterator::MockIterator;

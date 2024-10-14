@@ -1,9 +1,7 @@
-use crate::Type;
-use crate::Type::I64;
 use bytes::{Buf, BufMut};
 use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::ColumnNotFound;
-use shared::{utils, ColumnId, KeyspaceId, SimpleDbError};
+use shared::{utils, ColumnId, KeyspaceId, SimpleDbError, Type};
 use std::cmp::max;
 use std::hash::Hash;
 use std::sync::atomic::AtomicUsize;
@@ -180,32 +178,34 @@ impl Clone for Schema {
 }
 
 impl Column {
+    //Used for testing
     pub fn create_primary(name: &str) -> Column {
         Column {
             column_id: 0,
-            column_type: I64,
+            column_type: Type::I64,
             column_name: name.to_string(),
             is_primary: true,
             secondary_index_keyspace_id: None
         }
     }
-
+    //Used for testing
     pub fn create_secondary(name: &str, column_id: ColumnId) -> Column {
         Column {
             column_id,
-            column_type: I64,
+            column_type: Type::I64,
             column_name: name.to_string(),
             is_primary: false,
             secondary_index_keyspace_id: Some(1)
         }
     }
 
+    //Used for testing
     pub fn create(name: &str, column_id: ColumnId) -> Column {
         Column {
             secondary_index_keyspace_id: None,
             column_name: name.to_string(),
             is_primary: false,
-            column_type: I64,
+            column_type: Type::I64,
             column_id,
         }
     }
@@ -276,7 +276,8 @@ impl Column {
 #[cfg(test)]
 mod test {
     use std::sync::atomic::Ordering::Relaxed;
-    use crate::{Column, Schema, Type};
+    use shared::Type;
+    use crate::{Column, Schema};
 
     #[test]
     fn serialize_deserialize() {

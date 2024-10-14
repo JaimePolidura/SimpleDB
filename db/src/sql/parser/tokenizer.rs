@@ -1,8 +1,7 @@
 use std::str::FromStr;
 use shared::SimpleDbError::{IllegalToken};
-use shared::TokenLocation;
+use shared::{TokenLocation, Type};
 use crate::sql::parser::token::Token;
-use crate::value::Type;
 
 pub struct Tokenizer {
     string: String,
@@ -427,7 +426,6 @@ impl Tokenizer {
 mod test {
     use crate::sql::parser::token::Token;
     use crate::sql::parser::tokenizer::Tokenizer;
-    use crate::value::Type;
 
     #[test]
     fn select() {

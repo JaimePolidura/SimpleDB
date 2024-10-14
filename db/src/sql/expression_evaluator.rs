@@ -1,8 +1,7 @@
 use crate::sql::expression::Expression::Binary;
 use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
-use crate::value::Value;
 use crate::Row;
-use shared::SimpleDbError;
+use shared::{SimpleDbError, Type, Value};
 use SimpleDbError::MalformedQuery;
 
 //expression is expected to have been passed to evaluate_constant_expressions() before calling this function
@@ -13,9 +12,9 @@ pub fn evaluate_where_expression(
 ) -> Result<bool, SimpleDbError> {
     match evaluate_expression(row, expression)? {
         Expression::Literal(value_produced) => {
-            match value_produced {
-                Value::Boolean(boolean_produced) => Ok(boolean_produced),
-                Value::Null => Ok(false),
+            match value_produced.get_type() {
+                Type::Boolean => Ok(value_produced.get_boolean()?),
+                Type::Null => Ok(false),
                 _ => Err(MalformedQuery(String::from("Expression should produce a boolean value"))),
             }
         },
@@ -77,11 +76,11 @@ fn evaluate_constant_unary_op(
         UnaryOperator::Minus => {
             let value = expression.get_value()?;
             if value.is_fp_number() {
-                Ok(Expression::Literal(Value::F64(- value.get_f64()?)))
+                Ok(Expression::Literal(Value::create_f64(- value.get_f64()?)))
             } else if value.is_integer_number() {
-                Ok(Expression::Literal(Value::I64(- value.get_i64()?)))
+                Ok(Expression::Literal(Value::create_i64(- value.get_i64()?)))
             } else if value.is_null() {
-                Ok(Expression::Literal(Value::Null))
+                Ok(Expression::Literal(Value::create_null()))
             } else {
                 Err(MalformedQuery(String::from("Cannot apply unary operator")))
             }
@@ -124,16 +123,12 @@ mod test {
     use crate::sql::parser::parser::Parser;
     use crate::table::record::Record;
     use crate::table::table::Table;
-    use crate::value::{Type, Value};
+    use crate::table::table_descriptor::TableDescriptor;
     use crate::{Row, Schema};
     use bytes::Bytes;
-    use crossbeam_skiplist::SkipMap;
-    use shared::{SimpleDbFile, SimpleDbFileWrapper, SimpleDbOptions};
-    use std::cell::UnsafeCell;
-    use std::sync::atomic::AtomicUsize;
-    use std::sync::{Arc, Mutex};
+    use shared::{SimpleDbOptions, Type, Value};
+    use std::sync::Arc;
     use storage::Storage;
-    use crate::table::table_descriptor::TableDescriptor;
 
     //Where id == 10 OR dinero > 100
     #[test]
@@ -180,12 +175,12 @@ mod test {
             Box::new(Binary(
                 BinaryOperator::Greater,
                 Box::new(Expression::Identifier(String::from("dinero"))),
-                Box::new(Expression::Literal(Value::I64(21))),
+                Box::new(Expression::Literal(Value::create_i64(21))),
             )),
             Box::new(Binary(
                 BinaryOperator::Greater,
                 Box::new(Expression::Identifier(String::from("id"))),
-                Box::new(Expression::Literal(Value::I64(10)))),
+                Box::new(Expression::Literal(Value::create_i64(10)))),
             )),
         );
     }
@@ -198,7 +193,6 @@ mod test {
 
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(matches!(result, Expression::Literal(Value::I64(_))));
         assert_eq!(result.get_f64().unwrap(), (1 + 2) as f64 + (3.1 + -(4 * 2) as f64));
     }
 
@@ -210,7 +204,6 @@ mod test {
 
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(matches!(result, Expression::Literal(Value::Boolean(_))));
         assert_eq!(result.get_boolean().unwrap(), ((1 > 2) || (1 <= 2)) && (1 == 1));
     }
 

@@ -1,4 +1,4 @@
-use crate::{types, ColumnId, KeyspaceId};
+use crate::{types, ColumnId, KeyspaceId, Type};
 use bytes::Bytes;
 use std::fmt::{Debug, Formatter};
 use std::string::FromUtf8Error;
@@ -37,6 +37,10 @@ pub enum SimpleDbError {
     InvalidRequestBinaryFormat,
     NetworkError(std::io::Error),
 
+    //Shared error types
+    IllegalTypeCastFromBytes(Type),
+    IllegalTypeOperation(&'static str),
+
     //DB Layer errors
     IndexAlreadyExists(KeyspaceId, String),
     IndexNotFound(ColumnId),
@@ -73,6 +77,7 @@ pub enum SimpleDbError {
     CannotCreateKeyspaceDescriptorFile(types::KeyspaceId, std::io::Error),
     CannotReadKeyspaceDescriptorFile(types::KeyspaceId, std::io::Error),
     CannotOpenKeyspaceDescriptorFile(types::KeyspaceId, std::io::Error),
+    CannotDecodeKeyspaceDescriptor(types::KeyspaceId, DecodeError),
     KeyspaceNotFound(types::KeyspaceId),
     CannotReadKeyspacesDirectories(std::io::Error),
     CannotReadKeyspaceFile(types::KeyspaceId, std::io::Error),
@@ -116,6 +121,9 @@ impl Debug for SimpleDbError {
             SimpleDbError::CannotDecodeTableDescriptor(keyspace_id, decode_error) => {
                 write!(f, "Cannot decode table descriptor. Error: {}. Keyspace ID: {}", decode_error_to_message(&decode_error), keyspace_id)
             },
+            SimpleDbError::CannotDecodeKeyspaceDescriptor(keyspace_id, decode_error) => {
+                write!(f, "Cannot decode keyspace descriptor. Error: {}. Keyspace ID: {}", decode_error_to_message(&decode_error), keyspace_id)
+            }
             SimpleDbError::CannotOpenDatabaseDescriptor(database_name, io_error) => {
                 write!(f, "Cannot open Database descriptor. Error: {}. Database ID: {}", io_error, database_name)
             },
@@ -293,6 +301,12 @@ impl Debug for SimpleDbError {
             SimpleDbError::IndexNotFound(column_id) => {
                 write!(f, "Index not found on column ID: {}", column_id)
             }
+            SimpleDbError::IllegalTypeCastFromBytes(expected_type) => {
+                write!(f, "Cannot cast bytes to type: {}", expected_type.to_string())
+            }
+            SimpleDbError::IllegalTypeOperation(message) => {
+                write!(f, "{}", message)
+            }
         }
     }
 }
@@ -362,6 +376,9 @@ impl SimpleDbError {
             SimpleDbError::CannotOpenKeyspaceDescriptorFile(_, _) => 61,
             SimpleDbError::IndexAlreadyExists(_, _) => 62,
             SimpleDbError::IndexNotFound(_) => 63,
+            SimpleDbError::CannotDecodeKeyspaceDescriptor(_, _) => 64,
+            SimpleDbError::IllegalTypeCastFromBytes(_) => 65,
+            SimpleDbError::IllegalTypeOperation(_) => 66,
         }
     }
 }

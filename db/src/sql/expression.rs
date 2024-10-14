@@ -1,6 +1,5 @@
-use crate::value::Value;
 use bytes::Bytes;
-use shared::SimpleDbError;
+use shared::{SimpleDbError, Value};
 use std::cmp::PartialEq;
 use SimpleDbError::MalformedQuery;
 
@@ -118,7 +117,7 @@ impl Expression {
 
     pub fn and(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         if self.is_null() || other.is_null() {
-            return Ok(Expression::Literal(Value::Null));
+            return Ok(Expression::Literal(Value::create_null()));
         }
 
         let value_self = self.get_value()?;
@@ -129,8 +128,8 @@ impl Expression {
     pub fn greater(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         self.comparation_op(
             other,
-            Expression::Literal(Value::Null),
-            Expression::Literal(Value::Null),
+            Expression::Literal(Value::create_null()),
+            Expression::Literal(Value::create_null()),
             |a, b| a.greater(b)
         )
     }
@@ -138,8 +137,8 @@ impl Expression {
     pub fn greater_equal(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         self.comparation_op(
             other,
-            Expression::Literal(Value::Null),
-            Expression::Literal(Value::Null),
+            Expression::Literal(Value::create_null()),
+            Expression::Literal(Value::create_null()),
             |a, b| a.greater_equal(b)
         )
     }
@@ -147,8 +146,8 @@ impl Expression {
     pub fn less(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         self.comparation_op(
             other,
-            Expression::Literal(Value::Null),
-            Expression::Literal(Value::Null),
+            Expression::Literal(Value::create_null()),
+            Expression::Literal(Value::create_null()),
             |a, b| a.less(b)
         )
     }
@@ -156,8 +155,8 @@ impl Expression {
     pub fn less_equal(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         self.comparation_op(
             other,
-            Expression::Literal(Value::Null),
-            Expression::Literal(Value::Null),
+            Expression::Literal(Value::create_null()),
+            Expression::Literal(Value::create_null()),
             |a, b| a.less_equal(b),
         )
     }
@@ -165,8 +164,8 @@ impl Expression {
     pub fn equal(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         self.comparation_op(
             other,
-            Expression::Literal(Value::Boolean(true)),
-            Expression::Literal(Value::Boolean(false)),
+            Expression::Literal(Value::create_boolean(true)),
+            Expression::Literal(Value::create_boolean(false)),
             |a, b| a.equal(b),
         )
     }
@@ -174,8 +173,8 @@ impl Expression {
     pub fn not_equal(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         self.comparation_op(
             other,
-            Expression::Literal(Value::Boolean(false)),
-            Expression::Literal(Value::Boolean(true)),
+            Expression::Literal(Value::create_boolean(false)),
+            Expression::Literal(Value::create_boolean(true)),
             |a, b| a.not_equal(b),
         )
     }
@@ -217,7 +216,7 @@ impl Expression {
         Op: Fn(&Value, &Value) -> Result<Value, SimpleDbError>
     {
         if self.is_null() || other.is_null() {
-            return Ok(Expression::Literal(Value::Null))
+            return Ok(Expression::Literal(Value::create_null()))
         }
 
         match &self {

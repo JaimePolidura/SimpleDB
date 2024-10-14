@@ -1,22 +1,32 @@
-use bytes::Buf;
-use shared::SimpleDbError::{CannotCreateKeyspaceDescriptorFile, CannotOpenKeyspaceDescriptorFile, CannotReadKeyspaceDescriptorFile};
-use shared::{Flag, KeyspaceId, SimpleDbError, SimpleDbFile, SimpleDbFileMode};
+use bytes::{Buf, BufMut};
+use shared::SimpleDbError::{CannotCreateKeyspaceDescriptorFile, CannotDecodeKeyspaceDescriptor, CannotOpenKeyspaceDescriptorFile, CannotReadKeyspaceDescriptorFile};
+use shared::{DecodeError, DecodeErrorType, Flag, KeyspaceId, SimpleDbError, SimpleDbFile, SimpleDbFileMode, Type};
 use std::path::PathBuf;
 
 pub struct KeyspaceDescriptor {
     pub(crate) flags: Flag,
+    pub(crate) key_type: Type,
 }
 
 impl KeyspaceDescriptor {
     pub fn create(
         flags: Flag,
         keyspace_path: PathBuf,
-        keyspace_id: KeyspaceId
+        keyspace_id: KeyspaceId,
+        key_type: Type
     ) -> Result<KeyspaceDescriptor, SimpleDbError> {
-        let keyspace_path = Self::to_keyspace_path(keyspace_path);
-        SimpleDbFile::create(keyspace_path.as_path(), &flags.to_le_bytes().to_vec(), SimpleDbFileMode::RandomWrites)
+        let keyspace_descriptor = KeyspaceDescriptor {
+            key_type,
+            flags,
+        };
+
+        let keyspace_descriptor_path = Self::to_keyspace_path(keyspace_path);
+        let keyspace_descriptor_bytes = keyspace_descriptor.serialize();
+
+        SimpleDbFile::create(keyspace_descriptor_path.as_path(), &keyspace_descriptor_bytes, SimpleDbFileMode::RandomWrites)
             .map_err(|e| CannotCreateKeyspaceDescriptorFile(keyspace_id, e))?;
-        Ok(KeyspaceDescriptor{ flags })
+
+        Ok(keyspace_descriptor)
     }
 
     pub fn load_from_disk(
@@ -28,15 +38,30 @@ impl KeyspaceDescriptor {
             .map_err(|e| CannotReadKeyspaceDescriptorFile(keyspace_id, e))?;
         let keyspace_desc_bytes = keyspace_file.read_all()
             .map_err(|e| CannotOpenKeyspaceDescriptorFile(keyspace_id, e))?;
-        Ok(Self::deserialize(keyspace_desc_bytes))
+
+        Self::deserialize(&mut keyspace_desc_bytes.as_slice(), keyspace_id)
     }
 
-    pub fn deserialize(bytes: Vec<u8>) -> KeyspaceDescriptor {
-        let bytes_ptr = &mut bytes.as_slice();
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut serialized: Vec<u8> = Vec::new();
+        serialized.put_u8(self.key_type.clone() as u8);
+        serialized.put_u64_le(self.flags as u64);
+        serialized
+    }
 
-        KeyspaceDescriptor {
-            flags: bytes_ptr.get_u64_le()
-        }
+    pub fn deserialize(bytes: &mut &[u8], keyspace_id: KeyspaceId) -> Result<KeyspaceDescriptor, SimpleDbError> {
+        let key_type = Type::deserialize(bytes.get_u8())
+            .map_err(|unknown_flag| CannotDecodeKeyspaceDescriptor(keyspace_id, DecodeError{
+                offset: 0,
+                index: 0,
+                error_type: DecodeErrorType::UnknownFlag(unknown_flag as usize)
+            }))?;
+        let flags = bytes.get_u64_le();
+
+        Ok(KeyspaceDescriptor {
+            key_type,
+            flags
+        })
     }
 
     fn to_keyspace_path(mut keyspace_path: PathBuf) -> PathBuf {

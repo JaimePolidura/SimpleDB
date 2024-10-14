@@ -3,10 +3,9 @@ use crate::simple_db::Context;
 use crate::sql::expression::Expression;
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
 use crate::table::table::Table;
-use crate::value::Type;
 use crate::CreateIndexStatement;
 use shared::SimpleDbError::UnknownColumn;
-use shared::SimpleDbError;
+use shared::{SimpleDbError, Type};
 use std::sync::Arc;
 
 pub struct StatementValidator {
@@ -209,7 +208,7 @@ impl StatementValidator {
                     .ok_or(UnknownColumn(table_name.clone()))
                     .map(|it| it.column_type)
             },
-            Expression::Literal(value) => Ok(value.to_type()),
+            Expression::Literal(value) => Ok(value.get_type()),
         }
     }
 

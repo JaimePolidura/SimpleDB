@@ -9,10 +9,9 @@ use crate::table::schema::{Column, Schema};
 use crate::table::table_descriptor::TableDescriptor;
 use crate::table::table_flags::KEYSPACE_TABLE_USER;
 use crate::table::table_iterator::TableIterator;
-use crate::value::{Type, Value};
 use bytes::Bytes;
 use shared::SimpleDbError::{ColumnNameAlreadyDefined, ColumnNotFound, IndexAlreadyExists, InvalidType, OnlyOnePrimaryColumnAllowed, PrimaryColumnNotIncluded, UnknownColumn};
-use shared::{ColumnId, FlagMethods, KeyspaceId, SimpleDbError, SimpleDbOptions};
+use shared::{ColumnId, FlagMethods, KeyspaceId, SimpleDbError, SimpleDbOptions, Type, Value};
 use std::collections::HashSet;
 use std::sync::atomic::{fence, Ordering};
 use std::sync::Arc;
@@ -35,11 +34,20 @@ pub struct Table {
 impl Table {
     pub(crate) fn create(
         table_name: &str,
+        columns: Vec<(String, Type, bool)>,
         options: &Arc<shared::SimpleDbOptions>,
         storage: &Arc<storage::Storage>,
         database: Arc<Database>
     ) -> Result<Arc<Table>, SimpleDbError> {
-        let table_keyspace_id = storage.create_keyspace(KEYSPACE_TABLE_USER)?;
+        let primary_key_type = columns.iter()
+            .find(|(_, _, is_primary)| *is_primary)
+            .map(|(_, column_type, _)| column_type.clone())
+            .ok_or(PrimaryColumnNotIncluded())?;
+
+        let table_keyspace_id = storage.create_keyspace(
+            KEYSPACE_TABLE_USER,
+            primary_key_type
+        )?;
         let table_descriptor = TableDescriptor::create(
             table_keyspace_id,
             options,
@@ -206,21 +214,21 @@ impl Table {
 
     pub fn create_secondary_index(
         self: &Arc<Self>,
-        column_name: &str,
+        column_name_to_be_indexed: &str,
         wait: bool
     ) -> Result<usize, SimpleDbError> {
-        let column = self.get_column(column_name).unwrap();
+        let column_to_be_indexed = self.get_column(column_name_to_be_indexed).unwrap();
 
-        if self.secondary_indexes.can_be_read(column.column_id) {
-            return Err(IndexAlreadyExists(self.storage_keyspace_id, column_name.to_string()));
+        if self.secondary_indexes.can_be_read(column_to_be_indexed.column_id) {
+            return Err(IndexAlreadyExists(self.storage_keyspace_id, column_name_to_be_indexed.to_string()));
         }
 
-        let index_keyspace_id = self.secondary_indexes.create_new_secondary_index(column.column_id)?;
+        let index_keyspace_id = self.secondary_indexes.create_new_secondary_index(column_to_be_indexed.clone())?;
         //Before we start reading all the SSTables and Memtables, make sure the new secondary index is visible for writers
         fence(Ordering::Release);
 
         let (task, receiver) = IndexCreationTask::create(
-            column.clone(),
+            column_to_be_indexed.clone(),
             index_keyspace_id,
             self.storage_keyspace_id,
             self.database.clone(),
@@ -242,7 +250,7 @@ impl Table {
         }
 
         self.table_descriptor.update_column_secondary_index(
-            column.column_id,
+            column_to_be_indexed.column_id,
             index_keyspace_id
         )?;
 
@@ -400,7 +408,7 @@ impl Table {
         for (column_name, column_value) in to_insert_data {
             match schema.get_column(column_name) {
                 Some(column) => {
-                    if !column.column_type.can_be_casted(&column_value.to_type()) {
+                    if !column.column_type.can_be_casted(&column_value.get_type()) {
                         return Err(InvalidType(column_name.clone()));
                     }
                 },
@@ -484,7 +492,7 @@ impl Table {
                         .column_id;
 
                     match old_row_value.get_column_value(&column_secondary_indexed_column_name)? {
-                        Value::Null => continue,
+                        Value => continue,
                         value => old_data.push((column_id, value.serialize())),
                     };
                 }

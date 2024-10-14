@@ -1,7 +1,7 @@
 use bytes::BufMut;
 use serde::Serialize;
-use db::{Column, IndexType, Limit, PlanStepDesc, RangeScan, Row, Schema, Type, Value};
-use shared::{ErrorTypeId, SimpleDbError};
+use db::{Column, IndexType, Limit, PlanStepDesc, RangeScan, Row, Schema};
+use shared::{ErrorTypeId, SimpleDbError, Type, Value};
 
 pub enum Response {
     Statement(StatementResponse),
@@ -229,7 +229,7 @@ impl StatementResponse {
                 PlanStepDesc::PrimaryExactScan(primary_column_value_bytes) => {
                     let primary_column = schema.get_primary_column();
                     let primary_column_type = primary_column.column_type;
-                    let primary_column_value = Value::deserialize(primary_column_value_bytes.clone(), primary_column_type)
+                    let primary_column_value = Value::create(primary_column_value_bytes.clone(), primary_column_type)
                         .unwrap();
 
                     strings.push(Self::exact_primary_scan_plan_desc_to_string(depth, primary_column_value));
@@ -237,7 +237,7 @@ impl StatementResponse {
                 PlanStepDesc::SecondaryExactExactScan(secondary_column_name, secondary_column_value) => {
                     let secondary_column = schema.get_column_or_err(&secondary_column_name).unwrap();
                     let secondary_column_type = secondary_column.column_type;
-                    let secondary_column_value = Value::deserialize(secondary_column_value.clone(), secondary_column_type)
+                    let secondary_column_value = Value::create(secondary_column_value.clone(), secondary_column_type)
                         .unwrap();
                     strings.push(Self::exact_secondary_scan_plan_desc_to_string(depth, secondary_column_name, secondary_column_value));
                 }

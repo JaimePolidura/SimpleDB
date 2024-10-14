@@ -33,7 +33,7 @@ impl Record {
         self.data_records.len()
     }
 
-    pub fn get_value(&self, column_id_lookup: ColumnId) -> Option<&Bytes> {
+    pub fn get_column_bytes(&self, column_id_lookup: ColumnId) -> Option<&Bytes> {
         for (current_column_id, current_column_value) in &self.data_records {
             if *current_column_id == column_id_lookup {
                 return Some(current_column_value);
@@ -43,7 +43,7 @@ impl Record {
         None
     }
 
-    pub fn take_value(&mut self, column_id_lookup: ColumnId) -> Option<Bytes> {
+    pub fn take_column_bytes(&mut self, column_id_lookup: ColumnId) -> Option<Bytes> {
         for (current_index, current_entry) in self.data_records.iter().enumerate() {
             let (current_column_id, _) = current_entry;
 

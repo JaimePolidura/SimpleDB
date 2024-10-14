@@ -7,7 +7,7 @@ use shared::iterators::merge_iterator::MergeIterator;
 use crate::utils::storage_engine_iterator::StorageEngineIterator;
 use shared::iterators::two_merge_iterators::TwoMergeIterator;
 use bytes::Bytes;
-use shared::{Flag, KeyspaceId, SimpleDbError, SimpleDbOptions};
+use shared::{Flag, KeyspaceId, SimpleDbError, SimpleDbOptions, Type};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use shared::logger::{logger, SimpleDbLayer};
@@ -195,8 +195,8 @@ impl Storage {
         self.transaction_manager.rollback(transaction)
     }
 
-    pub fn create_keyspace(&self, flag: Flag) -> Result<KeyspaceId, SimpleDbError> {
-        let keyspace = self.keyspaces.create_keyspace(flag)?;
+    pub fn create_keyspace(&self, flag: Flag, key_type: Type) -> Result<KeyspaceId, SimpleDbError> {
+        let keyspace = self.keyspaces.create_keyspace(flag, key_type)?;
         keyspace.start_compaction_thread();
         Ok(keyspace.keyspace_id())
     }

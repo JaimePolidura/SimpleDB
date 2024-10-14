@@ -1,7 +1,7 @@
 use crate::index::secondary_index::{SecondaryIndex, SecondaryIndexState};
 use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 use crate::table::record::Record;
-use crate::table::table_descriptor::TableDescriptor;
+use crate::table::schema::Schema;
 use crate::table::table_flags::KEYSPACE_TABLE_INDEX;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
@@ -12,7 +12,7 @@ use shared::{ColumnId, KeyspaceId, SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use storage::{SimpleDbStorageIterator, Storage};
-use crate::table::schema::Schema;
+use crate::Column;
 
 pub struct SecondaryIndexes {
     secondary_index_by_column_id: SkipMap<ColumnId, Arc<SecondaryIndex>>,
@@ -75,11 +75,14 @@ impl SecondaryIndexes {
 
     pub fn create_new_secondary_index(
         &self,
-        column_id: ColumnId,
+        column_to_be_indexed: Column,
     ) -> Result<KeyspaceId, SimpleDbError> {
-        let keyspace_id = self.storage.create_keyspace(KEYSPACE_TABLE_INDEX)?;
+        let keyspace_id = self.storage.create_keyspace(
+            KEYSPACE_TABLE_INDEX,
+            column_to_be_indexed.column_type,
+        )?;
 
-        self.secondary_index_by_column_id.insert(column_id, Arc::new(SecondaryIndex::create(
+        self.secondary_index_by_column_id.insert(column_to_be_indexed.column_id, Arc::new(SecondaryIndex::create(
             self.storage.clone(),
             SecondaryIndexState::Creating,
             keyspace_id,
@@ -115,7 +118,7 @@ impl SecondaryIndexes {
                     transaction,
                     column_value.clone(),
                     primary_key.clone(),
-                    old_data.get_value(*column_id)
+                    old_data.get_column_bytes(*column_id)
                 )?;
             }
         }

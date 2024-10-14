@@ -3,8 +3,7 @@ use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
 use crate::sql::parser::token::Token;
 use crate::sql::parser::tokenizer::Tokenizer;
 use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Limit, SelectStatement, Statement, UpdateStatement};
-use crate::value::{Type, Value};
-use shared::SimpleDbError;
+use shared::{SimpleDbError, Type, Value};
 use shared::SimpleDbError::IllegalToken;
 use crate::CreateIndexStatement;
 
@@ -118,11 +117,11 @@ impl Parser {
 
     fn parse_prefix(&mut self) -> Result<Expression, SimpleDbError> {
         match self.advance()? {
-            Token::False => Ok(Expression::Literal(Value::Boolean(false))),
-            Token::True => Ok(Expression::Literal(Value::Boolean(true))),
-            Token::NumberF64(num) => Ok(Expression::Literal(Value::F64(num))),
-            Token::NumberI64(num) => Ok(Expression::Literal(Value::I64(num))),
-            Token::String(string) => Ok(Expression::Literal(Value::String(string))),
+            Token::False => Ok(Expression::Literal(Value::create_boolean(false))),
+            Token::True => Ok(Expression::Literal(Value::create_boolean(true))),
+            Token::NumberF64(num) => Ok(Expression::Literal(Value::create_f64(num))),
+            Token::NumberI64(num) => Ok(Expression::Literal(Value::create_i64(num))),
+            Token::String(string) => Ok(Expression::Literal(Value::create_string(string))),
             Token::Identifier(identifier) => Ok(Expression::Identifier(identifier)),
             Token::Minus => Ok(Expression::Unary(UnaryOperator::Minus, Box::new(self.expression(MAX_PRECEDENCE)?))),
             Token::Plus => Ok(Expression::Unary(UnaryOperator::Plus, Box::new(self.expression(MAX_PRECEDENCE)?))),
@@ -483,11 +482,11 @@ impl Parser {
 
 #[cfg(test)]
 mod test {
+    use shared::{Type, Value};
     use crate::selection::Selection;
     use crate::sql::expression::{BinaryOperator, Expression};
     use crate::sql::parser::parser::Parser;
     use crate::sql::statement::{Limit, Statement};
-    use crate::value::{Type, Value};
 
     #[test]
     fn update_all() {
@@ -502,7 +501,7 @@ mod test {
         assert_eq!(update_statement.table_name, String::from("personas"));
         assert_eq!(update_statement.updated_values.len(), 1);
         assert_eq!(update_statement.updated_values[0].0, "dinero");
-        assert_eq!(update_statement.updated_values[0].1, Expression::Literal(Value::I64(0)));
+        assert_eq!(update_statement.updated_values[0].1, Expression::Literal(Value::create_i64(0)));
         assert_eq!(update_statement.where_expr, None);
     }
 
@@ -525,15 +524,15 @@ mod test {
         assert_eq!(update_statement.updated_values[0].1, Expression::Binary(
             BinaryOperator::Add,
             Box::new(Expression::Identifier(String::from("dinero"))),
-            Box::new(Expression::Literal(Value::I64(10))))
+            Box::new(Expression::Literal(Value::create_i64(10))))
         );
         assert_eq!(update_statement.updated_values[1].0, "id");
-        assert_eq!(update_statement.updated_values[1].1, Expression::Literal(Value::F64(10.2)));
+        assert_eq!(update_statement.updated_values[1].1, Expression::Literal(Value::create_f64(10.2)));
 
         assert_eq!(update_statement.where_expr.unwrap(), Expression::Binary(
             BinaryOperator::Greater,
             Box::new(Expression::Identifier(String::from("dinero"))),
-            Box::new(Expression::Literal(Value::I64(10))),
+            Box::new(Expression::Literal(Value::create_i64(10))),
         ));
     }
 
@@ -565,7 +564,7 @@ mod test {
         assert_eq!(select_statement.where_expr.unwrap(), Expression::Binary(
             BinaryOperator::Greater,
             Box::new(Expression::Identifier(String::from("dinero"))),
-            Box::new(Expression::Literal(Value::I64(10))),
+            Box::new(Expression::Literal(Value::create_i64(10))),
         ));
     }
 
@@ -601,7 +600,7 @@ mod test {
         assert_eq!(select_statement.where_expr.unwrap(), Expression::Binary(
             BinaryOperator::Equal,
             Box::new(Expression::Identifier(String::from("id"))),
-            Box::new(Expression::Literal(Value::I64(1))),
+            Box::new(Expression::Literal(Value::create_i64(1))),
         ));
     }
 
@@ -629,14 +628,14 @@ mod test {
                 Box::new(Expression::Identifier(String::from("dinero"))),
                 Box::new(Expression::Binary(
                     BinaryOperator::Add,
-                    Box::new(Expression::Literal(Value::I64(1))),
-                    Box::new(Expression::Literal(Value::I64(2))),
+                    Box::new(Expression::Literal(Value::create_i64(1))),
+                    Box::new(Expression::Literal(Value::create_i64(2))),
                 )))
             ),
             Box::new(Expression::Binary(
                 BinaryOperator::Equal,
                 Box::new(Expression::Identifier(String::from("nombre"))),
-                Box::new(Expression:: Literal(Value::String(String::from("Jaime")))),
+                Box::new(Expression:: Literal(Value::create_string(String::from("Jaime")))),
             ))
         ));
     }
@@ -680,9 +679,9 @@ mod test {
             Statement::Insert(insert_statement) => {
                 assert_eq!(insert_statement.table_name, String::from("personas"));
                 assert_eq!(insert_statement.values.len(), 3);
-                assert_eq!(insert_statement.values[2], (String::from("id"), Value::I64(1)));
-                assert_eq!(insert_statement.values[1], (String::from("nombre"), Value::String(String::from("Jaime"))));
-                assert_eq!(insert_statement.values[0], (String::from("dinero"), Value::F64(10.2)));
+                assert_eq!(insert_statement.values[2], (String::from("id"), Value::create_i64(1)));
+                assert_eq!(insert_statement.values[1], (String::from("nombre"), Value::create_string(String::from("Jaime"))));
+                assert_eq!(insert_statement.values[0], (String::from("dinero"), Value::create_f64(10.2)));
             }
             _ => panic!()
         }

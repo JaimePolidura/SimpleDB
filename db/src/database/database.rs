@@ -1,13 +1,12 @@
 use crate::database::database_descriptor::DatabaseDescriptor;
 use crate::sql::statement::CreateTableStatement;
 use crate::table::table::Table;
-use crate::value::Type;
 use crossbeam_skiplist::SkipMap;
-use shared::SimpleDbError::{CannotCreateDatabaseFolder, PrimaryColumnNotIncluded, TableAlreadyExists};
-use shared::{utils, SimpleDbError, SimpleDbOptions};
+use shared::SimpleDbError::{CannotCreateDatabaseFolder, TableAlreadyExists};
+use shared::{utils, SimpleDbError, SimpleDbOptions, Type};
 use std::sync::{Arc, LockResult, Mutex, RwLock, RwLockWriteGuard};
-use storage::Storage;
 use storage::transactions::transaction::Transaction;
+use storage::Storage;
 
 pub struct Database {
     name: String,
@@ -94,6 +93,7 @@ impl Database {
     ) -> Result<Arc<Table>, SimpleDbError> {
         let table = Table::create(
             table_name,
+            columns,
             &self.options,
             &self.storage,
             self.clone()
@@ -102,8 +102,6 @@ impl Database {
         let mut lock_result = self.database_descriptor.lock();
         let database_descriptor = lock_result.as_mut().unwrap();
         database_descriptor.add_table(table_name, table.storage_keyspace_id)?;
-
-        table.add_columns(columns)?;
 
         self.tables.insert(table.table_name.clone(), table.clone());
 

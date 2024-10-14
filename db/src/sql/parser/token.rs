@@ -1,4 +1,4 @@
-use crate::value::{Type, Value};
+use shared::{Type, Value};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -62,12 +62,12 @@ pub enum Token {
 impl Token {
     pub fn serialize(&self) -> Result<Value, ()> {
         match self {
-            Token::String(string) => Ok(Value::String(string.clone())),
-            Token::NumberI64(number) => Ok(Value::I64(*number)),
-            Token::True => Ok(Value::Boolean(true)),
-            Token::False => Ok(Value::Boolean(false)),
-            Token::NumberF64(number) => Ok(Value::F64(*number)),
-            Token::Null => Ok(Value::Null),
+            Token::String(string) => Ok(Value::create_string(string.clone())),
+            Token::NumberI64(number) => Ok(Value::create_i64(*number)),
+            Token::True => Ok(Value::create_boolean(true)),
+            Token::False => Ok(Value::create_boolean(false)),
+            Token::NumberF64(number) => Ok(Value::create_f64(*number)),
+            Token::Null => Ok(Value::create_null()),
             _ => Err(()) //Cannot cast to bytes
         }
     }

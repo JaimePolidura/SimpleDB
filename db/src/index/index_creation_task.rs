@@ -1,18 +1,17 @@
-use std::io::Read;
+use crate::database::database::Database;
+use crate::index::posting_list::PostingList;
 use crate::table::record::Record;
 use crate::table::table::Table;
-use shared::{ColumnId, KeyspaceId, SimpleDbError};
-use std::sync::{mpsc, Arc};
-use std::sync::mpsc::{Receiver, Sender};
+use crate::Column;
 use bytes::Bytes;
-use storage::transactions::transaction::Transaction;
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::logger::logger;
 use shared::logger::SimpleDbLayer::DB;
+use shared::{KeyspaceId, SimpleDbError, Value};
+use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{mpsc, Arc};
+use storage::transactions::transaction::Transaction;
 use storage::Storage;
-use crate::{Column, Value};
-use crate::database::database::Database;
-use crate::index::posting_list::PostingList;
 
 pub struct IndexCreationTask {
     table: Arc<Table>,
@@ -74,15 +73,15 @@ impl IndexCreationTask {
             let record_bytes = iterator.value();
             let mut record = Record::deserialize(record_bytes.to_vec());
 
-            if let Some(value_to_be_indexed) = record.take_value(self.secondary_indexed_column.column_id) {
+            if let Some(value_to_be_indexed) = record.take_column_bytes(self.secondary_indexed_column.column_id) {
                 let posting_list = PostingList::crate_only_one_entry(primary_key);
                 n_affected_rows += 1;
 
                 logger().debug(DB(self.table.table_name.clone()), &format!(
-                    "Adding secondary index entry. Table: {} Primary key: {:?} Secondary key: {}",
+                    "Adding secondary index entry. Table: {} Primary key: {:?} Secondary key: {:?}",
                     self.table.table_name,
-                    primary_column_type.to_value(primary_key.as_bytes().clone()).unwrap().to_string(),
-                    secondary_column_type.to_value(value_to_be_indexed.clone()).unwrap().to_string()
+                    Value::create(primary_key.as_bytes().clone(), primary_column_type.clone()).unwrap(),
+                    Value::create(value_to_be_indexed.clone(), secondary_column_type.clone()).unwrap(),
                 ));
 
                 if let Err(error) = self.storage.set_with_transaction(

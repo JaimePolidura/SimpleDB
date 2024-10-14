@@ -12,7 +12,7 @@ use crate::SimpleDbStorageIterator;
 use bytes::Bytes;
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::iterators::two_merge_iterators::TwoMergeIterator;
-use shared::Flag;
+use shared::{Flag, Type};
 use std::fs;
 use std::sync::Arc;
 use shared::logger::logger;
@@ -35,12 +35,13 @@ impl Keyspace {
         keyspace_id: shared::KeyspaceId,
         transaction_manager: Arc<TransactionManager>,
         options: Arc<shared::SimpleDbOptions>,
-        flags: Flag
+        flags: Flag,
+        key_type: Type,
     ) -> Result<Arc<Keyspace>, shared::SimpleDbError> {
         let path = shared::get_directory_usize(&options.base_path, keyspace_id);
         fs::create_dir(path.as_path())
             .map_err(|e| shared::SimpleDbError::CannotCreateKeyspaceDirectory(keyspace_id, e))?;
-        KeyspaceDescriptor::create(flags, path.clone(), keyspace_id)?;
+        KeyspaceDescriptor::create(flags, path.clone(), keyspace_id, key_type)?;
         Self::create_and_load(keyspace_id, transaction_manager, options)
     }
 

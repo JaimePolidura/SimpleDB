@@ -1,9 +1,7 @@
 use crate::table::record::Record;
 use crate::table::schema::Schema;
-use crate::value::{Type, Value};
 use bytes::{BufMut, Bytes};
-use shared::SimpleDbError::CannotDecodeColumn;
-use shared::{utils, SimpleDbError};
+use shared::{SimpleDbError, Value};
 use std::fmt;
 use std::fmt::Formatter;
 
@@ -38,10 +36,9 @@ impl Row {
         let column_data = self.schema.get_column(column_name)
             .ok_or(SimpleDbError::ColumnNotFound(column_name.to_string()))?;
 
-        match self.storage_engine_record.get_value(column_data.column_id) {
-            Some(column_bytes) => Value::deserialize(column_bytes.clone(), column_data.column_type)
-                .map_err(|_| CannotDecodeColumn(column_name.to_string(), self.get_primary_column_value().clone())),
-            None => Ok(Value::Null)
+        match self.storage_engine_record.get_column_bytes(column_data.column_id) {
+            Some(column_bytes) => Value::create(column_bytes.clone(), column_data.column_type),
+            None => Ok(Value::create_null())
         }
     }
 
@@ -69,26 +66,12 @@ impl fmt::Display for Row {
 
         for column in column_names {
             let column = self.schema.get_column(&column).unwrap();
-            if let Some(column_value) = self.storage_engine_record.get_value(column.column_id) {
+            if let Some(column_value_bytes) = self.storage_engine_record.get_column_bytes(column.column_id) {
                 string.push_str(&column.column_name);
                 string.push_str(" = ");
-                string.push_str((match column.column_type {
-                    Type::I8 => utils::bytes_to_i8(column_value).to_string(),
-                    Type::U8 => utils::bytes_to_u8(column_value).to_string(),
-                    Type::I16 => utils::bytes_to_i16_le(column_value).to_string(),
-                    Type::U16 => utils::bytes_to_u16_le(column_value).to_string(),
-                    Type::U32 => utils::bytes_to_u32_le(column_value).to_string(),
-                    Type::I32 => utils::bytes_to_i32_le(column_value).to_string(),
-                    Type::U64 => utils::bytes_to_u64_le(column_value).to_string(),
-                    Type::I64 => utils::bytes_to_i64_le(column_value).to_string(),
-                    Type::F32 => format!("{:.2}", utils::bytes_to_f32_le(column_value)).to_string(),
-                    Type::F64 => format!("{:.2}", utils::bytes_to_f64_le(column_value)).to_string(),
-                    Type::Boolean => if column_value[0] == 0x00 { String::from("false") } else { String::from("true") },
-                    Type::String => String::from_utf8(column_value.to_vec()).unwrap(),
-                    Type::Date => todo!(),
-                    Type::Blob => format!("Blob {} bytes long", column_value.len()),
-                    Type::Null => panic!("")
-                }).as_str());
+
+                string.push_str(&Value::create(column_value_bytes.clone(), column.column_type).unwrap()
+                    .to_string());
 
                 count += 1;
                 if count < n_columns {

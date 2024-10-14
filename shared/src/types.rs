@@ -8,6 +8,8 @@ pub type ColumnId = u16;
 
 pub type Flag = u64;
 
+pub type TypeId = u8;
+
 pub trait FlagMethods {
     fn has(&self, other: Flag) -> bool;
 }

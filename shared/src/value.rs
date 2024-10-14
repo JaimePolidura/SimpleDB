@@ -1,6 +1,6 @@
+use crate::SimpleDbError::{IllegalTypeCastFromBytes, IllegalTypeOperation};
+use crate::{utils, SimpleDbError, TypeId};
 use bytes::Bytes;
-use shared::SimpleDbError::MalformedQuery;
-use shared::{utils, SimpleDbError};
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Type {
@@ -22,7 +22,7 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn serialize(&self) -> u8 {
+    pub fn serialize(&self) -> TypeId {
         match &self {
             Type::I8 => 1,
             Type::U8 => 2,
@@ -112,6 +112,26 @@ impl Type {
             utils::enum_eq(self, &other)
         }
     }
+
+    pub fn to_string(&self) -> String {
+        match &self {
+            Type::I8 => "I8".to_string(),
+            Type::U8 => "U8".to_string(),
+            Type::I16 => "I16".to_string(),
+            Type::U16 => "U16".to_string(),
+            Type::U32 => "U32".to_string(),
+            Type::I32 => "I32".to_string(),
+            Type::U64 => "U64".to_string(),
+            Type::I64 => "I64".to_string(),
+            Type::F32 => "F32".to_string(),
+            Type::F64 => "F64".to_string(),
+            Type::Boolean => "Boolean".to_string(),
+            Type::String => "String".to_string(),
+            Type::Date => "Date".to_string(),
+            Type::Blob => "Blob".to_string(),
+            Type::Null => "Null".to_string(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -121,10 +141,55 @@ pub struct Value {
 }
 
 impl Value {
-    pub fn create(value_bytes: Bytes, value_type: Type) -> Value {
-        Value{
+    pub fn create(value_bytes: Bytes, value_type: Type) -> Result<Value, SimpleDbError> {
+        if !Self::bytes_has_type_format(&value_bytes, &value_type) {
+            return Err(IllegalTypeCastFromBytes(value_type));
+        }
+
+        Ok(Value {
             value_bytes,
             value_type
+        })
+    }
+
+    pub fn create_boolean(boolean_value: bool) -> Value {
+        let value_bytes = if boolean_value {
+            Bytes::from(vec![0x01])
+        } else {
+            Bytes::from(vec![0x00])
+        };
+
+        Value {
+            value_type: Type::Boolean,
+            value_bytes,
+        }
+    }
+
+    pub fn create_f64(value_f64: f64) -> Value {
+        Value {
+            value_bytes: Bytes::from(value_f64.to_le_bytes().to_vec()),
+            value_type: Type::F64,
+        }
+    }
+
+    pub fn create_i64(value_i64: i64) -> Value {
+        Value {
+            value_bytes: Bytes::from(value_i64.to_le_bytes().to_vec()),
+            value_type: Type::I64,
+        }
+    }
+
+    pub fn create_null() -> Value {
+        Value {
+            value_bytes: Bytes::from(vec![]),
+            value_type: Type::Null
+        }
+    }
+
+    pub fn create_string(string: String) -> Value {
+        Value {
+            value_bytes: Bytes::from(string.as_bytes().to_vec()),
+            value_type: Type::String
         }
     }
 
@@ -152,7 +217,7 @@ impl Value {
             Type::String |
             Type::Date |
             Type::Blob |
-            Type::Null => Err(SimpleDbError::MalformedQuery(String::from("Cannot get as f64"))),
+            Type::Null => Err(SimpleDbError::IllegalTypeOperation("Expected number type from value")),
         }
     }
 
@@ -172,14 +237,14 @@ impl Value {
             Type::String |
             Type::Date |
             Type::Blob |
-            Type::Null => Err(SimpleDbError::MalformedQuery(String::from("Cannot get as f64"))),
+            Type::Null => Err(SimpleDbError::IllegalTypeOperation("Expected number type from value")),
         }
     }
 
     pub fn get_string(&self) -> Result<String, SimpleDbError> {
         match self.value_type {
             Type::String => Ok(String::from_utf8(self.value_bytes.to_vec()).unwrap()),
-            _ => Err(MalformedQuery(String::from("Cannot get String")))
+            _ => Err(IllegalTypeOperation("Expected string type"))
         }
     }
 
@@ -272,17 +337,17 @@ impl Value {
     pub fn and(&self, other: &Value) -> Result<Value, SimpleDbError> {
         if self.is_boolean() && other.is_boolean() {
             let boolean_result = self.get_boolean()? && other.get_boolean()?;
-            Ok(Self::bool_to_value(boolean_result))
+            Ok(Self::create_boolean(boolean_result))
         } else {
-            Err(SimpleDbError::MalformedQuery(String::from("Cannot and values")))
+            Err(SimpleDbError::IllegalTypeOperation("Cannot and values"))
         }
     }
 
     pub fn or(&self, other: &Value) -> Result<Value, SimpleDbError> {
         if self.is_boolean() && other.is_boolean() {
-            Ok(Self::bool_to_value(self.get_boolean()? || other.get_boolean()?))
+            Ok(Self::create_boolean(self.get_boolean()? || other.get_boolean()?))
         } else {
-            Err(SimpleDbError::MalformedQuery(String::from("Cannot or values")))
+            Err(SimpleDbError::IllegalTypeOperation("Cannot or values"))
         }
     }
 
@@ -332,15 +397,15 @@ impl Value {
         FpOp: Fn(f64, f64) -> f64,
     {
         if !self.is_number() && !other.is_number() {
-            return Err(MalformedQuery(String::from("Only numbers can be added")));
+            return Err(IllegalTypeOperation("Only numbers can be added"));
         }
 
         if !self.is_fp_number() && !other.is_fp_number() {
             let result = int_op(self.get_i64()?, other.get_i64()?);
-            Ok(Value::create(Bytes::from(result.to_le_bytes().to_vec()), Type::I64))
+            Value::create(Bytes::from(result.to_le_bytes().to_vec()), Type::I64)
         } else {
             let result = fp_op(self.get_f64()?, other.get_f64()?);
-            Ok(Value::create(Bytes::from(result.to_le_bytes().to_vec()), Type::F64))
+            Value::create(Bytes::from(result.to_le_bytes().to_vec()), Type::F64)
         }
     }
 
@@ -357,25 +422,37 @@ impl Value {
         FpOp: Fn(f64, f64) -> bool,
     {
         if !self.is_comparable(other) {
-            return Err(SimpleDbError::MalformedQuery(String::from("Cannot compare values")));
+            return Err(SimpleDbError::IllegalTypeOperation("Cannot compare values"));
         }
 
         if self.is_fp_number() && other.is_fp_number() {
-            Ok(Self::bool_to_value(fp_op(self.get_f64()?, other.get_f64()?)))
+            Ok(Self::create_boolean(fp_op(self.get_f64()?, other.get_f64()?)))
         } else if self.is_integer_number() && other.is_integer_number() {
-            Ok(Self::bool_to_value(int_op(self.get_i64()?, other.get_i64()?)))
+            Ok(Self::create_boolean(int_op(self.get_i64()?, other.get_i64()?)))
         } else if self.is_string() && other.is_string() {
-            Ok(Self::bool_to_value(str_op(&self.get_string()?, &other.get_string()?)))
+            Ok(Self::create_boolean(str_op(&self.get_string()?, &other.get_string()?)))
         } else {
-            Err(SimpleDbError::MalformedQuery(String::from("Cannot compare values")))
+            Err(SimpleDbError::IllegalTypeOperation("Cannot compare values"))
         }
     }
 
-    fn bool_to_value(value: bool) -> Value {
-        if value {
-            Value::create(Bytes::from(vec![0x01]), Type::Boolean)
-        } else {
-            Value::create(Bytes::from(vec![0x00]), Type::Boolean)
+    fn bytes_has_type_format(bytes: &Bytes, expected_type: &Type) -> bool {
+        match expected_type {
+            Type::I8 => bytes.len() <= 8,
+            Type::U8 => bytes.len() <= 8,
+            Type::I16 => bytes.len() <= 8,
+            Type::U16 => bytes.len() <= 8,
+            Type::U32 => bytes.len() <= 8,
+            Type::I32 => bytes.len() <= 8,
+            Type::U64 => bytes.len() <= 8,
+            Type::I64 => bytes.len() <= 8,
+            Type::F32 => bytes.len() <= 8,
+            Type::F64 => bytes.len() <= 8,
+            Type::Boolean => true,
+            Type::String => String::from_utf8(bytes.to_vec()).is_ok(),
+            Type::Date => todo!(),
+            Type::Blob => true,
+            Type::Null => true,
         }
     }
 }
