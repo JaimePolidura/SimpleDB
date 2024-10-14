@@ -1,3 +1,4 @@
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::memtables::memtable::MemTable;
 use crate::memtables::memtable_iterator::MemtableIterator;
 use crate::memtables::wal::Wal;
@@ -12,24 +13,22 @@ use std::sync::{Arc, RwLock};
 pub struct Memtables {
     inactive_memtables: AtomicPtr<RwLock<Vec<Arc<MemTable>>>>,
     current_memtable: AtomicPtr<Arc<MemTable>>,
-    keyspace_id: shared::KeyspaceId,
-    keyspace_flags: Flag,
     next_memtable_id: AtomicUsize,
     options: Arc<shared::SimpleDbOptions>,
+    keyspace_desc: KeyspaceDescriptor,
 }
 
 impl Memtables {
     pub fn create_and_recover_from_wal(
         options: Arc<shared::SimpleDbOptions>,
-        keyspace_id: shared::KeyspaceId,
-        keyspace_flags: Flag,
+        keyspace_desc: KeyspaceDescriptor
     ) -> Result<Memtables, shared::SimpleDbError> {
-        let (wals, max_memtable_id) = Wal::get_persisted_wal_id(&options, keyspace_id)?;
+        let (wals, max_memtable_id) = Wal::get_persisted_wal_id(&options, keyspace_desc)?;
 
         if !wals.is_empty() {
-            Self::recover_memtables_from_wal(options, max_memtable_id, wals, keyspace_id, keyspace_flags)
+            Self::recover_memtables_from_wal(options, max_memtable_id, wals, keyspace_desc)
         } else {
-            Self::create_memtables_no_wal(options, keyspace_id, keyspace_flags)
+            Self::create_memtables_no_wal(options, keyspace_desc)
         }
     }
 
@@ -97,14 +96,16 @@ impl Memtables {
         unsafe {
             let mut memtable_iterators: Vec<Box<MemtableIterator>> = Vec::new();
 
-            memtable_iterators.push(Box::from(MemtableIterator::create(&(*self.current_memtable.load(Acquire)), transaction)));
+            memtable_iterators.push(Box::from(MemtableIterator::create(
+                &(*self.current_memtable.load(Acquire)), transaction, self.keyspace_desc
+            )));
 
             let inactive_memtables_rw_lock = &*self.inactive_memtables.load(Acquire);
             let inactive_memtables_rw_result = inactive_memtables_rw_lock.read().unwrap();
 
             for memtable in inactive_memtables_rw_result.iter() {
                 let cloned = Arc::clone(memtable);
-                memtable_iterators.push(Box::new(MemtableIterator::create(&cloned, transaction)));
+                memtable_iterators.push(Box::new(MemtableIterator::create(&cloned, transaction, self.keyspace_desc)));
             }
 
             memtable_iterators
@@ -132,7 +133,7 @@ impl Memtables {
     //This might be called by concurrently, it might fail returing None
     fn set_current_memtable_as_inactive(&self) -> Option<Arc<MemTable>> {
         let new_memtable_id = self.next_memtable_id.fetch_add(1, Relaxed) as shared::MemtableId;
-        let new_memtable = MemTable::create_new(self.options.clone(), new_memtable_id, self.keyspace_id, self.keyspace_flags)
+        let new_memtable = MemTable::create_new(self.options.clone(), new_memtable_id, self.keyspace_desc)
             .expect("Failed to create memtable");
         new_memtable.set_active();
         let new_memtable = Box::into_raw(Box::new(Arc::new(new_memtable)));
@@ -171,8 +172,7 @@ impl Memtables {
         options: Arc<shared::SimpleDbOptions>,
         max_memtable_id: usize,
         wals: Vec<Wal>,
-        keyspace_id: shared::KeyspaceId,
-        keyspace_flags: Flag,
+        keyspace_desc: KeyspaceDescriptor
     ) -> Result<Memtables, shared::SimpleDbError> {
         let mut active_memtable = None;
         let mut inactive_memtables: Vec<Arc<MemTable>> = Vec::new();
@@ -180,7 +180,9 @@ impl Memtables {
 
         for wal in wals {
             let memtable_id = wal.get_memtable_id();
-            let memtable_created = MemTable::create_and_recover_from_wal(options.clone(), memtable_id, keyspace_id, keyspace_flags, wal)?;
+            let memtable_created = MemTable::create_and_recover_from_wal(
+                options.clone(), memtable_id, keyspace_desc, wal
+            )?;
 
             if memtable_created.current_size_bytes.load(Relaxed) < options.memtable_max_size_bytes && active_memtable.is_none() {
                 //Active memtable
@@ -196,7 +198,7 @@ impl Memtables {
         let active_memtable = match active_memtable {
             Some(active_memtable) => active_memtable,
             None => {
-                let active_memtable = MemTable::create_new(options.clone(), max_memtable_id + 1, keyspace_id, keyspace_flags)?;
+                let active_memtable = MemTable::create_new(options.clone(), max_memtable_id + 1, keyspace_desc)?;
                 active_memtable.set_active();
                 active_memtable
             }
@@ -206,26 +208,23 @@ impl Memtables {
             inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(inactive_memtables)))),
             current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(active_memtable)))),
             next_memtable_id: AtomicUsize::new(next_memtable_id),
-            keyspace_flags,
-            keyspace_id,
-            options
+            keyspace_desc,
+            options,
         })
     }
 
     fn create_memtables_no_wal(
         options: Arc<shared::SimpleDbOptions>,
-        keyspace_id: shared::KeyspaceId,
-        keyspace_flags: Flag,
+        keyspace_desc: KeyspaceDescriptor
     ) -> Result<Memtables, shared::SimpleDbError> {
-        let current_memtable = MemTable::create_new(options.clone(), 0, keyspace_id, keyspace_flags)?;
+        let current_memtable = MemTable::create_new(options.clone(), 0, keyspace_desc)?;
         current_memtable.set_active();
 
         Ok(Memtables {
             inactive_memtables: AtomicPtr::new(Box::into_raw(Box::new(RwLock::new(Vec::with_capacity(options.max_memtables_inactive))))),
             current_memtable: AtomicPtr::new(Box::into_raw(Box::new(Arc::new(current_memtable)))),
             next_memtable_id: AtomicUsize::new(1),
-            keyspace_flags,
-            keyspace_id,
+            keyspace_desc,
             options
         })
     }

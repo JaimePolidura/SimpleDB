@@ -1,5 +1,6 @@
 use bytes::{BufMut, Bytes};
 use shared::key::Key;
+use shared::Type;
 use crate::transactions::transaction::{Transaction};
 
 #[derive(Eq, PartialEq)]
@@ -13,6 +14,7 @@ impl BlockMetadata {
     pub fn decode_all(
         bytes: &Vec<u8>,
         start_index: usize,
+        key_type: Type
     ) -> Result<Vec<BlockMetadata>, shared::DecodeErrorType> {
         let expected_crc = shared::u8_vec_to_u32_le(bytes, start_index);
         let n_blocks_metadata = shared::u8_vec_to_u32_le(bytes, start_index + 4);
@@ -21,10 +23,10 @@ impl BlockMetadata {
         let start_content_index = last_index;
         let mut blocks_metadata_decoded: Vec<BlockMetadata> = Vec::with_capacity(n_blocks_metadata as usize);
         for _ in 0..n_blocks_metadata {
-            let (new_last_index, blockmetadata_decoded) = Self::decode(&bytes, last_index)?;
+            let (new_last_index, block_metadata_decoded) = Self::decode(&bytes, last_index, key_type)?;
 
             last_index = new_last_index;
-            blocks_metadata_decoded.push(blockmetadata_decoded);
+            blocks_metadata_decoded.push(block_metadata_decoded);
         }
 
         let actual_crc = crc32fast::hash(&bytes[start_content_index..last_index]);
@@ -49,7 +51,11 @@ impl BlockMetadata {
         encoded
     }
 
-    pub fn decode(bytes: &Vec<u8>, start_index: usize) -> Result<(usize, BlockMetadata), shared::DecodeErrorType> {
+    pub fn decode(
+        bytes: &Vec<u8>,
+        start_index: usize,
+        key_type: Type
+    ) -> Result<(usize, BlockMetadata), shared::DecodeErrorType> {
         let mut current_index = start_index;
 
         let first_key_length = shared::u8_vec_to_u32_le(&bytes, current_index) as usize;
@@ -71,8 +77,8 @@ impl BlockMetadata {
         current_index = current_index + 4;
 
         Ok((current_index, BlockMetadata{
-            first_key: Key::create(first_key, first_key_txn_id),
-            last_key: Key::create(last_key, last_key_txn_id),
+            first_key: Key::create(first_key, key_type, first_key_txn_id),
+            last_key: Key::create(last_key, key_type, last_key_txn_id),
             offset
         }))
     }
@@ -93,7 +99,7 @@ impl BlockMetadata {
     }
 
     pub fn contains(&self, key: &Bytes, transaction: &Transaction) -> bool {
-        let key_to_be_checked = Key::create(key.clone(), transaction.txn_id);
+        let key_to_be_checked = Key::create(key.clone(), self.first_key.get_type(), transaction.txn_id);
         self.first_key.le(&key_to_be_checked) && self.last_key.ge(&key_to_be_checked)
     }
 }
@@ -111,6 +117,7 @@ impl Clone for BlockMetadata {
 #[cfg(test)]
 mod test {
     use shared::key::Key;
+    use shared::Type;
     use crate::sst::block_metadata::BlockMetadata;
 
     #[test]
@@ -122,7 +129,7 @@ mod test {
             BlockMetadata{offset: 3, first_key: Key::create_from_str("d", 1), last_key: Key::create_from_str("z", 1)},
         ];
         let encoded = BlockMetadata::encode_all(&metadata);
-        let decoded = BlockMetadata::decode_all(&encoded, 0);
+        let decoded = BlockMetadata::decode_all(&encoded, 0, Type::String);
 
         assert!(decoded.is_ok());
         let decoded = decoded.unwrap();

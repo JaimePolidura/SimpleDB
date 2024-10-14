@@ -68,7 +68,7 @@ impl RangeScan {
         if self.has_start() && other.has_start() {
             let start_self = self.start.clone().unwrap();
             let start_other = other.start.clone().unwrap();
-            let is_self_less_than_other = start_self.less_equal(&start_other)?.get_boolean()?;
+            let is_self_less_than_other = start_self.le(&start_other)?.get_boolean()?;
             let is_new_start_inclusive = if is_self_less_than_other { other.start_inclusive } else { self.start_inclusive };
             let new_start = if is_self_less_than_other { start_other } else { start_self };
 
@@ -78,7 +78,7 @@ impl RangeScan {
         if self.has_end() && other.has_end() {
             let end_other = other.end.clone().unwrap();
             let end_self = self.end.clone().unwrap();
-            let is_self_less_than_other = end_self.less_equal(&end_other)?.get_boolean()?;
+            let is_self_less_than_other = end_self.le(&end_other)?.get_boolean()?;
             let is_new_end_inclusive = if is_self_less_than_other { self.end_inclusive } else { other.end_inclusive };
             let new_end = if is_self_less_than_other { end_self } else { end_other };
 
@@ -95,7 +95,7 @@ impl RangeScan {
             let start = self.start.as_ref().unwrap();
             let end = self.end.as_ref().unwrap();
 
-            if start.greater_equal(end)?.get_boolean()? {
+            if start.ge(end)?.get_boolean()? {
                 return Err(MalformedQuery(String::from("Invalid range")))
             }
         }
@@ -109,7 +109,7 @@ impl RangeScan {
 
     pub fn get_position(&self, other_key: &Bytes) -> RangeKeyPosition {
         if let Some(start_key) = self.start.as_ref() {
-            let start_key_bytes = start_key.serialize();
+            let start_key_bytes = start_key.get_literal_bytes();
             let is_bellow = (self.start_inclusive && start_key_bytes.gt(other_key)) ||
                 (!self.start_inclusive && start_key_bytes.ge(other_key));
             if is_bellow {
@@ -117,7 +117,7 @@ impl RangeScan {
             }
         }
         if let Some(end_key) = self.end.as_ref() {
-            let end_key_bytes = end_key.serialize();
+            let end_key_bytes = end_key.get_literal_bytes();
             let is_above = (self.end_inclusive && end_key_bytes.lt(other_key)) ||
                 (!self.end_inclusive && end_key_bytes.le(other_key));
             if is_above {

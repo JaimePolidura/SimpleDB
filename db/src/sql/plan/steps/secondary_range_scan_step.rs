@@ -27,7 +27,7 @@ impl SecondaryRangeScanStep {
         range: RangeScan,
     ) -> Result<SecondaryRangeScanStep, SimpleDbError> {
         let iterator = if let Some(star_range_key_expr) = range.start() {
-            let star_range_key_bytes = star_range_key_expr.serialize();
+            let star_range_key_bytes = star_range_key_expr.get_literal_bytes();
             table.scan_from_key_secondary_index(&star_range_key_bytes, range.is_start_inclusive(), transaction, &column_name)
         } else {
             table.scan_all_secondary_index(transaction, &column_name)

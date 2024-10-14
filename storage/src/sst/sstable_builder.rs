@@ -1,9 +1,11 @@
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::sst::block::block_builder::BlockBuilder;
 use crate::sst::block_metadata::BlockMetadata;
 use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
 use crate::utils::bloom_filter::BloomFilter;
 use bytes::{BufMut, Bytes};
 use shared::key::Key;
+use shared::SimpleDbError::CannotCreateSSTableFile;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -15,8 +17,8 @@ pub struct SSTableBuilder {
     first_key_current_block: Option<Key>,
     last_key_current_block: Option<Key>,
 
-    builded_block_metadata: Vec<BlockMetadata>,
-    builded_encoded_blocks: Vec<u8>,
+    built_block_metadata: Vec<BlockMetadata>,
+    built_encoded_blocks: Vec<u8>,
 
     key_hashes: Vec<u32>,
 
@@ -25,22 +27,22 @@ pub struct SSTableBuilder {
 
     memtable_id: Option<usize>,
 
-    keyspace_id: shared::KeyspaceId,
+    keyspace_desc: KeyspaceDescriptor
 }
 
 impl SSTableBuilder {
     pub fn create(
         options: Arc<shared::SimpleDbOptions>,
-        keyspace_id: shared::KeyspaceId,
+        keyspace_desc: KeyspaceDescriptor,
         level: u32
     ) -> SSTableBuilder {
         SSTableBuilder {
-            current_block_builder: BlockBuilder::create(options.clone()),
+            current_block_builder: BlockBuilder::create(options.clone(), keyspace_desc),
             level,
-            keyspace_id,
+            keyspace_desc,
             key_hashes: Vec::new(),
-            builded_block_metadata: Vec::new(),
-            builded_encoded_blocks: Vec::new(),
+            built_block_metadata: Vec::new(),
+            built_encoded_blocks: Vec::new(),
             first_key_current_block: None,
             last_key_current_block: None,
             memtable_id: None,
@@ -97,11 +99,11 @@ impl SSTableBuilder {
             self.options.bloom_filter_n_entries
         );
 
-        let mut encoded = self.builded_encoded_blocks;
+        let mut encoded = self.built_encoded_blocks;
 
         //Blocks metadata
         let meta_offset = encoded.len();
-        let meta_encoded = BlockMetadata::encode_all(&self.builded_block_metadata);
+        let meta_encoded = BlockMetadata::encode_all(&self.built_block_metadata);
         encoded.extend(meta_encoded);
 
         //Bloom
@@ -116,15 +118,15 @@ impl SSTableBuilder {
         encoded.put_u32_le(meta_offset as u32);
 
         match shared::SimpleDbFile::create(path, &encoded, shared::SimpleDbFileMode::ReadOnly) {
-            Ok(lsm_file) => Ok(SSTable::create(self.builded_block_metadata, self.options, bloom_filter, self.first_key.unwrap(),
-                                               self.last_key.unwrap(), lsm_file, self.level, id, SSTABLE_ACTIVE, self.keyspace_id,
+            Ok(lsm_file) => Ok(SSTable::create(self.built_block_metadata, self.options, bloom_filter, self.first_key.unwrap(),
+                                               self.last_key.unwrap(), lsm_file, self.level, id, SSTABLE_ACTIVE, self.keyspace_desc,
             )),
-            Err(e) => Err(shared::SimpleDbError::   CannotCreateSSTableFile(self.keyspace_id, id, e))
+            Err(e) => Err(CannotCreateSSTableFile(self.keyspace_desc.keyspace_id, id, e))
         }
     }
 
     pub fn estimated_size_bytes(&self) -> usize {
-        self.builded_encoded_blocks.len() + self.options.block_size_bytes
+        self.built_encoded_blocks.len() + self.options.block_size_bytes
     }
 
     fn build_current_block(&mut self) {
@@ -135,16 +137,16 @@ impl SSTableBuilder {
 
         let encoded_block: Vec<u8> = self.current_block_builder.build()
             .serialize(&self.options);
-        self.current_block_builder = BlockBuilder::create(self.options.clone());
+        self.current_block_builder = BlockBuilder::create(self.options.clone(), self.keyspace_desc);
 
-        self.builded_block_metadata.push(BlockMetadata {
+        self.built_block_metadata.push(BlockMetadata {
             first_key: self.first_key_current_block.take().unwrap(),
             last_key: self.last_key_current_block.take().unwrap(),
-            offset: self.builded_encoded_blocks.len(),
+            offset: self.built_encoded_blocks.len(),
         });
 
         let crc = crc32fast::hash(&encoded_block);
-        self.builded_encoded_blocks.extend(encoded_block);
-        self.builded_encoded_blocks.put_u32_le(crc);
+        self.built_encoded_blocks.extend(encoded_block);
+        self.built_encoded_blocks.put_u32_le(crc);
     }
 }

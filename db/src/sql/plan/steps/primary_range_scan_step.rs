@@ -22,7 +22,7 @@ impl PrimaryRangeScanStep {
         range: RangeScan
     ) -> Result<PrimaryRangeScanStep, SimpleDbError> {
         let iterator = if let Some(star_range_key_expr) = range.start() {
-            let star_range_key_bytes = star_range_key_expr.serialize();
+            let star_range_key_bytes = star_range_key_expr.get_literal_bytes();
             table.scan_from_key(&star_range_key_bytes, range.is_start_inclusive(), transaction, &selection)
         } else {
             table.scan_all(transaction, selection)

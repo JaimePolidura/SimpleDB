@@ -1,12 +1,13 @@
 use std::sync::Arc;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use shared::Flag;
+use shared::{Flag, Type};
 use crate::sst::sstable_builder::SSTableBuilder;
 use crate::sst::sstables::SSTables;
 use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::storage_engine_iterator::StorageEngineIterator;
 use shared::iterators::storage_iterator::StorageIterator;
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::utils::tombstone::TOMBSTONE;
 
 #[derive(Serialize, Deserialize, Copy, Clone)]
@@ -20,15 +21,14 @@ pub(crate) fn start_tiered_compaction(
     transaction_manager: &Arc<TransactionManager>,
     options: &Arc<shared::SimpleDbOptions>,
     sstables: &Arc<SSTables>,
-    keyspace_id: shared::KeyspaceId,
-    keyspace_flags: Flag
+    keyspace_desc: KeyspaceDescriptor
 ) -> Result<(), shared::SimpleDbError> {
     match task {
         TieredCompactionTask::AmplificationRatioTrigger => {
-            do_tiered_compaction(options, sstables, sstables.get_n_levels() - 1, transaction_manager, keyspace_id, keyspace_flags)
+            do_tiered_compaction(options, sstables, sstables.get_n_levels() - 1, transaction_manager, keyspace_desc)
         },
         TieredCompactionTask::SizeRatioTrigger(level_id) => {
-            do_tiered_compaction(options, sstables, level_id, transaction_manager, keyspace_id, keyspace_flags)
+            do_tiered_compaction(options, sstables, level_id, transaction_manager, keyspace_desc)
         },
     }
 }
@@ -38,19 +38,18 @@ fn do_tiered_compaction(
     sstables: &Arc<SSTables>,
     max_level_id_to_compact: usize, //Compact from level 0 to max_level_id_to_compact (inclusive, inclusive)
     transaction_manager: &Arc<TransactionManager>,
-    keyspace_id: shared::KeyspaceId,
-    keyspace_flags: Flag
+    keyspace_desc: KeyspaceDescriptor
 ) -> Result<(), shared::SimpleDbError> {
     let new_level = max_level_id_to_compact + 1;
     let is_new_level_last_level = sstables.is_last_level(new_level);
     let levels_id_to_compact: Vec<usize> = (0..max_level_id_to_compact).into_iter().collect();
     let mut iterator = StorageEngineIterator::create(
-        keyspace_flags,
+        keyspace_desc,
         options,
         sstables.scan_from_level(&levels_id_to_compact),
     );
     let mut new_sstable_builder = Some(SSTableBuilder::create(
-        options.clone(), keyspace_id, new_level as u32
+        options.clone(), keyspace_desc, new_level as u32
     ));
 
     while iterator.has_next() {
@@ -75,7 +74,7 @@ fn do_tiered_compaction(
                     sstables.flush_to_disk(new_sstable_builder.take().unwrap())?;
 
                     new_sstable_builder = Some(
-                        SSTableBuilder::create(options.clone(), keyspace_id, new_level as u32)
+                        SSTableBuilder::create(options.clone(), keyspace_desc, new_level as u32)
                     );
                 }
             },

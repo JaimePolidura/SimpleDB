@@ -1,3 +1,4 @@
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent, MemtableFlushManifestOperation};
 use crate::sst::sstable::{SSTable, SSTABLE_ACTIVE};
 use crate::sst::sstable_builder::SSTableBuilder;
@@ -14,33 +15,34 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, RwLock};
+use shared::SimpleDbError::CannotReadSSTablesFiles;
 
 pub struct SSTables {
     //For each level one index entry
     sstables: Vec<RwLock<Vec<Arc<SSTable>>>>,
-    keyspace_id: shared::KeyspaceId,
     next_sstable_id: AtomicUsize,
     options: Arc<shared::SimpleDbOptions>,
     manifest: Arc<Manifest>,
     n_current_levels: usize,
+    keyspace_desc: KeyspaceDescriptor
 }
 
 impl SSTables {
     pub fn open(
         options: Arc<shared::SimpleDbOptions>,
-        keyspace_id: shared::KeyspaceId,
-        manifest: Arc<Manifest>
+        keyspace_desc: KeyspaceDescriptor,
+        manifest: Arc<Manifest>,
     ) -> Result<SSTables, shared::SimpleDbError> {
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
         }
-        let (sstables, max_ssatble_id) = Self::load_sstables(&options, keyspace_id)?;
+        let (sstables, max_sstable_id) = Self::load_sstables(&options, keyspace_desc)?;
 
         Ok(SSTables {
-            keyspace_id,
-            next_sstable_id: AtomicUsize::new(max_ssatble_id + 1),
+            next_sstable_id: AtomicUsize::new(max_sstable_id + 1),
             n_current_levels: 0,
+            keyspace_desc,
             options,
             sstables,
             manifest,
@@ -49,20 +51,20 @@ impl SSTables {
 
     fn load_sstables(
         options: &Arc<shared::SimpleDbOptions>,
-        keyspace_id: shared::KeyspaceId
+        keyspace_desc: KeyspaceDescriptor,
     ) -> Result<(Vec<RwLock<Vec<Arc<SSTable>>>>, shared::SSTableId), shared::SimpleDbError> {
-        logger().info(StorageKeyspace(keyspace_id), &format!("Loading SSTables"));
+        logger().info(StorageKeyspace(keyspace_desc.keyspace_id), "Loading SSTables");
 
         let mut levels: Vec<RwLock<Vec<Arc<SSTable>>>> = Vec::with_capacity(64);
         for _ in 0..64 {
             levels.push(RwLock::new(Vec::new()));
         }
 
-        let path = shared::get_directory_usize(&options.base_path, keyspace_id);
+        let path = shared::get_directory_usize(&options.base_path, keyspace_desc.keyspace_id);
         let path = path.as_path();
         let mut max_sstable_id: shared::SSTableId = 0;
 
-        for file in fs::read_dir(path).map_err(|e| shared::SimpleDbError::CannotReadSSTablesFiles(keyspace_id, e))? {
+        for file in fs::read_dir(path).map_err(|e| CannotReadSSTablesFiles(keyspace_desc.keyspace_id, e))? {
             let file = file.unwrap();
 
             if !is_sstable_file(&file) {
@@ -70,10 +72,10 @@ impl SSTables {
             }
 
             if let Ok(sstable_id) = extract_sstable_id_from_file(&file) {
-                logger().info(StorageKeyspace(keyspace_id), &format!("Loading SSTable ID: {}", sstable_id));
+                logger().info(StorageKeyspace(keyspace_desc.keyspace_id), &format!("Loading SSTable ID: {}", sstable_id));
 
                 let sstable = SSTable::from_file(
-                    sstable_id, keyspace_id, file.path().as_path(), options.clone()
+                    sstable_id, file.path().as_path(), options.clone(), keyspace_desc
                 )?;
 
                 if sstable.state.load(Acquire) != SSTABLE_ACTIVE {
@@ -88,7 +90,7 @@ impl SSTables {
             }
         }
 
-        logger().info(StorageKeyspace(keyspace_id), &format!("Loaded {} levels of SSTables", levels.len()));
+        logger().info(StorageKeyspace(keyspace_desc.keyspace_id), &format!("Loaded {} levels of SSTables", levels.len()));
 
         Ok((levels, max_sstable_id))
     }
@@ -101,7 +103,7 @@ impl SSTables {
             let sstables_in_level = lock.as_ref().unwrap();
 
             for sstable in sstables_in_level.iter() {
-                iterators.push(Box::new(SSTableIterator::create(sstable.clone(), &Transaction::none())))
+                iterators.push(Box::new(SSTableIterator::create(sstable.clone(), &Transaction::none(), self.keyspace_desc)))
             }
         }
 
@@ -121,7 +123,7 @@ impl SSTables {
             let sstable_in_level = lock_result.as_ref().unwrap();
 
             for sstable in sstable_in_level.iter() {
-                iterators.push(Box::new(SSTableIterator::create(sstable.clone(), transaction)));
+                iterators.push(Box::new(SSTableIterator::create(sstable.clone(), transaction, self.keyspace_desc)));
             }
         }
 
@@ -248,7 +250,7 @@ impl SSTables {
     fn do_flush_to_disk(&self, sstable_builder: SSTableBuilder, sstable_id: shared::SSTableId) -> Result<usize, shared::SimpleDbError> {
         let sstable_build_result = sstable_builder.build(
             sstable_id,
-            self.to_sstable_file_path(sstable_id, self.keyspace_id).as_path(),
+            self.to_sstable_file_path(sstable_id, self.keyspace_desc.keyspace_id).as_path(),
         );
 
         match sstable_build_result {

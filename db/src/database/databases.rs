@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
-use shared::{Flag, FlagMethods, SimpleDbError, SimpleDbOptions, StorageValueMergeResult};
+use shared::{Flag, FlagMethods, SimpleDbError, SimpleDbOptions, StorageValueMergeResult, Type};
 use crate::database::database::Database;
 use crate::index::posting_list::PostingList;
 use crate::table::record::Record;
@@ -19,7 +19,7 @@ impl Databases {
         options: Arc<SimpleDbOptions>,
     ) -> Result<Databases, SimpleDbError> {
         let options = shared::start_simpledb_options_builder_from(&options)
-            .storage_value_merger(|prev, new, flag| Self::merge_storage_tables(prev, new, flag))
+            .storage_value_merger(|prev, new, flag, key_type| Self::merge_storage_tables(prev, new, flag, key_type))
             .build_arc();
 
         let mut databases = Self::load_databases(&options)?;
@@ -103,7 +103,7 @@ impl Databases {
         Ok(databases)
     }
 
-    fn merge_storage_tables(prev: &Bytes, new: &Bytes, flag: Flag) -> StorageValueMergeResult {
+    fn merge_storage_tables(prev: &Bytes, new: &Bytes, flag: Flag, key_type: Type) -> StorageValueMergeResult {
         if flag.has(KEYSPACE_TABLE_USER) {
             let tombstone = Bytes::new();
             if prev.eq(&tombstone) || new.eq(&tombstone) {
@@ -116,8 +116,8 @@ impl Databases {
                 StorageValueMergeResult::Ok(Bytes::from(prev.serialize()))
             }
         } else if flag.has(KEYSPACE_TABLE_INDEX) {
-            let prev = PostingList::deserialize(&mut prev.iter().as_slice());
-            let new = PostingList::deserialize(&mut new.iter().as_slice());
+            let prev = PostingList::deserialize(&mut prev.iter().as_slice(), key_type);
+            let new = PostingList::deserialize(&mut new.iter().as_slice(), key_type);
             let merged_posting_list = PostingList::merge(&new, &prev);
 
             if !merged_posting_list.is_emtpy() {

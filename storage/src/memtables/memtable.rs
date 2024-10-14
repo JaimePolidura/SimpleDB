@@ -1,3 +1,4 @@
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::memtables::memtable::MemtableState::{Active, Flushed, Flushing, Inactive, RecoveringFromWal};
 use crate::memtables::memtable_iterator::MemtableIterator;
 use crate::memtables::wal::Wal;
@@ -5,12 +6,12 @@ use crate::sst::sstable_builder::SSTableBuilder;
 use crate::transactions::transaction::Transaction;
 use crate::transactions::transaction_manager::TransactionManager;
 use crate::utils::tombstone::TOMBSTONE;
-use bytes::{Bytes};
-use crossbeam_skiplist::{SkipMap, SkipSet};
+use bytes::Bytes;
+use crossbeam_skiplist::SkipMap;
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::key::Key;
 use shared::logger::{logger, SimpleDbLayer};
-use shared::{Flag, StorageValueMergeResult};
+use shared::StorageValueMergeResult;
 use std::cell::UnsafeCell;
 use std::ops::Bound::Excluded;
 use std::sync::atomic::AtomicUsize;
@@ -25,9 +26,7 @@ pub struct MemTable {
     pub(crate) state: UnsafeCell<MemtableState>,
     pub(crate) wal: UnsafeCell<Wal>,
     pub(crate) options: Arc<shared::SimpleDbOptions>,
-    pub(crate) txn_ids_written: SkipSet<shared::TxnId>,
-    pub(crate) keyspace_id: shared::KeyspaceId,
-    pub(crate) keyspace_flags: Flag,
+    pub(crate) keyspace_desc: KeyspaceDescriptor
 }
 
 pub(crate) enum MemtableState {
@@ -43,18 +42,15 @@ impl MemTable {
     pub fn create_new(
         options: Arc<shared::SimpleDbOptions>,
         memtable_id: shared::MemtableId,
-        keyspace_id: shared::KeyspaceId,
-        keyspace_flags: Flag
+        keyspace_desc: KeyspaceDescriptor,
     ) -> Result<MemTable, shared::SimpleDbError> {
         Ok(MemTable {
-            wal: UnsafeCell::new(Wal::create(options.clone(), keyspace_id, memtable_id)?),
+            wal: UnsafeCell::new(Wal::create(options.clone(), memtable_id, keyspace_desc)?),
             max_size_bytes: options.memtable_max_size_bytes,
             current_size_bytes: AtomicUsize::new(0),
             state: UnsafeCell::new(MemtableState::New),
             data: Arc::new(SkipMap::new()),
-            txn_ids_written: SkipSet::new(),
-            keyspace_flags,
-            keyspace_id,
+            keyspace_desc,
             memtable_id,
             options,
         })
@@ -63,8 +59,7 @@ impl MemTable {
     pub fn create_and_recover_from_wal(
         options: Arc<shared::SimpleDbOptions>,
         memtable_id: shared::MemtableId,
-        keyspace_id: shared::KeyspaceId,
-        keyspace_flags: Flag,
+        keyspace_desc: KeyspaceDescriptor,
         wal: Wal
     ) -> Result<MemTable, shared::SimpleDbError> {
         let mut memtable = MemTable {
@@ -73,9 +68,7 @@ impl MemTable {
             state: UnsafeCell::new(MemtableState::New),
             data: Arc::new(SkipMap::new()),
             wal: UnsafeCell::new(wal),
-            txn_ids_written: SkipSet::new(),
-            keyspace_flags,
-            keyspace_id,
+            keyspace_desc,
             memtable_id,
             options
         };
@@ -88,7 +81,7 @@ impl MemTable {
     pub fn create_mock(
         options: Arc<shared::SimpleDbOptions>,
         memtable_id: shared::MemtableId,
-        keyspace_flags: Flag
+        keyspace_desc: KeyspaceDescriptor,
     ) -> Result<MemTable, shared::SimpleDbError> {
         Ok(MemTable {
             wal: UnsafeCell::new(Wal::create_mock(options.clone(), memtable_id)?),
@@ -96,16 +89,10 @@ impl MemTable {
             current_size_bytes: AtomicUsize::new(0),
             state: UnsafeCell::new(MemtableState::Active),
             data: Arc::new(SkipMap::new()),
-            txn_ids_written: SkipSet::new(),
-            keyspace_id: 0,
-            keyspace_flags,
+            keyspace_desc,
             memtable_id,
             options,
         })
-    }
-
-    pub fn has_txn_id_been_written(&self, txn_id: shared::TxnId) -> bool {
-        self.txn_ids_written.contains(&txn_id)
     }
 
     pub fn set_inactive(&self) {
@@ -136,7 +123,7 @@ impl MemTable {
     }
 
     pub fn get(&self, key_lookup: &Bytes, transaction: &Transaction) -> Option<Bytes> {
-        let mut current_key = Key::create(key_lookup.clone(), transaction.txn_id + 1);
+        let mut current_key = Key::create(key_lookup.clone(), self.keyspace_desc.key_type, transaction.txn_id + 1);
 
         loop {
             if let Some(entry) = self.data.upper_bound(Excluded(&current_key)) {
@@ -156,21 +143,17 @@ impl MemTable {
 
     pub fn set(&self, transaction: &Transaction, key: Bytes, value: &[u8]) -> Result<(), shared::SimpleDbError> {
         self.write(
-            &Key::create(key, transaction.txn_id),
-            Bytes::copy_from_slice(value),
-            transaction.txn_id
-        )
+            &Key::create(key, self.keyspace_desc.key_type, transaction.txn_id),
+            Bytes::copy_from_slice(value))
     }
 
     pub fn delete(&self, transaction: &Transaction, key: Bytes) -> Result<(), shared::SimpleDbError> {
         self.write(
-            &Key::create(key, transaction.txn_id),
-            TOMBSTONE,
-            transaction.txn_id
-        )
+            &Key::create(key, self.keyspace_desc.key_type, transaction.txn_id),
+            TOMBSTONE)
     }
 
-    fn write(&self, key: &Key, value: Bytes, txn_id: shared::TxnId) -> Result<(), shared::SimpleDbError> {
+    fn write(&self, key: &Key, value: Bytes) -> Result<(), shared::SimpleDbError> {
         if !self.can_memtable_be_written() {
             return Ok(());
         }
@@ -179,8 +162,6 @@ impl MemTable {
         }
 
         self.write_wal(&key, &value)?;
-
-        self.txn_ids_written.insert(txn_id);
 
         self.current_size_bytes.fetch_add(key.len() + value.len(), Relaxed);
 
@@ -203,7 +184,7 @@ impl MemTable {
             Some(present_entry) => {
                 let merger_fn = self.options.storage_value_merger.unwrap();
 
-                match merger_fn(present_entry.value(), &value, self.keyspace_flags) {
+                match merger_fn(present_entry.value(), &value, self.keyspace_desc.flags, self.keyspace_desc.key_type) {
                     StorageValueMergeResult::Ok(merged_value) => { self.data.insert(key.clone(), merged_value); }
                     StorageValueMergeResult::DiscardPreviousKeepNew => { self.data.insert(key.clone(), value); }
                     StorageValueMergeResult::DiscardPreviousAndNew => {}
@@ -227,8 +208,8 @@ impl MemTable {
     }
 
     pub fn to_sst(self: &Arc<MemTable>, transaction_manager: &Arc<TransactionManager>) -> SSTableBuilder {
-        let mut memtable_iterator = MemtableIterator::create(&self, &Transaction::none());
-        let mut sstable_builder = SSTableBuilder::create(self.options.clone(), self.keyspace_id, 0);
+        let mut memtable_iterator = MemtableIterator::create(&self, &Transaction::none(), self.keyspace_desc);
+        let mut sstable_builder = SSTableBuilder::create(self.options.clone(), self.keyspace_desc, 0);
         sstable_builder.set_memtable_id(self.memtable_id);
 
         while memtable_iterator.next() {
@@ -249,12 +230,12 @@ impl MemTable {
         let wal: &Wal = unsafe { &*self.wal.get() };
         let mut entries = wal.read_entries()?;
 
-        logger().info(SimpleDbLayer::StorageKeyspace(self.keyspace_id), &format!(
+        logger().info(SimpleDbLayer::StorageKeyspace(self.keyspace_desc.keyspace_id), &format!(
             "Applying {} operations from WAL to memtable with ID: {}", entries.len(), wal.get_memtable_id())
         );
 
         while let Some(entry) = entries.pop() {
-            self.write(&entry.key, entry.value, entry.key.txn_id())?;
+            self.write(&entry.key, entry.value)?;
         }
 
         self.set_active();
@@ -282,16 +263,18 @@ impl MemTable {
 
 #[cfg(test)]
 mod test {
+    use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
     use crate::memtables::memtable::MemTable;
     use crate::transactions::transaction::Transaction;
     use crate::transactions::transaction_manager::IsolationLevel;
     use bytes::Bytes;
+    use shared::Type;
     use std::sync::Arc;
 
     #[test]
     fn get_set_delete_no_transactions() {
-        let memtable = MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
-            .unwrap();
+        let memtable = MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0,
+                                             KeyspaceDescriptor::create_mock(Type::String)).unwrap();
         let value: Vec<u8> = vec![10, 12];
 
         assert!(memtable.get(&Bytes::from("nombre"), &Transaction::none()).is_none());
@@ -309,7 +292,8 @@ mod test {
 
     #[test]
     fn get_set_delete_transactions() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0).unwrap());
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0,
+                                                      KeyspaceDescriptor::create_mock(Type::String)).unwrap());
         memtable.set_active();
         memtable.set(&transaction(10), Bytes::from("aa"), &vec![1]); //Cannot be read by the transaction, should be ignored
         memtable.set(&transaction(1), Bytes::from("alberto"), &vec![2]);

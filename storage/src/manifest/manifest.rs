@@ -6,12 +6,13 @@ use std::sync::atomic::Ordering::Relaxed;
 use bytes::{Buf, BufMut};
 use serde::{Deserialize, Serialize};
 use crate::compaction::compaction::CompactionTask;
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 
 pub struct Manifest {
     file: Mutex<shared::SimpleDbFile>,
     last_manifest_record_id: AtomicUsize,
     options: Arc<shared::SimpleDbOptions>,
-    keyspace_id: shared::KeyspaceId
+    keyspace_desc: KeyspaceDescriptor
 }
 
 #[derive(Serialize, Deserialize)]
@@ -36,16 +37,16 @@ pub struct MemtableFlushManifestOperation {
 impl Manifest {
     pub fn create(
         options: Arc<shared::SimpleDbOptions>,
-        keyspace_id: shared::KeyspaceId
+        keyspace_desc: KeyspaceDescriptor
     ) -> Result<Manifest, shared::SimpleDbError> {
-        match shared::SimpleDbFile::open(Self::manifest_path(&options, keyspace_id).as_path(), shared::SimpleDbFileMode::AppendOnly) {
+        match shared::SimpleDbFile::open(Self::manifest_path(&options, keyspace_desc.keyspace_id).as_path(), shared::SimpleDbFileMode::AppendOnly) {
             Ok(file) => Ok(Manifest {
                 last_manifest_record_id: AtomicUsize::new(0),
                 file: Mutex::new(file),
-                keyspace_id,
+                keyspace_desc,
                 options
             }),
-            Err(e) => Err(shared::SimpleDbError::CannotCreateManifest(keyspace_id, e))
+            Err(e) => Err(shared::SimpleDbError::CannotCreateManifest(keyspace_desc.keyspace_id, e))
         }
     }
 
@@ -68,12 +69,12 @@ impl Manifest {
     }
 
     fn clear_manifest(&self) -> Result<(), shared::SimpleDbError> {
-        let path = Self::manifest_path(&self.options, self.keyspace_id);
+        let path = Self::manifest_path(&self.options, self.keyspace_desc.keyspace_id);
         let mut file = shared::SimpleDbFile::open(path.as_path(), shared::SimpleDbFileMode::RandomWrites)
-            .map_err(|e| shared::SimpleDbError::CannotResetManifest(self.keyspace_id, e))?;
+            .map_err(|e| shared::SimpleDbError::CannotResetManifest(self.keyspace_desc.keyspace_id, e))?;
 
         file.clear()
-            .map_err(|e| shared::SimpleDbError::CannotResetManifest(self.keyspace_id, e))
+            .map_err(|e| shared::SimpleDbError::CannotResetManifest(self.keyspace_desc.keyspace_id, e))
     }
 
     fn get_uncompleted_operations(&self, all_operations: &mut Vec<ManifestOperation>) -> Vec<ManifestOperationContent> {
@@ -107,7 +108,7 @@ impl Manifest {
             .as_mut()
             .unwrap();
         let records_bytes = file.read_all()
-            .map_err(|e| shared::SimpleDbError::CannotReadManifestOperations(self.keyspace_id, e))?;
+            .map_err(|e| shared::SimpleDbError::CannotReadManifestOperations(self.keyspace_desc.keyspace_id, e))?;
         let mut records_bytes_ptr = records_bytes.as_slice();
         let mut all_records: Vec<ManifestOperation> = Vec::new();
         let mut current_offset = 0;
@@ -119,7 +120,7 @@ impl Manifest {
             let actual_crc = crc32fast::hash(json_record_bytes);
 
             if expected_crc != actual_crc {
-                return Err(shared::SimpleDbError::CannotDecodeManifest(self.keyspace_id, shared::DecodeError {
+                return Err(shared::SimpleDbError::CannotDecodeManifest(self.keyspace_desc.keyspace_id, shared::DecodeError {
                     error_type: shared::DecodeErrorType::CorruptedCrc(expected_crc, actual_crc),
                     index: all_records.len(),
                     offset: current_offset,
@@ -127,7 +128,7 @@ impl Manifest {
             }
 
             let deserialized_record = serde_json::from_slice::<ManifestOperation>(json_record_bytes)
-                .map_err(|e| shared::SimpleDbError::CannotDecodeManifest(self.keyspace_id, shared::DecodeError {
+                .map_err(|e| shared::SimpleDbError::CannotDecodeManifest(self.keyspace_desc.keyspace_id, shared::DecodeError {
                     error_type: shared::DecodeErrorType::JsonSerdeDeserialization(e),
                     index: all_records.len(),
                     offset: current_offset,
@@ -161,7 +162,7 @@ impl Manifest {
                 serialized.extend(record_json_serialized);
 
                 file.write(&serialized)
-                    .map_err(|e| shared::SimpleDbError::CannotWriteManifestOperation(self.keyspace_id, e))?;
+                    .map_err(|e| shared::SimpleDbError::CannotWriteManifestOperation(self.keyspace_desc.keyspace_id, e))?;
                 let _ = file.fsync(); //We dont care if it fails to fysnc
                 Ok(manifest_record_id)
             }

@@ -90,7 +90,7 @@ impl StatementExecutor {
                 let new_value_bytes = match evaluate_expression(&row_to_update, new_value_expr)? {
                     Expression::Literal(updated_value) => {
                         if !updated_value.is_null() {
-                            updated_value.serialize()
+                            updated_value.get_bytes().clone()
                         } else {
                             continue
                         }
@@ -98,7 +98,7 @@ impl StatementExecutor {
                     _ => return Err(MalformedQuery(String::from("Update values should produce a literal value")))
                 };
 
-                new_values.push((updated_column_name.clone(), new_value_bytes));
+                new_values.push((updated_column_name.clone(), new_value_bytes.clone()));
             }
 
             table.update(transaction, id, &new_values)?;
@@ -248,7 +248,7 @@ impl StatementExecutor {
     ) -> Vec<(String, Bytes)>{
         let mut formatted_values = Vec::new();
         for (column_name, column_value) in values {
-            formatted_values.push((column_name.clone(), column_value.serialize()));
+            formatted_values.push((column_name.clone(), column_value.get_bytes().clone()));
         }
 
         formatted_values

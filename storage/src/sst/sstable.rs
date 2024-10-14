@@ -1,3 +1,4 @@
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::sst::block::block::Block;
 use crate::sst::block_cache::BlockCache;
 use crate::sst::block_metadata::BlockMetadata;
@@ -5,6 +6,7 @@ use crate::transactions::transaction::Transaction;
 use crate::utils::bloom_filter::BloomFilter;
 use bytes::Bytes;
 use shared::key::Key;
+use shared::SimpleDbError::CannotDeleteSSTable;
 use shared::{SimpleDbFile, SimpleDbFileWrapper};
 use std::cell::UnsafeCell;
 use std::path::Path;
@@ -27,7 +29,7 @@ pub struct SSTable {
     pub(crate) first_key: Key,
     pub(crate) last_key: Key,
 
-    pub(crate) keyspace_id: shared::KeyspaceId,
+    pub(crate) keyspace_desc: KeyspaceDescriptor,
 }
 
 impl SSTable {
@@ -41,7 +43,7 @@ impl SSTable {
         level: u32,
         sstable_id: shared::SSTableId,
         state: u8,
-        keyspace_id: shared::KeyspaceId
+        keyspace_desc: KeyspaceDescriptor
     ) -> SSTable {
         SSTable {
             block_cache: Mutex::new(BlockCache::create(options.clone())),
@@ -53,40 +55,40 @@ impl SSTable {
             first_key,
             last_key,
             level,
+            keyspace_desc,
             sstable_id,
-            keyspace_id,
         }
     }
 
     pub fn from_file(
         sstable_id: shared::SSTableId,
-        keyspace_id: shared::KeyspaceId,
         path: &Path,
-        options: Arc<shared::SimpleDbOptions>
+        options: Arc<shared::SimpleDbOptions>,
+        keyspace_desc: KeyspaceDescriptor
     ) -> Result<Arc<SSTable>, shared::SimpleDbError> {
         let sst_file = shared::SimpleDbFile::open(path, shared::SimpleDbFileMode::RandomWrites)
-            .map_err(|e| shared::SimpleDbError::CannotOpenSSTableFile(keyspace_id, sstable_id, e))?;
+            .map_err(|e| shared::SimpleDbError::CannotOpenSSTableFile(keyspace_desc.keyspace_id, sstable_id, e))?;
         let sst_bytes = sst_file.read_all()
-            .map_err(|e| shared::SimpleDbError::CannotOpenSSTableFile(keyspace_id, sstable_id, e))?;
+            .map_err(|e| shared::SimpleDbError::CannotOpenSSTableFile(keyspace_desc.keyspace_id, sstable_id, e))?;
 
-        Self::deserialize(&sst_bytes, sstable_id, keyspace_id, options, sst_file)
+        Self::deserialize(&sst_bytes, sstable_id, options, sst_file, keyspace_desc)
     }
 
     fn deserialize(
         bytes: &Vec<u8>,
         sstable_id: shared::SSTableId,
-        keyspace_id: shared::KeyspaceId,
         options: Arc<shared::SimpleDbOptions>,
         file: shared::SimpleDbFile,
+        keyspace_desc: KeyspaceDescriptor
     ) -> Result<Arc<SSTable>, shared::SimpleDbError> {
         let meta_offset = shared::u8_vec_to_u32_le(bytes, bytes.len() - 4);
         let bloom_offset = shared::u8_vec_to_u32_le(bytes, bytes.len() - 8);
         let level = shared::u8_vec_to_u32_le(bytes, bytes.len() - 12);
         let state = bytes[bytes.len() - 13];
 
-        let block_metadata = BlockMetadata::decode_all(bytes, meta_offset as usize)
+        let block_metadata = BlockMetadata::decode_all(bytes, meta_offset as usize, keyspace_desc.key_type)
             .map_err(|error_type| shared::SimpleDbError::CannotDecodeSSTable(
-                keyspace_id,
+                keyspace_desc.keyspace_id,
                 sstable_id,
                 shared::SSTableCorruptedPart::BlockMetadata,
                 shared::DecodeError {
@@ -98,7 +100,7 @@ impl SSTable {
 
         let bloom_filter = BloomFilter::decode(bytes, bloom_offset as usize)
             .map_err(|error_type| shared::SimpleDbError::CannotDecodeSSTable(
-                keyspace_id,
+                keyspace_desc.keyspace_id,
                 sstable_id,
                 shared::SSTableCorruptedPart::BloomFilter,
                 shared::DecodeError {
@@ -121,7 +123,7 @@ impl SSTable {
             level,
             sstable_id,
             state,
-            keyspace_id
+            keyspace_desc
         )))
     }
 
@@ -153,7 +155,7 @@ impl SSTable {
         self.state.store(SSTABLE_DELETED, Release);
         let file: &mut SimpleDbFile = unsafe { &mut *self.file.file.get() };
         file.delete()
-            .map_err(|e| shared::SimpleDbError::CannotDeleteSSTable(self.keyspace_id, self.sstable_id, e))
+            .map_err(|e| CannotDeleteSSTable(self.keyspace_desc.keyspace_id, self.sstable_id, e))
     }
 
     pub fn size(&self) -> shared::SSTableId {
@@ -177,11 +179,11 @@ impl SSTable {
         let metadata: &BlockMetadata = &self.block_metadata[block_id];
         let file: &mut SimpleDbFile = unsafe { &mut *self.file.file.get() };
         let encoded_block = file.read(metadata.offset, self.options.block_size_bytes)
-            .map_err(|e| shared::SimpleDbError::CannotReadSSTableFile(self.keyspace_id, self.sstable_id, e))?;
+            .map_err(|e| shared::SimpleDbError::CannotReadSSTableFile(self.keyspace_desc.keyspace_id, self.sstable_id, e))?;
 
-        let block = Block::deserialize(&encoded_block, &self.options)
+        let block = Block::deserialize(&encoded_block, &self.options, self.keyspace_desc)
             .map_err(|error_type| shared::SimpleDbError::CannotDecodeSSTable(
-                self.keyspace_id,
+                self.keyspace_desc.keyspace_id,
                 self.sstable_id,
                 shared::SSTableCorruptedPart::Block(block_id),
                 shared::DecodeError {
@@ -221,7 +223,7 @@ impl SSTable {
     }
 
     fn get_blocks_metadata(&self, key: &Bytes, transaction: &Transaction) -> Option<usize> {
-        let lookup_key = Key::create(key.clone(), transaction.txn_id);
+        let lookup_key = Key::create(key.clone(), self.keyspace_desc.key_type, transaction.txn_id);
         let mut right = self.block_metadata.len() - 1;
         let mut left = 0;
 

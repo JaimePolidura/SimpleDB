@@ -1,12 +1,13 @@
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::sst::block::block::Block;
 use crate::sst::block::block_iterator::BlockIterator;
 use crate::sst::block_metadata::BlockMetadata;
 use crate::sst::sstable::SSTable;
 use crate::transactions::transaction::Transaction;
-use shared::iterators::storage_iterator::StorageIterator;
 use bytes::Bytes;
-use std::sync::Arc;
+use shared::iterators::storage_iterator::StorageIterator;
 use shared::key::Key;
+use std::sync::Arc;
 
 //This iterators fulfills:
 // - The returned keys are readable/visible by the current transaction.
@@ -17,6 +18,7 @@ use shared::key::Key;
 pub struct SSTableIterator {
     transaction: Transaction,
     sstable: Arc<SSTable>,
+    key_desc: KeyspaceDescriptor,
 
     pending_blocks: Vec<BlockMetadata>,
     current_block_metadata: Option<BlockMetadata>,
@@ -25,13 +27,18 @@ pub struct SSTableIterator {
 }
 
 impl SSTableIterator {
-    pub fn create(sstable: Arc<SSTable>, transaction: &Transaction) -> SSTableIterator {
+    pub fn create(
+        sstable: Arc<SSTable>,
+        transaction: &Transaction,
+        key_desc: KeyspaceDescriptor
+    ) -> SSTableIterator {
         SSTableIterator {
             pending_blocks: sstable.block_metadata.clone(),
             transaction: transaction.clone(),
             current_block_iterator: None,
             current_block_metadata: None,
             current_block_id: -1,
+            key_desc,
             sstable,
         }
     }
@@ -76,7 +83,7 @@ impl SSTableIterator {
     fn set_iterating_block(&mut self, block_metadata: BlockMetadata) {
         let block = self.load_block(self.current_block_id as usize);
         self.current_block_metadata = Some(block_metadata);
-        self.current_block_iterator = Some(BlockIterator::create(block));
+        self.current_block_iterator = Some(BlockIterator::create(block, self.key_desc));
     }
 
     fn load_block(&mut self, block_id: usize) -> Arc<Block> {
@@ -124,7 +131,7 @@ impl StorageIterator for SSTableIterator {
     }
 
     fn seek(&mut self, key_bytes: &Bytes, inclusive: bool) {
-        let key = Key::create(key_bytes.clone(), 0);
+        let key = Key::create(key_bytes.clone(), self.key_desc.key_type, 0);
         if (inclusive && self.sstable.key_greater(&key)) ||
             (!inclusive && self.sstable.key_greater_equal(&key)) {
             self.pending_blocks.clear();
@@ -144,7 +151,7 @@ impl StorageIterator for SSTableIterator {
 
             if current_block_metadata.contains(key_bytes, &self.transaction) {
                 let current_block = self.load_block(self.current_block_id as usize);
-                let mut current_block_iterator = BlockIterator::create(current_block);
+                let mut current_block_iterator = BlockIterator::create(current_block, self.key_desc);
 
                 current_block_iterator.seek(key_bytes, inclusive);
 
@@ -163,7 +170,7 @@ impl StorageIterator for SSTableIterator {
 
 #[cfg(test)]
 mod test {
-    use std::cell::UnsafeCell;
+    use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
     use crate::sst::block::block_builder::BlockBuilder;
     use crate::sst::block_cache::BlockCache;
     use crate::sst::block_metadata::BlockMetadata;
@@ -171,13 +178,13 @@ mod test {
     use crate::sst::ssttable_iterator::SSTableIterator;
     use crate::transactions::transaction::Transaction;
     use crate::utils::bloom_filter::BloomFilter;
-    use shared::iterators::storage_iterator::StorageIterator;
     use bytes::Bytes;
-    use crossbeam_skiplist::SkipSet;
+    use shared::iterators::storage_iterator::StorageIterator;
+    use shared::key::Key;
+    use shared::{assertions, SimpleDbFileWrapper, Type};
+    use std::cell::UnsafeCell;
     use std::sync::atomic::AtomicU8;
     use std::sync::{Arc, Mutex};
-    use shared::{assertions, SimpleDbFileWrapper};
-    use shared::key::Key;
 
     //SSTable:
     //Block1: [Alberto, Berto]
@@ -265,17 +272,19 @@ mod test {
     }
 
     fn build_sstable_iterator() -> SSTableIterator {
-        let mut block1 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
+        let keyspace_desc = KeyspaceDescriptor::create_mock(Type::String);
+
+        let mut block1 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), keyspace_desc);
         block1.add_entry(Key::create_from_str("Alberto", 0), Bytes::from(vec![1]));
         block1.add_entry(Key::create_from_str("Berto", 0), Bytes::from(vec![1]));
         let block1 = Arc::new(block1.build());
 
-        let mut block2 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
+        let mut block2 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), keyspace_desc);
         block2.add_entry(Key::create_from_str("Cigu", 0), Bytes::from(vec![1]));
         block2.add_entry(Key::create_from_str("De", 0), Bytes::from(vec![1]));
         let block2 = Arc::new(block2.build());
 
-        let mut block3 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
+        let mut block3 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), keyspace_desc);
         block3.add_entry(Key::create_from_str("Estonia", 0), Bytes::from(vec![1]));
         block3.add_entry(Key::create_from_str("Gibraltar", 0), Bytes::from(vec![1]));
         block3.add_entry(Key::create_from_str("Zi", 0), Bytes::from(vec![1]));
@@ -287,7 +296,6 @@ mod test {
         block_cache.put(2, block3);
 
         let sstable = Arc::new(SSTable{
-            keyspace_id: 0,
             sstable_id: 1,
             bloom_filter: BloomFilter::create(&Vec::new(), 8),
             file: SimpleDbFileWrapper{ file: UnsafeCell::new(shared::SimpleDbFile::create_mock()) },
@@ -302,8 +310,9 @@ mod test {
             state: AtomicU8::new(SSTABLE_ACTIVE),
             first_key: Key::create_from_str("Alberto", 1),
             last_key: Key::create_from_str("Zi", 1),
+            keyspace_desc
         });
 
-        SSTableIterator::create(sstable, &Transaction::none())
+        SSTableIterator::create(sstable, &Transaction::none(), keyspace_desc)
     }
 }

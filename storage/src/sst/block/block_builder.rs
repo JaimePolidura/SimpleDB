@@ -1,12 +1,14 @@
-use std::sync::Arc;
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
+use crate::sst::block::block::{Block, BLOCK_FOOTER_LENGTH};
 use bytes::{BufMut, Bytes};
 use shared::key::Key;
-use crate::sst::block::block::{Block, BLOCK_FOOTER_LENGTH};
+use std::sync::Arc;
 
 pub struct BlockBuilder {
     entries: Vec<Entry>,
     current_size: usize,
     options: Arc<shared::SimpleDbOptions>,
+    keyspace_desc: KeyspaceDescriptor
 }
 
 struct Entry {
@@ -15,10 +17,11 @@ struct Entry {
 }
 
 impl BlockBuilder {
-    pub fn create(options: Arc<shared::SimpleDbOptions>) -> BlockBuilder {
+    pub fn create(options: Arc<shared::SimpleDbOptions>, keyspace_desc: KeyspaceDescriptor) -> BlockBuilder {
         BlockBuilder {
-            entries: Vec::new(),
             current_size: BLOCK_FOOTER_LENGTH,
+            entries: Vec::new(),
+            keyspace_desc,
             options,
         }
     }
@@ -39,7 +42,7 @@ impl BlockBuilder {
             offsets.push(offset as u16);
         }
 
-        Block { entries, offsets }
+        Block { entries, offsets, keyspace_desc: self.keyspace_desc }
     }
 
     //TODO Handle block overflow
@@ -69,14 +72,16 @@ impl BlockBuilder {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
+    use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
     use crate::sst::block::block_builder::BlockBuilder;
     use bytes::Bytes;
     use shared::key::Key;
+    use shared::Type;
+    use std::sync::Arc;
 
     #[test]
     fn build() {
-        let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
+        let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::String));
         block_builder.add_entry(Key::create_from_str("Jaime", 1), Bytes::from(vec![1, 2, 3]));
         block_builder.add_entry(Key::create_from_str("Pedro", 1), Bytes::from(vec![4, 5, 6]));
         let block = block_builder.build();

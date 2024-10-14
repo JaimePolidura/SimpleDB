@@ -3,7 +3,7 @@ use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 use bytes::Bytes;
 use shared::logger::logger;
 use shared::logger::SimpleDbLayer::DB;
-use shared::{KeyspaceId, SimpleDbError, SimpleDbOptions};
+use shared::{KeyspaceId, SimpleDbError, SimpleDbOptions, Type};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use storage::{SimpleDbStorageIterator, Storage};
@@ -17,7 +17,8 @@ pub struct SecondaryIndex {
     keyspace_id: KeyspaceId,
     storage: Arc<storage::Storage>,
     state: SecondaryIndexState,
-    table_name: String
+    table_name: String,
+    primary_column_type: Type,
 }
 
 impl SecondaryIndex {
@@ -25,9 +26,10 @@ impl SecondaryIndex {
         storage: Arc<storage::Storage>,
         state: SecondaryIndexState,
         keyspace_id: KeyspaceId,
-        table_name: String
+        table_name: String,
+        primary_column_type: Type,
     ) -> SecondaryIndex {
-        SecondaryIndex { keyspace_id, storage, state, table_name }
+        SecondaryIndex { keyspace_id, storage, state, table_name, primary_column_type }
     }
 
     pub fn create_mock() -> SecondaryIndex {
@@ -35,6 +37,7 @@ impl SecondaryIndex {
             storage: Arc::new(Storage::create_mock(&Arc::new(SimpleDbOptions::default()))),
             table_name: String::from("table_name"),
             state: SecondaryIndexState::Active,
+            primary_column_type: Type::I64,
             keyspace_id: 1,
         }
     }
@@ -55,7 +58,7 @@ impl SecondaryIndex {
             self.delete(transaction, old_value.clone(), primary_key.clone())?;
         }
 
-        let new_entry = PostingList::create_deleted(primary_key, transaction)
+        let new_entry = PostingList::create_deleted(primary_key, self.primary_column_type, transaction)
             .serialize();
 
         self.storage.set_with_transaction(
@@ -71,7 +74,7 @@ impl SecondaryIndex {
         transaction: &Transaction
     ) -> Result<SecondaryIndexIterator<SimpleDbStorageIterator>, SimpleDbError> {
         let iterator = self.storage.scan_all_with_transaction(transaction, self.keyspace_id)?;
-        Ok(SecondaryIndexIterator::create(transaction, iterator))
+        Ok(SecondaryIndexIterator::create(transaction, iterator, self.primary_column_type))
     }
 
     pub fn delete(
@@ -80,7 +83,7 @@ impl SecondaryIndex {
         column_value: Bytes, //New column value indexed
         primary_key: Bytes //Table's primary key
     ) -> Result<(), SimpleDbError> {
-        let deleted_entry = PostingList::create_deleted(primary_key, transaction)
+        let deleted_entry = PostingList::create_deleted(primary_key, self.primary_column_type, transaction)
             .serialize();
 
         self.storage.set_with_transaction(

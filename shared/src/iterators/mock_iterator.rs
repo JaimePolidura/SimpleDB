@@ -1,6 +1,6 @@
 use crate::iterators::storage_iterator::StorageIterator;
 use crate::key::Key;
-use crate::TxnId;
+use crate::{TxnId, Type};
 use bytes::Bytes;
 
 pub struct MockIterator {
@@ -16,7 +16,7 @@ impl MockIterator {
         let mut iterator = Self::create();
         for entry in entries {
             iterator.entries.push((
-                Key::create(Bytes::from(entry.0.to_le_bytes().to_vec()), 1),
+                Key::create(Bytes::from(entry.0.to_le_bytes().to_vec()), Type::I64, 1),
                 entry.1)
             );
         }

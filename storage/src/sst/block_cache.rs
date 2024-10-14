@@ -106,12 +106,14 @@ mod test {
     use crate::sst::block::block_builder::BlockBuilder;
     use crate::sst::block_cache::BlockCache;
     use std::sync::Arc;
+    use shared::Type;
+    use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 
     #[test]
     fn put_get() {
-        let block1 = Arc::new(BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default())).build());
-        let block2 = Arc::new(BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default())).build());
-        let block3 = Arc::new(BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default())).build());
+        let block1 = Arc::new(BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::I64)).build());
+        let block2 = Arc::new(BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::I64)).build());
+        let block3 = Arc::new(BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::I64)).build());
         let mut cache = BlockCache::create(Arc::new(shared::SimpleDbOptions::default()));
 
         cache.put(1, block1);

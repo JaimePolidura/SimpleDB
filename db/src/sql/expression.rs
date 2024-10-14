@@ -49,9 +49,9 @@ impl Expression {
         }
     }
 
-    pub fn serialize(&self) -> Bytes {
+    pub fn get_literal_bytes(&self) -> Bytes {
         match self {
-            Expression::Literal(value) => value.serialize(),
+            Expression::Literal(value) => value.get_bytes().clone(),
             _ => panic!("")
         }
     }
@@ -101,8 +101,8 @@ impl Expression {
         self.arithmetic_op(other, |a, b| a.multiply(b))
     }
 
-    pub fn substract(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
-        self.arithmetic_op(other, |a, b| a.substract(b))
+    pub fn subtract(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
+        self.arithmetic_op(other, |a, b| a.subtract(b))
     }
 
     pub fn divide(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
@@ -125,57 +125,57 @@ impl Expression {
         Ok(Expression::Literal(value_self.and(&value_other)?))
     }
 
-    pub fn greater(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
+    pub fn gt(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         self.comparation_op(
             other,
             Expression::Literal(Value::create_null()),
             Expression::Literal(Value::create_null()),
-            |a, b| a.greater(b)
+            |a, b| a.gt(b)
         )
     }
 
-    pub fn greater_equal(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
+    pub fn ge(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         self.comparation_op(
             other,
             Expression::Literal(Value::create_null()),
             Expression::Literal(Value::create_null()),
-            |a, b| a.greater_equal(b)
+            |a, b| a.ge(b)
         )
     }
 
-    pub fn less(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
+    pub fn lt(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         self.comparation_op(
             other,
             Expression::Literal(Value::create_null()),
             Expression::Literal(Value::create_null()),
-            |a, b| a.less(b)
+            |a, b| a.lt(b)
         )
     }
 
-    pub fn less_equal(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
+    pub fn le(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         self.comparation_op(
             other,
             Expression::Literal(Value::create_null()),
             Expression::Literal(Value::create_null()),
-            |a, b| a.less_equal(b),
+            |a, b| a.le(b),
         )
     }
 
-    pub fn equal(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
+    pub fn eq(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         self.comparation_op(
             other,
             Expression::Literal(Value::create_boolean(true)),
             Expression::Literal(Value::create_boolean(false)),
-            |a, b| a.equal(b),
+            |a, b| a.eq(b),
         )
     }
 
-    pub fn not_equal(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
+    pub fn ne(&self, other: &Expression) -> Result<Expression, SimpleDbError> {
         self.comparation_op(
             other,
             Expression::Literal(Value::create_boolean(false)),
             Expression::Literal(Value::create_boolean(true)),
-            |a, b| a.not_equal(b),
+            |a, b| a.ne(b),
         )
     }
 
@@ -194,7 +194,7 @@ impl Expression {
         op: Op
     ) -> Result<Expression, SimpleDbError>
     where
-        Op: Fn(&Value, &Value) -> Result<Value, SimpleDbError>
+        Op: Fn(&Value, &Value) -> Result<bool, SimpleDbError>
     {
         if self.is_null() && other.is_null() {
             return Ok(null_null_return_value);
@@ -205,7 +205,7 @@ impl Expression {
 
         match &self {
             Expression::Literal(value) => Ok(
-                Expression::Literal(op(value, &other.get_value()?)?)
+                Expression::Literal(Value::create_boolean(op(value, &other.get_value()?)?))
             ),
             _ => Err(MalformedQuery(String::from("Cannot add values")))
         }

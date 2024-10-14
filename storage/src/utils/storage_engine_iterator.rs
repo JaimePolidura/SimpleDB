@@ -7,7 +7,7 @@ use shared::key::Key;
 use shared::{Flag, StorageValueMergeResult};
 use std::collections::VecDeque;
 use std::sync::Arc;
-
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 //TODO Refactor this code
 
 //This is the iterator that will be exposed to users of the storage engine:
@@ -28,14 +28,14 @@ pub struct StorageEngineIterator<I: StorageIterator> {
 
     is_finished: bool,
 
-    keyspace_flags: Flag,
+    keyspace_desc: KeyspaceDescriptor,
 
     first_iteration: bool,
 }
 
 impl<I: StorageIterator> StorageEngineIterator<I> {
     pub fn create(
-        keyspace_flags: Flag,
+        keyspace_desc: KeyspaceDescriptor,
         options: &Arc<shared::SimpleDbOptions>,
         iterator: I,
     ) -> StorageEngineIterator<I> {
@@ -54,7 +54,7 @@ impl<I: StorageIterator> StorageEngineIterator<I> {
             current_value: None,
             current_key: None,
             transaction: None,
-            keyspace_flags,
+            keyspace_desc,
             is_finished,
         }
     }
@@ -120,7 +120,7 @@ impl<I: StorageIterator> StorageEngineIterator<I> {
         while let Some((next_key, next_value)) = self.entries_to_return.pop_front() {
             match prev_merged_value.take() {
                 Some((_, previous_merged_value)) => {
-                    match merge_fn(&previous_merged_value, &next_value, self.keyspace_flags) {
+                    match merge_fn(&previous_merged_value, &next_value, self.keyspace_desc.flags, self.keyspace_desc.key_type) {
                         StorageValueMergeResult::Ok(merged_value) => prev_merged_value = Some((next_key, merged_value)),
                         StorageValueMergeResult::DiscardPreviousKeepNew => prev_merged_value = Some((next_key, next_value)),
                         StorageValueMergeResult::DiscardPreviousAndNew => {}
@@ -211,22 +211,23 @@ mod test {
     use bytes::Bytes;
     use shared::iterators::storage_iterator::StorageIterator;
     use shared::key::Key;
-    use shared::StorageValueMergeResult;
+    use shared::{StorageValueMergeResult, Type};
     use std::sync::Arc;
+    use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 
     #[test]
     fn iterator_one_entry() {
         let options = shared::start_simpledb_options_builder_from(&shared::SimpleDbOptions::default())
-            .storage_value_merger(|a, b, _| merge_values(a, b))
+            .storage_value_merger(|a, b, _, _| merge_values(a, b))
             .build_arc();
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, KeyspaceDescriptor::create_mock(Type::String))
             .unwrap());
         memtable.set(&transaction(10), Bytes::from("aa"), &vec![1]);
 
         let mut iterator = StorageEngineIterator::create(
-            0,
+            KeyspaceDescriptor::create_mock(Type::String),
             &options,
-            MemtableIterator::create(&memtable, &Transaction::none()),
+            MemtableIterator::create(&memtable, &Transaction::none(), KeyspaceDescriptor::create_mock(Type::String)),
         );
 
         assert!(iterator.next());
@@ -237,13 +238,13 @@ mod test {
     #[test]
     fn iterator_empty() {
         let options = Arc::new(shared::SimpleDbOptions::default());
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, KeyspaceDescriptor::create_mock(Type::String))
             .unwrap());
 
         let mut iterator = StorageEngineIterator::create(
-            0,
+            KeyspaceDescriptor::create_mock(Type::String),
             &options,
-            MemtableIterator::create(&memtable, &Transaction::none()),
+            MemtableIterator::create(&memtable, &Transaction::none(), KeyspaceDescriptor::create_mock(Type::String)),
         );
 
         assert!(!iterator.next());
@@ -252,7 +253,7 @@ mod test {
     #[test]
     fn iterator_no_merger_fn() {
         let options = Arc::new(shared::SimpleDbOptions::default());
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, KeyspaceDescriptor::create_mock(Type::String))
             .unwrap());
         memtable.set(&transaction(10), Bytes::from("aa"), &vec![1]);
         memtable.set(&transaction(1), Bytes::from("alberto"), &vec![2]);
@@ -263,9 +264,9 @@ mod test {
         memtable.set(&transaction(1), Bytes::from("wili"), &vec![9]);
 
         let mut iterator = StorageEngineIterator::create(
-            0,
+            KeyspaceDescriptor::create_mock(Type::String),
             &options,
-            MemtableIterator::create(&memtable, &Transaction::none()),
+            MemtableIterator::create(&memtable, &Transaction::none(), KeyspaceDescriptor::create_mock(Type::String)),
         );
 
         assert!(iterator.next());
@@ -308,10 +309,10 @@ mod test {
     #[test]
     fn iterator_merger_fn() {
         let options = shared::start_simpledb_options_builder_from(&shared::SimpleDbOptions::default())
-            .storage_value_merger(|a, b, _| merge_values(a, b))
+            .storage_value_merger(|a, b, _, _| merge_values(a, b))
             .build_arc();
 
-        let memtable = Arc::new(MemTable::create_mock(options.clone(), 0, 0).unwrap());
+        let memtable = Arc::new(MemTable::create_mock(options.clone(), 0, KeyspaceDescriptor::create_mock(Type::String)).unwrap());
         memtable.set(&transaction(10), Bytes::from("aa"), &vec![1]);
         memtable.set(&transaction(1), Bytes::from("alberto"), &vec![1]);
         memtable.set(&transaction(3), Bytes::from("alberto"), &vec![1]);
@@ -324,9 +325,9 @@ mod test {
         memtable.set(&transaction(1), Bytes::from("wili"), &vec![2]);
 
         let mut iterator = StorageEngineIterator::create(
-            0,
+            KeyspaceDescriptor::create_mock(Type::String),
             &options,
-            MemtableIterator::create(&memtable, &Transaction::none()),
+            MemtableIterator::create(&memtable, &Transaction::none(), KeyspaceDescriptor::create_mock(Type::String)),
         );
 
         assert!(iterator.next());

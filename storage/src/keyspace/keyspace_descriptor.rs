@@ -3,12 +3,24 @@ use shared::SimpleDbError::{CannotCreateKeyspaceDescriptorFile, CannotDecodeKeys
 use shared::{DecodeError, DecodeErrorType, Flag, KeyspaceId, SimpleDbError, SimpleDbFile, SimpleDbFileMode, Type};
 use std::path::PathBuf;
 
+#[derive(Copy, Clone)]
 pub struct KeyspaceDescriptor {
     pub(crate) flags: Flag,
     pub(crate) key_type: Type,
+    pub(crate) keyspace_id: KeyspaceId //Not serialized
 }
 
 impl KeyspaceDescriptor {
+    pub fn create_mock(
+        key_type: Type
+    ) -> KeyspaceDescriptor {
+        KeyspaceDescriptor {
+            keyspace_id: 0,
+            key_type,
+            flags: 0,
+        }
+    }
+
     pub fn create(
         flags: Flag,
         keyspace_path: PathBuf,
@@ -16,6 +28,7 @@ impl KeyspaceDescriptor {
         key_type: Type
     ) -> Result<KeyspaceDescriptor, SimpleDbError> {
         let keyspace_descriptor = KeyspaceDescriptor {
+            keyspace_id,
             key_type,
             flags,
         };
@@ -59,6 +72,7 @@ impl KeyspaceDescriptor {
         let flags = bytes.get_u64_le();
 
         Ok(KeyspaceDescriptor {
+            keyspace_id,
             key_type,
             flags
         })

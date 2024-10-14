@@ -4,9 +4,10 @@ use serde::{Deserialize, Serialize};
 use crate::sst::sstables::SSTables;
 use std::time::Duration;
 use std::sync::Arc;
-use shared::Flag;
+use shared::{Flag, Type};
 use shared::logger::logger;
 use shared::logger::SimpleDbLayer::StorageKeyspace;
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::manifest::manifest::{Manifest, ManifestOperationContent};
 use crate::transactions::transaction_manager::TransactionManager;
 
@@ -15,9 +16,7 @@ pub struct Compaction {
     options: Arc<shared::SimpleDbOptions>,
     sstables: Arc<SSTables>,
     manifest: Arc<Manifest>,
-
-    keyspace_id: shared::KeyspaceId,
-    keyspace_flags: Flag,
+    keyspace_desc: KeyspaceDescriptor,
 }
 
 struct CompactionThread {
@@ -25,9 +24,7 @@ struct CompactionThread {
     options: Arc<shared::SimpleDbOptions>,
     sstables: Arc<SSTables>,
     manifest: Arc<Manifest>,
-
-    keyspace_id: shared::KeyspaceId,
-    keyspace_flags: Flag,
+    keyspace_desc: KeyspaceDescriptor
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -42,28 +39,25 @@ impl Compaction {
         options: Arc<shared::SimpleDbOptions>,
         sstables: Arc<SSTables>,
         manifest: Arc<Manifest>,
-        keyspace_id: shared::KeyspaceId,
-        keyspace_flags: Flag,
+        keyspace_desc: KeyspaceDescriptor,
     ) -> Arc<Compaction> {
         Arc::new(Compaction {
             transaction_manager: transaction_manager.clone(),
             options: options.clone(),
             sstables: sstables.clone(),
             manifest: manifest.clone(),
-            keyspace_flags,
-            keyspace_id
+            keyspace_desc,
         })
     }
 
     pub fn start_compaction_thread(&self) {
-        logger().info(StorageKeyspace(self.keyspace_id), "Starting compaction thread");
+        logger().info(StorageKeyspace(self.keyspace_desc.keyspace_id), "Starting compaction thread");
 
         let compaction_thread = CompactionThread {
             transaction_manager: self.transaction_manager.clone(),
-            keyspace_flags: self.keyspace_flags,
             sstables: self.sstables.clone(),
             manifest: self.manifest.clone(),
-            keyspace_id: self.keyspace_id,
+            keyspace_desc: self.keyspace_desc,
             options: self.options.clone(),
         };
 
@@ -72,13 +66,13 @@ impl Compaction {
         });
     }
 
-    pub fn compact(&self, compaction_task: CompactionTask) -> Result<(), shared::SimpleDbError> {
+    pub fn compact(&self, compaction_task: CompactionTask, key_type: Type) -> Result<(), shared::SimpleDbError> {
         match compaction_task {
             CompactionTask::SimpleLeveled(simple_leveled_task) => start_simple_leveled_compaction(
-                simple_leveled_task, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id, self.keyspace_flags
+                simple_leveled_task, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_desc
             ),
             CompactionTask::Tiered(tiered_task) => start_tiered_compaction(
-                tiered_task, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id, self.keyspace_flags
+                tiered_task, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_desc
             ),
         }
     }
@@ -93,7 +87,7 @@ impl CompactionThread {
                 let operation_id = self.manifest.append_operation(ManifestOperationContent::Compaction(compaction_task));
 
                 if let Err(compaction_error) = self.compact(compaction_task) {
-                    logger().error(StorageKeyspace(self.keyspace_id), &format!("Error while compacting: {:?}", compaction_error));
+                    logger().error(StorageKeyspace(self.keyspace_desc.keyspace_id), &format!("Error while compacting: {:?}", compaction_error));
                 }
 
                 if let Ok(operation_id) = operation_id {
@@ -127,10 +121,10 @@ impl CompactionThread {
     fn compact(&self, compaction_task: CompactionTask) -> Result<(), shared::SimpleDbError> {
         match compaction_task {
             CompactionTask::SimpleLeveled(simple_leveled_task) => start_simple_leveled_compaction(
-                simple_leveled_task, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id, self.keyspace_flags
+                simple_leveled_task, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_desc
             ),
             CompactionTask::Tiered(tiered_task) => start_tiered_compaction(
-                tiered_task, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_id, self.keyspace_flags,
+                tiered_task, &self.transaction_manager, &self.options, &self.sstables, self.keyspace_desc,
             ),
         }
     }

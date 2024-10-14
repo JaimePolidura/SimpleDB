@@ -1,3 +1,3 @@
 pub mod keyspace;
 pub mod keyspaces;
-mod keyspace_descriptor;
+pub mod keyspace_descriptor;

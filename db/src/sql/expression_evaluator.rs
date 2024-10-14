@@ -99,17 +99,17 @@ fn evaluate_constant_binary_op(
 
     match operator {
         BinaryOperator::Add => left.add(&right),
-        BinaryOperator::Subtract => left.substract(&right),
+        BinaryOperator::Subtract => left.subtract(&right),
         BinaryOperator::Multiply => left.multiply(&right),
         BinaryOperator::Divide => left.divide(&right),
         BinaryOperator::And => left.and(&right),
         BinaryOperator::Or => left.or(&right),
-        BinaryOperator::NotEqual => left.not_equal(&right),
-        BinaryOperator::Equal => left.equal(&right),
-        BinaryOperator::Greater => left.greater(&right),
-        BinaryOperator::GreaterEqual => left.greater_equal(&right),
-        BinaryOperator::Less => left.less(&right),
-        BinaryOperator::LessEqual => left.less_equal(&right),
+        BinaryOperator::NotEqual => left.ne(&right),
+        BinaryOperator::Equal => left.eq(&right),
+        BinaryOperator::Greater => left.gt(&right),
+        BinaryOperator::GreaterEqual => left.ge(&right),
+        BinaryOperator::Less => left.lt(&right),
+        BinaryOperator::LessEqual => left.le(&right),
     }
 }
 

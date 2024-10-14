@@ -5,12 +5,14 @@ use std::fs::DirEntry;
 use std::path::PathBuf;
 use std::sync::Arc;
 use shared::key::Key;
+use shared::{SimpleDbError, SimpleDbFile, Type};
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 
 pub struct Wal {
-    keyspace_id: shared::KeyspaceId,
     options: Arc<shared::SimpleDbOptions>,
     memtable_id: shared::MemtableId,
     file: shared::SimpleDbFile,
+    keyspace_desc: KeyspaceDescriptor
 }
 
 pub(crate) struct WalEntry {
@@ -21,14 +23,14 @@ pub(crate) struct WalEntry {
 impl Wal {
     pub fn create(
         options: Arc<shared::SimpleDbOptions>,
-        keyspace_id: shared::KeyspaceId,
-        memtable_id: shared::MemtableId
+        memtable_id: shared::MemtableId,
+        keyspace_desc: KeyspaceDescriptor
     ) -> Result<Wal, shared::SimpleDbError> {
         Ok(Wal {
-            file: shared::SimpleDbFile::open(Self::to_wal_file_path(&options, memtable_id, keyspace_id).as_path(), shared::SimpleDbFileMode::AppendOnly)
-                .map_err(|e| shared::SimpleDbError::CannotCreateWal(keyspace_id, memtable_id, e))?,
+            file: SimpleDbFile::open(Self::to_wal_file_path(&options, memtable_id, keyspace_desc.keyspace_id).as_path(), shared::SimpleDbFileMode::AppendOnly)
+                .map_err(|e| shared::SimpleDbError::CannotCreateWal(keyspace_desc.keyspace_id, memtable_id, e))?,
             options,
-            keyspace_id,
+            keyspace_desc,
             memtable_id,
         })
     }
@@ -38,17 +40,17 @@ impl Wal {
         memtable_id: shared::MemtableId
     ) -> Result<Wal, shared::SimpleDbError> {
         Ok(Wal {
+            keyspace_desc: KeyspaceDescriptor::create_mock(Type::String),
             file: shared::SimpleDbFile::create_mock(),
-            keyspace_id: 0,
-            options,
             memtable_id,
+            options,
         })
     }
 
     pub fn add_entry(&mut self, key: &Key, value: &[u8]) -> Result<(), shared::SimpleDbError> {
         let encoded = self.encode(key, value);
         self.file.write(&encoded)
-            .map_err(|e| shared::SimpleDbError::CannotWriteWalEntry(self.keyspace_id, self.memtable_id, e))?;
+            .map_err(|e| shared::SimpleDbError::CannotWriteWalEntry(self.keyspace_desc.keyspace_id, self.memtable_id, e))?;
 
         if matches!(self.options.durability_level, shared::DurabilityLevel::Strong) {
             let _ = self.file.fsync();
@@ -59,7 +61,7 @@ impl Wal {
 
     pub(crate) fn read_entries(&self) -> Result<Vec<WalEntry>, shared::SimpleDbError> {
         let entries = self.file.read_all()
-            .map_err(|e| shared::SimpleDbError::CannotReadWalEntries(self.keyspace_id, self.memtable_id, e))?;
+            .map_err(|e| shared::SimpleDbError::CannotReadWalEntries(self.keyspace_desc.keyspace_id, self.memtable_id, e))?;
         let mut current_ptr = entries.as_slice();
         let mut entries: Vec<WalEntry> = Vec::new();
         let mut current_offset = 0;
@@ -75,7 +77,7 @@ impl Wal {
             let key_bytes = &current_ptr[..key_len];
             current_ptr.advance(key_len);
             entry_bytes_size = entry_bytes_size + key_len;
-            let key = Key::create(Bytes::from(key_bytes.to_vec()), key_timestmap);
+            let key = Key::create(Bytes::from(key_bytes.to_vec()), self.keyspace_desc.key_type, key_timestmap);
 
             let value_len = current_ptr.get_u32_le() as usize;
             entry_bytes_size = entry_bytes_size + 4;
@@ -88,7 +90,7 @@ impl Wal {
             entry_bytes_size = entry_bytes_size + 4;
 
             if expected_crc != actual_crc {
-                return Err(shared::SimpleDbError::CannotDecodeWal(self.keyspace_id, self.memtable_id, shared::DecodeError {
+                return Err(shared::SimpleDbError::CannotDecodeWal(self.keyspace_desc.keyspace_id, self.memtable_id, shared::DecodeError {
                     error_type: shared::DecodeErrorType::CorruptedCrc(actual_crc, expected_crc),
                     offset: current_offset,
                     index: entries.len(),
@@ -116,14 +118,14 @@ impl Wal {
 
     pub fn get_persisted_wal_id(
         options: &Arc<shared::SimpleDbOptions>,
-        keyspace_id: shared::KeyspaceId
+        keyspace_desc: KeyspaceDescriptor
     ) -> Result<(Vec<Wal>, shared::MemtableId), shared::SimpleDbError> {
-        let path = shared::get_directory_usize(&options.base_path, keyspace_id);
+        let path = shared::get_directory_usize(&options.base_path, keyspace_desc.keyspace_id);
         let path = path.as_path();
         let mut max_memtable_id: usize = 0;
         let mut wals: Vec<Wal> = Vec::new();
 
-        for file in fs::read_dir(path).map_err(|e| shared::SimpleDbError::CannotReadWalFiles(keyspace_id, e))? {
+        for file in fs::read_dir(path).map_err(|e| SimpleDbError::CannotReadWalFiles(keyspace_desc.keyspace_id, e))? {
             let file = file.unwrap();
 
             if !Self::is_wal_file(&file) {
@@ -134,9 +136,9 @@ impl Wal {
                 max_memtable_id = max(max_memtable_id, memtable_id);
                 wals.push(Wal{
                     file: shared::SimpleDbFile::open(file.path().as_path(), shared::SimpleDbFileMode::AppendOnly)
-                        .map_err(|e| shared::SimpleDbError::CannotReadWalFiles(keyspace_id, e))?,
+                        .map_err(|e| shared::SimpleDbError::CannotReadWalFiles(keyspace_desc.keyspace_id, e))?,
                     options: options.clone(),
-                    keyspace_id,
+                    keyspace_desc,
                     memtable_id,
                 });
             }

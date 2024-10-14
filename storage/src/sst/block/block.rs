@@ -1,7 +1,8 @@
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::sst::block::block_decoder::decode_block;
 use crate::sst::block::block_encoder::encode_block;
 use crate::transactions::transaction::Transaction;
-use bytes::{Bytes};
+use bytes::Bytes;
 use shared::key::Key;
 use std::sync::Arc;
 
@@ -16,6 +17,8 @@ pub const BLOCK_FOOTER_LENGTH: usize =
 pub struct Block {
     pub(crate) entries: Vec<u8>,
     pub(crate) offsets: Vec<u16>,
+
+    pub(crate) keyspace_desc: KeyspaceDescriptor, //Not serialized
 }
 
 impl Block {
@@ -25,9 +28,10 @@ impl Block {
 
     pub fn deserialize(
         encoded: &Vec<u8>,
-        options: &Arc<shared::SimpleDbOptions>
+        options: &Arc<shared::SimpleDbOptions>,
+        keyspace_descriptor: KeyspaceDescriptor
     ) -> Result<Block, shared::DecodeErrorType> {
-        decode_block(encoded, options)
+        decode_block(encoded, options, keyspace_descriptor)
     }
 
     pub fn is_key_bytes_higher(&self, key: &Key, inclusive: bool) -> bool {
@@ -143,7 +147,7 @@ impl Block {
     pub fn get_key_by_index(&self, n_entry_index: usize) -> Key {
         let entry_index = self.offsets[n_entry_index] as usize;
         let key_ptr = &mut &self.entries[entry_index..];
-        Key::deserialize(key_ptr)
+        Key::deserialize(key_ptr, self.keyspace_desc.key_type)
     }
 
     //Expect n_entry_index to be an index to block::offsets array
@@ -160,15 +164,17 @@ impl Block {
 
 #[cfg(test)]
 mod test {
+    use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
     use crate::sst::block::block::Block;
     use crate::sst::block::block_builder::BlockBuilder;
     use bytes::Bytes;
     use shared::key::Key;
+    use shared::Type;
     use std::sync::Arc;
 
     #[test]
     fn serialize_deserialize() {
-        let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()));
+        let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::String));
         block_builder.add_entry(Key::create_from_str("Jaime", 1), Bytes::from(vec![1]));
         block_builder.add_entry(Key::create_from_str("Javier", 1), Bytes::from(vec![2]));
         block_builder.add_entry(Key::create_from_str("Jose", 1), Bytes::from(vec![3]));
@@ -180,7 +186,7 @@ mod test {
 
         let encoded = block.serialize(&Arc::new(shared::SimpleDbOptions::default()));
 
-        let decoded_block_to_test = Block::deserialize(&encoded, &Arc::new(shared::SimpleDbOptions::default()))
+        let decoded_block_to_test = Block::deserialize(&encoded, &Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::String))
             .unwrap();
 
         assert_eq!(decoded_block_to_test.get_key_by_index(0).to_string(), String::from("Jaime"));

@@ -2,12 +2,15 @@ use std::sync::Arc;
 use bytes::{BufMut, Bytes};
 use block::{NOT_COMPRESSED, PREFIX_COMPRESSED};
 use shared::key::Key;
+use shared::Type;
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::sst::block::block;
 use crate::sst::block::block::Block;
 
 pub(crate) fn decode_block(
     encoded: &Vec<u8>,
-    options: &Arc<shared::SimpleDbOptions>
+    options: &Arc<shared::SimpleDbOptions>,
+    keyspace_desc: KeyspaceDescriptor
 ) -> Result<Block, shared::DecodeErrorType> {
     if encoded.len() != options.block_size_bytes {
         return Err(shared::DecodeErrorType::IllegalSize(options.block_size_bytes, encoded.len()));
@@ -18,12 +21,12 @@ pub(crate) fn decode_block(
     let n_entries: u16 = shared::u8_vec_to_u16_le(&encoded, options.block_size_bytes - 4);
     let offsets = decode_offsets(encoded, offsets_offset, n_entries);
     let (entries, new_offsets) = match flag {
-        PREFIX_COMPRESSED => Ok(decode_entries_prefix_compressed(encoded, &offsets)),
+        PREFIX_COMPRESSED => Ok(decode_entries_prefix_compressed(encoded, &offsets, keyspace_desc.key_type)),
         NOT_COMPRESSED => Ok((decode_entries_not_compressed(encoded, offsets_offset), offsets)),
         _ => Err(shared::DecodeErrorType::UnknownFlag(flag as usize)),
     }?;
 
-    Ok(Block{ offsets: new_offsets, entries })
+    Ok(Block{ offsets: new_offsets, entries, keyspace_desc })
 }
 
 fn decode_offsets(
@@ -40,6 +43,7 @@ fn decode_offsets(
 fn decode_entries_prefix_compressed(
     encoded: &Vec<u8>,
     offsets: &Vec<u16>,
+    key_type: Type
 ) -> (Vec<u8>, Vec<u16>) {
     let mut entries_decoded: Vec<u8> = Vec::new();
     let mut prev_key: Option<Key> = None;
@@ -61,10 +65,10 @@ fn decode_entries_prefix_compressed(
         let current_key = match prev_key.as_ref() {
             Some(prev_key) => {
                 let (overlaps, _) = prev_key.split(key_overlap_size as usize);
-                let rest_key = Key::create(Bytes::from(rest_key_u8_vec), key_txn_id);
+                let rest_key = Key::create(Bytes::from(rest_key_u8_vec), key_type, key_txn_id);
                 Key::merge(&overlaps, &rest_key, key_txn_id)
             },
-            None => Key::create(Bytes::from(rest_key_u8_vec), key_txn_id)
+            None => Key::create(Bytes::from(rest_key_u8_vec), key_type, key_txn_id)
         };
         current_index = current_index + rest_key_size as usize;
         entries_decoded.extend(current_key.serialize());

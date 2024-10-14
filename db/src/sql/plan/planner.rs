@@ -100,10 +100,10 @@ impl Planner {
 
         match scan_type {
             ScanType::ExactSecondary(column, exact_id_expr) => {
-                Ok(PlanStep::SecondaryExactExactScan(SecondaryExactScanStep::create(table.clone(), &column, exact_id_expr.serialize(), transaction, selection)?))
+                Ok(PlanStep::SecondaryExactExactScan(SecondaryExactScanStep::create(table.clone(), &column, exact_id_expr.get_literal_bytes(), transaction, selection)?))
             },
             ScanType::ExactPrimary(exact_id_expr) => {
-                Ok(PlanStep::PrimaryExactScan(PrimaryExactScanStep::create(table.clone(), exact_id_expr.serialize(), selection, transaction)?))
+                Ok(PlanStep::PrimaryExactScan(PrimaryExactScanStep::create(table.clone(), exact_id_expr.get_literal_bytes(), selection, transaction)?))
             },
             ScanType::Range(range) => {
                 if schema.is_secondary_indexed(&range.column_name) {

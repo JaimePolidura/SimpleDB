@@ -39,14 +39,14 @@ impl Table {
         storage: &Arc<storage::Storage>,
         database: Arc<Database>
     ) -> Result<Arc<Table>, SimpleDbError> {
-        let primary_key_type = columns.iter()
+        let primary_column_type = columns.iter()
             .find(|(_, _, is_primary)| *is_primary)
             .map(|(_, column_type, _)| column_type.clone())
             .ok_or(PrimaryColumnNotIncluded())?;
 
         let table_keyspace_id = storage.create_keyspace(
             KEYSPACE_TABLE_USER,
-            primary_key_type
+            primary_column_type
         )?;
         let table_descriptor = TableDescriptor::create(
             table_keyspace_id,
@@ -55,7 +55,7 @@ impl Table {
         )?;
 
         Ok(Arc::new(Table {
-            secondary_indexes: SecondaryIndexes::create_empty(storage.clone(), table_name),
+            secondary_indexes: SecondaryIndexes::create_empty(storage.clone(), table_name, primary_column_type),
             table_name: table_descriptor.table_name.clone(),
             storage_keyspace_id: table_keyspace_id,
             storage: storage.clone(),
@@ -492,8 +492,8 @@ impl Table {
                         .column_id;
 
                     match old_row_value.get_column_value(&column_secondary_indexed_column_name)? {
-                        Value => continue,
-                        value => old_data.push((column_id, value.serialize())),
+                        _ => continue,
+                        value => old_data.push((column_id, value.get_bytes().clone())),
                     };
                 }
             }

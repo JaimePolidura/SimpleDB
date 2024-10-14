@@ -8,7 +8,7 @@ use crossbeam_skiplist::SkipMap;
 use shared::logger::logger;
 use shared::logger::SimpleDbLayer::DB;
 use shared::SimpleDbError::IndexNotFound;
-use shared::{ColumnId, KeyspaceId, SimpleDbError, SimpleDbOptions};
+use shared::{ColumnId, KeyspaceId, SimpleDbError, SimpleDbOptions, Type};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use storage::{SimpleDbStorageIterator, Storage};
@@ -18,13 +18,15 @@ pub struct SecondaryIndexes {
     secondary_index_by_column_id: SkipMap<ColumnId, Arc<SecondaryIndex>>,
     storage: Arc<Storage>,
     table_name: String,
+    primary_column_type: Type,
 }
 
 impl SecondaryIndexes {
-    pub fn create_empty(storage: Arc<Storage>, table_name: &str) -> SecondaryIndexes {
+    pub fn create_empty(storage: Arc<Storage>, table_name: &str, primary_column_type: Type) -> SecondaryIndexes {
         SecondaryIndexes {
             secondary_index_by_column_id: SkipMap::new(),
             table_name: table_name.to_string(),
+            primary_column_type,
             storage
         }
     }
@@ -34,9 +36,10 @@ impl SecondaryIndexes {
         secondary_indexes.insert(1, Arc::new(SecondaryIndex::create_mock()));
 
         SecondaryIndexes {
-            storage: Arc::new(Storage::create_mock(&options)),
             secondary_index_by_column_id: secondary_indexes,
+            storage: Arc::new(Storage::create_mock(&options)),
             table_name: String::from(""),
+            primary_column_type: Type::I64,
         }
     }
 
@@ -49,6 +52,7 @@ impl SecondaryIndexes {
 
         let secondary_indexes = SkipMap::new();
         let columns = schema.get_columns();
+        let primary_column = schema.get_primary_column();
 
         for column in columns {
             if let Some(secondary_index_keyspace_id) = column.secondary_index_keyspace_id {
@@ -56,7 +60,8 @@ impl SecondaryIndexes {
                     storage.clone(),
                     SecondaryIndexState::Active,
                     secondary_index_keyspace_id,
-                    table_name.clone()
+                    table_name.clone(),
+                    primary_column.column_type
                 ));
                 secondary_indexes.insert(column.column_id, secondary_index);
             }
@@ -68,6 +73,7 @@ impl SecondaryIndexes {
 
         SecondaryIndexes {
             secondary_index_by_column_id: secondary_indexes,
+            primary_column_type: primary_column.column_type,
             table_name: table_name.clone(),
             storage
         }
@@ -86,7 +92,8 @@ impl SecondaryIndexes {
             self.storage.clone(),
             SecondaryIndexState::Creating,
             keyspace_id,
-            self.table_name.clone()
+            self.table_name.clone(),
+            self.primary_column_type.clone(),
         )));
 
         Ok(keyspace_id)

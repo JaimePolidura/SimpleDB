@@ -52,11 +52,11 @@ impl Keyspace {
     ) -> Result<Arc<Keyspace>, shared::SimpleDbError> {
         let path = shared::get_directory_usize(&options.base_path, keyspace_id);
         let descriptor = KeyspaceDescriptor::load_from_disk(keyspace_id, path)?;
-        let manifest = Arc::new(Manifest::create(options.clone(), keyspace_id)?);
-        let sstables = Arc::new(SSTables::open(options.clone(), keyspace_id, manifest.clone())?);
-        let memtables = Memtables::create_and_recover_from_wal(options.clone(), keyspace_id, descriptor.flags)?;
+        let manifest = Arc::new(Manifest::create(options.clone(), descriptor)?);
+        let sstables = Arc::new(SSTables::open(options.clone(), descriptor, manifest.clone())?);
+        let memtables = Memtables::create_and_recover_from_wal(options.clone(), descriptor)?;
         let compaction = Compaction::create(transaction_manager.clone(), options.clone(),
-                                            sstables.clone(), manifest.clone(), keyspace_id, descriptor.flags);
+                                            sstables.clone(), manifest.clone(), descriptor);
 
         Ok(Arc::new(Keyspace {
             transaction_manager,
@@ -77,7 +77,7 @@ impl Keyspace {
         inclusive: bool,
     ) -> SimpleDbStorageIterator {
         let mut iterator = StorageEngineIterator::create(
-            self.descriptor.flags,
+            self.descriptor,
             &self.options,
             TwoMergeIterator::create(
                 self.memtables.scan_all(&transaction),
@@ -93,7 +93,7 @@ impl Keyspace {
         transaction: &Transaction
     ) -> SimpleDbStorageIterator {
         StorageEngineIterator::create(
-            self.descriptor.flags,
+            self.descriptor,
             &self.options,
             TwoMergeIterator::create(
                 self.memtables.scan_all(&transaction),
@@ -189,7 +189,7 @@ impl Keyspace {
     }
 
     fn restart_compaction(&self, compaction: CompactionTask) {
-        self.compaction.compact(compaction)
+        self.compaction.compact(compaction, self.descriptor.key_type)
             .expect("Cannot restart compaction");
     }
 

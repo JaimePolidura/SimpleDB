@@ -1,6 +1,6 @@
 use bytes::{Buf, BufMut, Bytes};
 use shared::key::Key;
-use shared::{KeyspaceId, TxnId};
+use shared::{KeyspaceId, TxnId, Type};
 use storage::transactions::transaction::Transaction;
 
 #[derive(Clone, Debug, PartialOrd, PartialEq)]
@@ -21,11 +21,12 @@ impl PostingList {
 
     pub fn create_deleted(
         id: Bytes,
+        primary_key_type: Type,
         transaction: &Transaction
     ) -> PostingList {
         PostingList {
             entries: vec![PostingListEntry{
-                primary_key: Key::create(id, transaction.id()),
+                primary_key: Key::create(id,  primary_key_type, transaction.id()),
                 is_present: false,
             }]
         }
@@ -48,7 +49,7 @@ impl PostingList {
         let mut entries = Vec::new();
         for value in values {
             entries.push(PostingListEntry{
-                primary_key: Key::create(Bytes::copy_from_slice(value.0.as_bytes()), value.1),
+                primary_key: Key::create(Bytes::copy_from_slice(value.0.as_bytes()), Type::String, value.1),
                 is_present: value.2
             });
         }
@@ -84,13 +85,13 @@ impl PostingList {
         self.entries.is_empty()
     }
 
-    pub fn deserialize(ptr: &mut &[u8]) -> PostingList {
+    pub fn deserialize(ptr: &mut &[u8], primary_key_type: Type) -> PostingList {
         let n_entries = ptr.get_u64_le() as usize;
         let mut entries = Vec::with_capacity(n_entries);
 
         for _ in 0..n_entries {
             let is_present = ptr.get_u8() != 0x00;
-            let primary_key = Key::deserialize(ptr);
+            let primary_key = Key::deserialize(ptr, primary_key_type);
 
             entries.push(PostingListEntry {is_present, primary_key})
         }
@@ -124,6 +125,7 @@ impl PostingList {
 #[cfg(test)]
 mod test {
     use shared::key::Key;
+    use shared::Type;
     use crate::index::posting_list::{PostingList, PostingListEntry};
 
     #[test]
@@ -135,7 +137,7 @@ mod test {
         ]);
         let serialized = posting_list.serialize();
 
-        let deserialized = PostingList::deserialize(&mut serialized.as_slice());
+        let deserialized = PostingList::deserialize(&mut serialized.as_slice(), Type::String);
 
         assert_eq!(deserialized, PostingList{entries: vec![
             PostingListEntry{ primary_key: Key::create_from_str("Jaime", 1), is_present: true },

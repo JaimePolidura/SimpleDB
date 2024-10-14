@@ -4,7 +4,7 @@ use bytes::Bytes;
 use crossbeam_skiplist::SkipSet;
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::key::Key;
-use shared::TxnId;
+use shared::{TxnId, Type};
 use storage::transactions::transaction::Transaction;
 
 //This iterator will return the primary keys indexed::
@@ -12,6 +12,8 @@ use storage::transactions::transaction::Transaction;
 //  - They are not deleted
 pub struct SecondaryIndexIterator<I: StorageIterator> {
     transaction: Transaction,
+
+    primary_column_type: Type,
 
     posting_list_iterator: Option<PostingListIterator>,
     storage_iterator: I,
@@ -23,12 +25,14 @@ impl<I: StorageIterator> SecondaryIndexIterator<I> {
     pub fn create(
         transaction: &Transaction,
         iterator: I,
+        primary_column_type: Type
     ) -> SecondaryIndexIterator<I> {
         SecondaryIndexIterator {
             transaction: transaction.clone(),
             deleted_entries: SkipSet::new(),
             posting_list_iterator: None,
-            storage_iterator: iterator
+            storage_iterator: iterator,
+            primary_column_type
         }
     }
 
@@ -83,7 +87,7 @@ impl<I: StorageIterator> SecondaryIndexIterator<I> {
         let posting_list_bytes = self.storage_iterator.value();
         let posting_list_secondary_value = self.storage_iterator.key();
 
-        let posting_list = PostingList::deserialize(&mut posting_list_bytes.clone());
+        let posting_list = PostingList::deserialize(&mut posting_list_bytes.clone(), self.primary_column_type);
         self.posting_list_iterator = Some(PostingListIterator::create(
             posting_list_secondary_value.clone(), &self.transaction, posting_list
         ));
@@ -103,6 +107,7 @@ mod test  {
     use bytes::Bytes;
     use shared::iterators::mock_iterator::MockIterator;
     use shared::key::Key;
+    use shared::Type;
     use storage::transactions::transaction::Transaction;
 
     #[test]
@@ -110,6 +115,7 @@ mod test  {
         let mut secondary_index_iterator = SecondaryIndexIterator::create(
             &Transaction::none(),
             MockIterator::create(),
+            Type::String,
         );
         secondary_index_iterator.seek(&Bytes::from("A".as_bytes()), true);
 
@@ -169,7 +175,8 @@ mod test  {
 
         SecondaryIndexIterator::create(
             &Transaction::create(5),
-            inner_iterator
+            inner_iterator,
+            Type::I64,
         )
     }
 }

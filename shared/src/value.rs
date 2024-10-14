@@ -1,8 +1,9 @@
+use std::cmp::Ordering;
 use crate::SimpleDbError::{IllegalTypeCastFromBytes, IllegalTypeOperation};
 use crate::{utils, SimpleDbError, TypeId};
 use bytes::Bytes;
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum Type {
     I8,
     U8,
@@ -134,7 +135,7 @@ impl Type {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Value {
     value_type: Type,
     value_bytes: Bytes,
@@ -193,8 +194,8 @@ impl Value {
         }
     }
 
-    pub fn serialize(&self) -> Bytes {
-        self.value_bytes.clone()
+    pub fn get_bytes(&self) -> &Bytes {
+        &self.value_bytes
     }
 
     pub fn get_type(&self) -> Type {
@@ -351,27 +352,51 @@ impl Value {
         }
     }
 
-    pub fn greater(&self, other: &Value) -> Result<Value, SimpleDbError> {
+    pub fn gt_bytes(&self, other: &Bytes) -> bool {
+        let other_value = Value::create(other.clone(), self.value_type.clone()).unwrap();
+        self.comparation_op(&other_value, |a, b| a > b, |a, b| a > b, |a, b| a > b)
+            .unwrap()
+    }
+
+    pub fn gt(&self, other: &Value) -> Result<bool, SimpleDbError> {
         self.comparation_op(other, |a, b| a > b, |a, b| a > b, |a, b| a > b)
     }
 
-    pub fn greater_equal(&self, other: &Value) -> Result<Value, SimpleDbError> {
+    pub fn ge_bytes(&self, other: &Bytes) -> bool {
+        let other_value = Value::create(other.clone(), self.value_type.clone()).unwrap();
+        self.comparation_op(&other_value, |a, b| a >= b, |a, b| a >= b, |a, b| a >= b)
+            .unwrap()
+    }
+
+    pub fn ge(&self, other: &Value) -> Result<bool, SimpleDbError> {
         self.comparation_op(other, |a, b| a >= b, |a, b| a >= b, |a, b| a >= b)
     }
 
-    pub fn less(&self, other: &Value) -> Result<Value, SimpleDbError> {
+    pub fn lt_bytes(&self, other: &Bytes) -> bool {
+        let other_value = Value::create(other.clone(), self.value_type.clone()).unwrap();
+        self.comparation_op(&other_value, |a, b| a < b, |a, b| a < b, |a, b| a < b)
+            .unwrap()
+    }
+
+    pub fn lt(&self, other: &Value) -> Result<bool, SimpleDbError> {
         self.comparation_op(other, |a, b| a < b, |a, b| a < b, |a, b| a < b)
     }
 
-    pub fn less_equal(&self, other: &Value) -> Result<Value, SimpleDbError> {
+    pub fn le_bytes(&self, other: &Bytes) -> bool {
+        let other_value = Value::create(other.clone(), self.value_type.clone()).unwrap();
+        self.comparation_op(&other_value, |a, b| a <= b, |a, b| a <= b, |a, b| a <= b)
+            .unwrap()
+    }
+
+    pub fn le(&self, other: &Value) -> Result<bool, SimpleDbError> {
         self.comparation_op(other, |a, b| a <= b, |a, b| a <= b, |a, b| a <= b)
     }
 
-    pub fn equal(&self, other: &Value) -> Result<Value, SimpleDbError> {
+    pub fn eq(&self, other: &Value) -> Result<bool, SimpleDbError> {
         self.comparation_op(other, |a, b| a == b, |a, b| a == b, |a, b| a == b)
     }
 
-    pub fn not_equal(&self, other: &Value) -> Result<Value, SimpleDbError> {
+    pub fn ne(&self, other: &Value) -> Result<bool, SimpleDbError> {
         self.comparation_op(other, |a, b| a != b, |a, b| a != b, |a, b| a != b)
     }
 
@@ -379,7 +404,7 @@ impl Value {
         self.arithmetic_op(other, |a, b| a + b, |a, b| a + b)
     }
 
-    pub fn substract(&self, other: &Value) -> Result<Value, SimpleDbError> {
+    pub fn subtract(&self, other: &Value) -> Result<Value, SimpleDbError> {
         self.arithmetic_op(other, |a, b| a - b, |a, b| a - b)
     }
 
@@ -415,7 +440,7 @@ impl Value {
         fp_op: FpOp,
         int_op: IntOp,
         str_op: StrOp
-    ) -> Result<Value, SimpleDbError>
+    ) -> Result<bool, SimpleDbError>
     where
         StrOp: Fn(&String, &String) -> bool,
         IntOp: Fn(i64, i64) -> bool,
@@ -426,11 +451,11 @@ impl Value {
         }
 
         if self.is_fp_number() && other.is_fp_number() {
-            Ok(Self::create_boolean(fp_op(self.get_f64()?, other.get_f64()?)))
+            Ok(fp_op(self.get_f64()?, other.get_f64()?))
         } else if self.is_integer_number() && other.is_integer_number() {
-            Ok(Self::create_boolean(int_op(self.get_i64()?, other.get_i64()?)))
+            Ok(int_op(self.get_i64()?, other.get_i64()? ))
         } else if self.is_string() && other.is_string() {
-            Ok(Self::create_boolean(str_op(&self.get_string()?, &other.get_string()?)))
+            Ok(str_op(&self.get_string()?, &other.get_string()?))
         } else {
             Err(SimpleDbError::IllegalTypeOperation("Cannot compare values"))
         }
@@ -453,6 +478,42 @@ impl Value {
             Type::Date => todo!(),
             Type::Blob => true,
             Type::Null => true,
+        }
+    }
+}
+
+impl Ord for Value {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.get_bytes().eq(other.get_bytes()) {
+            return Ordering::Equal;
+        }
+
+        if self.lt(other).unwrap() {
+            Ordering::Less
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+
+impl PartialOrd for Value {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if !self.get_type().is_comparable(&other.get_type()) {
+            return None;
+        }
+        if self.get_bytes().eq(other.get_bytes()) {
+            return Some(Ordering::Equal);
+        }
+
+        match self.lt(other) {
+            Ok(result) => {
+                if result {
+                    Some(Ordering::Less)
+                } else {
+                    Some(Ordering::Equal)
+                }
+            }
+            Err(_) => None
         }
     }
 }

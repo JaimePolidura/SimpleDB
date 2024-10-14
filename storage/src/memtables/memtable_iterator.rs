@@ -1,3 +1,4 @@
+use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::memtables::memtable::MemTable;
 use crate::transactions::transaction::Transaction;
 use bytes::Bytes;
@@ -21,15 +22,21 @@ pub struct MemtableIterator {
     current_key: Option<Key>,
 
     transaction: Transaction,
+    keyspace_desc: KeyspaceDescriptor
 }
 
 impl MemtableIterator {
-    pub fn create(memtable: &Arc<MemTable>, transaction: &Transaction) -> MemtableIterator {
+    pub fn create(
+        memtable: &Arc<MemTable>,
+        transaction: &Transaction,
+        keyspace_desc: KeyspaceDescriptor
+    ) -> MemtableIterator {
         MemtableIterator {
             transaction: transaction.clone(),
             memtable: memtable.clone(),
             current_value: None,
             current_key: None,
+            keyspace_desc
         }
     }
 
@@ -111,7 +118,7 @@ impl StorageIterator for MemtableIterator {
 
     fn seek(&mut self, key_bytes: &Bytes, inclusive: bool) {
         let key_txn_id = if inclusive { 0 } else { MAX_TXN_ID };
-        let key = Key::create(key_bytes.clone(), key_txn_id);
+        let key = Key::create(key_bytes.clone(), self.keyspace_desc.key_type, key_txn_id);
         let bound = if inclusive { Included(&key) } else { Excluded(&key) };
 
         if let Some(seeked_entry) = self.memtable.data.lower_bound(bound) {
@@ -137,6 +144,7 @@ impl StorageIterator for MemtableIterator {
 
 #[cfg(test)]
 mod test {
+    use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
     use crate::memtables::memtable::MemTable;
     use crate::memtables::memtable_iterator::MemtableIterator;
     use crate::transactions::transaction::Transaction;
@@ -145,17 +153,17 @@ mod test {
     use shared::assertions::assert_iterator_key_seq;
     use shared::iterators::storage_iterator::StorageIterator;
     use shared::key::Key;
+    use shared::{assertions, Type};
     use std::sync::Arc;
-    use shared::assertions;
 
     #[test]
     fn one_entry() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, KeyspaceDescriptor::create_mock(Type::String))
             .unwrap());
         memtable.set_active();
         memtable.set(&transaction(1), Bytes::from("B"), &vec![]);
 
-        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
+        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none(), KeyspaceDescriptor::create_mock(Type::String));
 
         assert!(iterator.has_next());
         iterator.next();
@@ -165,16 +173,16 @@ mod test {
 
     #[test]
     fn emtpy() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, KeyspaceDescriptor::create_mock(Type::String))
             .unwrap());
 
-        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
+        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none(), KeyspaceDescriptor::create_mock(Type::String));
         assertions::assert_empty_iterator(iterator);
     }
 
     #[test]
     fn iterators_seek() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, KeyspaceDescriptor::create_mock(Type::String))
             .unwrap());
         memtable.set_active();
         memtable.set(&transaction(1), Bytes::from("B"), &vec![]);
@@ -186,47 +194,47 @@ mod test {
         memtable.set(&transaction(7), Bytes::from("F"), &vec![]);
 
         //[B, D, F] Seek: A, Inclusive
-        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
+        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none(), KeyspaceDescriptor::create_mock(Type::String));
         iterator.seek(&Bytes::from("A"), true);
         assert!(iterator.has_next());
         iterator.next();
         assert!(iterator.key().eq(&Key::create_from_str("B", 1)));
 
         //[B, D, F] Seek: D, Inclusive
-        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
+        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none(), KeyspaceDescriptor::create_mock(Type::String));
         iterator.seek(&Bytes::from("D"), true);
         assert!(iterator.has_next());
         iterator.next();
         assert!(iterator.key().eq(&Key::create_from_str("D", 4)));
 
         //[B, D, F] Seek: D, Exclusive
-        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
+        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none(), KeyspaceDescriptor::create_mock(Type::String));
         iterator.seek(&Bytes::from("D"), false);
         assert!(iterator.has_next());
         iterator.next();
         assert_eq!(iterator.key().clone(), Key::create_from_str("F", 6));
 
         //[B, D, F] Seek: D, Exclusive
-        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
+        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none(), KeyspaceDescriptor::create_mock(Type::String));
         iterator.seek(&Bytes::from("F"), true);
         assert!(iterator.has_next());
         iterator.next();
         assert_eq!(iterator.key().clone(), Key::create_from_str("F", 6));
 
         //[B, D, F] Seek: G, Inclusive
-        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
+        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none(), KeyspaceDescriptor::create_mock(Type::String));
         iterator.seek(&Bytes::from("G"), true);
         assertions::assert_empty_iterator(iterator);
 
         //[B, D, F] Seek: F, Exclusive
-        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none());
+        let mut iterator = MemtableIterator::create(&memtable, &Transaction::none(), KeyspaceDescriptor::create_mock(Type::String));
         iterator.seek(&Bytes::from("F"), false);
         assertions::assert_empty_iterator(iterator);
     }
 
     #[test]
     fn iterators_read_uncommited() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, KeyspaceDescriptor::create_mock(Type::String))
             .unwrap());
         memtable.set(&transaction(1), Bytes::from("alberto"), &vec![]);
         memtable.set(&transaction(2), Bytes::from("alberto"), &vec![]);
@@ -237,7 +245,7 @@ mod test {
         memtable.set(&transaction(0), Bytes::from("wili"), &vec![]);
 
         assert_iterator_key_seq(
-            MemtableIterator::create(&memtable, &Transaction::none()),
+            MemtableIterator::create(&memtable, &Transaction::none(), KeyspaceDescriptor::create_mock(Type::String)),
             vec![
                 Key::create_from_str("alberto", 1),
                 Key::create_from_str("alberto", 2),
@@ -252,7 +260,7 @@ mod test {
 
     #[test]
     fn iterators_snapshot_isolation() {
-        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, 0)
+        let memtable = Arc::new(MemTable::create_mock(Arc::new(shared::SimpleDbOptions::default()), 0, KeyspaceDescriptor::create_mock(Type::String))
             .unwrap());
         memtable.set_active();
         memtable.set(&transaction(10), Bytes::from("aa"), &vec![]); //Cannot be read by the transaction, should be ignored
@@ -266,7 +274,7 @@ mod test {
         memtable.set(&transaction(0), Bytes::from("wili"), &vec![]);
 
         assert_iterator_key_seq(
-            MemtableIterator::create(&memtable, &transaction_with_iso(3, IsolationLevel::SnapshotIsolation)),
+            MemtableIterator::create(&memtable, &transaction_with_iso(3, IsolationLevel::SnapshotIsolation), KeyspaceDescriptor::create_mock(Type::String)),
             vec![
                 Key::create_from_str("alberto", 1),
                 Key::create_from_str("alberto", 2),
