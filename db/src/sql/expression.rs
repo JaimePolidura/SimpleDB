@@ -89,7 +89,7 @@ impl Expression {
         }
     }
 
-    pub fn is_constant(&self) -> bool {
+    pub fn is_literal(&self) -> bool {
         matches!(self, Expression::Literal(_))
     }
 
@@ -194,7 +194,7 @@ impl Expression {
         op: Op
     ) -> Result<Expression, SimpleDbError>
     where
-        Op: Fn(&Value, &Value) -> Result<bool, SimpleDbError>
+        Op: Fn(&Value, &Value) -> bool
     {
         if self.is_null() && other.is_null() {
             return Ok(null_null_return_value);
@@ -203,9 +203,15 @@ impl Expression {
             return Ok(null_some_return_value);
         }
 
+        let other_value = other.get_value()?;
+        let self_value = self.get_value()?;
+        if !self_value.is_comparable(&other_value) {
+            return Err(SimpleDbError::IllegalTypeOperation("Cannot compare values"));
+        }
+
         match &self {
             Expression::Literal(value) => Ok(
-                Expression::Literal(Value::create_boolean(op(value, &other.get_value()?)?))
+                Expression::Literal(Value::create_boolean(op(&self_value, &other_value)))
             ),
             _ => Err(MalformedQuery(String::from("Cannot add values")))
         }

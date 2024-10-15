@@ -176,7 +176,7 @@ mod test  {
         SecondaryIndexIterator::create(
             &Transaction::create(5),
             inner_iterator,
-            Type::I64,
+            Type::String,
         )
     }
 }

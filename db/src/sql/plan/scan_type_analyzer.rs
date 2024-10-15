@@ -51,9 +51,9 @@ impl ScanTypeAnalyzer {
                 Ok(ScanType::Full)
             },
             BinaryOperator::Equal => {
-                if right.is_constant() && self.schema.is_secondary_indexed(&left.get_identifier()?) {
+                if right.is_literal() && self.schema.is_secondary_indexed(&left.get_identifier()?) {
                     Ok(ScanType::ExactSecondary(left.get_identifier()?, *right.clone()))
-                } else if right.is_constant() && left.identifier_eq(&self.schema.get_primary_column().column_name) {
+                } else if right.is_literal() && left.identifier_eq(&self.schema.get_primary_column().column_name) {
                     Ok(ScanType::ExactPrimary(*right.clone()))
                 } else {
                     Ok(ScanType::Full)
@@ -64,7 +64,7 @@ impl ScanTypeAnalyzer {
             },
             BinaryOperator::GreaterEqual |
             BinaryOperator::Greater => {
-                if right.is_constant() && (left.identifier_eq(&self.schema.get_primary_column().column_name) ||
+                if right.is_literal() && (left.identifier_eq(&self.schema.get_primary_column().column_name) ||
                     self.schema.is_secondary_indexed(&left.get_identifier()?)) {
                     Ok(ScanType::Range(RangeScan {
                         column_name: left.get_identifier()?,
@@ -79,7 +79,7 @@ impl ScanTypeAnalyzer {
             },
             BinaryOperator::LessEqual |
             BinaryOperator::Less => {
-                if right.is_constant() && (left.identifier_eq(&self.schema.get_primary_column().column_name) ||
+                if right.is_literal() && (left.identifier_eq(&self.schema.get_primary_column().column_name) ||
                     self.schema.is_secondary_indexed(&left.get_identifier()?)) {
 
                     Ok(ScanType::Range(RangeScan{
@@ -331,14 +331,13 @@ impl ScanTypeAnalyzer {
 
 #[cfg(test)]
 mod test {
+    use shared::Value;
     use crate::sql::expression::Expression;
     use crate::sql::parser::parser::Parser;
     use crate::sql::plan::scan_type::ScanType;
     use crate::sql::plan::scan_type::ScanType::{ExactPrimary, ExactSecondary, MergeUnion};
     use crate::sql::plan::scan_type_analyzer::ScanTypeAnalyzer;
     use crate::table::schema::{Column, Schema};
-    use crate::table::table::Table;
-    use crate::value::Value;
 
     #[test]
     fn compound_2() {
@@ -356,12 +355,12 @@ mod test {
 
         assert_eq!(result, ScanType::MergeIntersection(
             Box::new(MergeUnion(
-                Box::new(ExactPrimary(Expression::Literal(Value::I64(1)))),
-                Box::new(ExactSecondary(String::from("dinero"), Expression::Literal(Value::I64(100)))),
+                Box::new(ExactPrimary(Expression::Literal(Value::create_i64(1)))),
+                Box::new(ExactSecondary(String::from("dinero"), Expression::Literal(Value::create_i64(100)))),
             )),
             Box::new(MergeUnion(
-                Box::new(ExactPrimary(Expression::Literal(Value::I64(2)))),
-                Box::new(ExactSecondary(String::from("dinero"), Expression::Literal(Value::I64(200)))),
+                Box::new(ExactPrimary(Expression::Literal(Value::create_i64(2)))),
+                Box::new(ExactSecondary(String::from("dinero"), Expression::Literal(Value::create_i64(200)))),
             )),
         ));
     }
@@ -398,8 +397,8 @@ mod test {
 
         match result {
             ScanType::MergeUnion(left, right) => {
-                assert_eq!(*right, ScanType::ExactSecondary(String::from("dinero"), Expression::Literal(Value::I64(100))));
-                assert_eq!(*left, ScanType::ExactPrimary(Expression::Literal(Value::I64(1))));
+                assert_eq!(*right, ScanType::ExactSecondary(String::from("dinero"), Expression::Literal(Value::create_i64(100))));
+                assert_eq!(*left, ScanType::ExactPrimary(Expression::Literal(Value::create_i64(1))));
             },
             _ => panic!("")
         };
@@ -417,7 +416,7 @@ mod test {
         );
         let result = analyzer.analyze().unwrap();
 
-        assert_eq!(result, ScanType::ExactPrimary(Expression::Literal(Value::I64(1))));
+        assert_eq!(result, ScanType::ExactPrimary(Expression::Literal(Value::create_i64(1))));
     }
 
     //Expect full
@@ -449,7 +448,7 @@ mod test {
         let range_scan = match result { ScanType::Range(value) => value, _ => panic!("") };
         assert!(range_scan.start.is_some());
         assert!(range_scan.start_inclusive);
-        assert_eq!(range_scan.start.as_ref().unwrap().clone(), Expression::Literal(Value::I64(1)));
+        assert_eq!(range_scan.start.as_ref().unwrap().clone(), Expression::Literal(Value::create_i64(1)));
 
         assert!(range_scan.end.is_none());
     }
@@ -484,7 +483,7 @@ mod test {
         let range_scan = match result { ScanType::Range(value) => value, _ => panic!("") };
         assert!(range_scan.start.is_some());
         assert!(range_scan.start_inclusive);
-        assert_eq!(range_scan.start.as_ref().unwrap().clone(), Expression::Literal(Value::I64(1)));
+        assert_eq!(range_scan.start.as_ref().unwrap().clone(), Expression::Literal(Value::create_i64(1)));
     }
 
     //Expect: ExactPrimary
@@ -500,7 +499,7 @@ mod test {
         let result = analyzer.analyze().unwrap();
         let result = match result { ScanType::ExactPrimary(value) => value, _ => panic!("") };
 
-        assert_eq!(result, Expression::Literal(Value::I64(1)));
+        assert_eq!(result, Expression::Literal(Value::create_i64(1)));
     }
 
     //Expect: full

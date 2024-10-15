@@ -67,7 +67,7 @@ fn evaluate_constant_unary_op(
     expression: Expression,
     operator: UnaryOperator,
 ) -> Result<Expression, SimpleDbError> {
-    if !expression.is_constant() {
+    if !expression.is_literal() {
         return Ok(expression);
     }
 
@@ -124,7 +124,7 @@ mod test {
     use crate::table::record::Record;
     use crate::table::table::Table;
     use crate::table::table_descriptor::TableDescriptor;
-    use crate::{Row, Schema};
+    use crate::{Column, Row, Schema};
     use bytes::Bytes;
     use shared::{SimpleDbOptions, Type, Value};
     use std::sync::Arc;
@@ -240,7 +240,11 @@ mod test {
         Row {
             key_bytes: Bytes::copy_from_slice(id.to_le_bytes().as_slice()),
             storage_engine_record: record.build(),
-            schema: Schema::create(vec![]),
+            schema: Schema::create(vec![
+                Column::create_primary("id"),
+                Column::create("dinero", 1),
+                Column::create("nombre", 2),
+            ]),
         }
     }
 }

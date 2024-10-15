@@ -151,7 +151,7 @@ impl Default for Key {
 
 impl PartialEq for Key {
     fn eq(&self, other: &Self) -> bool {
-        self.value.eq(&other.value).unwrap() && self.txn_id == other.txn_id
+        self.value.eq(&other.value) && self.txn_id == other.txn_id
     }
 }
 

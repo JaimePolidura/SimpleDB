@@ -358,18 +358,11 @@ impl Value {
             .unwrap()
     }
 
-    pub fn gt(&self, other: &Value) -> Result<bool, SimpleDbError> {
-        self.comparation_op(other, |a, b| a > b, |a, b| a > b, |a, b| a > b)
-    }
 
     pub fn ge_bytes(&self, other: &Bytes) -> bool {
         let other_value = Value::create(other.clone(), self.value_type.clone()).unwrap();
         self.comparation_op(&other_value, |a, b| a >= b, |a, b| a >= b, |a, b| a >= b)
             .unwrap()
-    }
-
-    pub fn ge(&self, other: &Value) -> Result<bool, SimpleDbError> {
-        self.comparation_op(other, |a, b| a >= b, |a, b| a >= b, |a, b| a >= b)
     }
 
     pub fn lt_bytes(&self, other: &Bytes) -> bool {
@@ -378,26 +371,10 @@ impl Value {
             .unwrap()
     }
 
-    pub fn lt(&self, other: &Value) -> Result<bool, SimpleDbError> {
-        self.comparation_op(other, |a, b| a < b, |a, b| a < b, |a, b| a < b)
-    }
-
     pub fn le_bytes(&self, other: &Bytes) -> bool {
         let other_value = Value::create(other.clone(), self.value_type.clone()).unwrap();
         self.comparation_op(&other_value, |a, b| a <= b, |a, b| a <= b, |a, b| a <= b)
             .unwrap()
-    }
-
-    pub fn le(&self, other: &Value) -> Result<bool, SimpleDbError> {
-        self.comparation_op(other, |a, b| a <= b, |a, b| a <= b, |a, b| a <= b)
-    }
-
-    pub fn eq(&self, other: &Value) -> Result<bool, SimpleDbError> {
-        self.comparation_op(other, |a, b| a == b, |a, b| a == b, |a, b| a == b)
-    }
-
-    pub fn ne(&self, other: &Value) -> Result<bool, SimpleDbError> {
-        self.comparation_op(other, |a, b| a != b, |a, b| a != b, |a, b| a != b)
     }
 
     pub fn add(&self, other: &Value) -> Result<Value, SimpleDbError> {
@@ -488,10 +465,17 @@ impl Ord for Value {
             return Ordering::Equal;
         }
 
-        if self.lt(other).unwrap() {
+        let is_less = self.comparation_op(
+            &other,
+            |a, b| a < b,
+            |a, b| a < b,
+            |a, b| a < b
+        ).unwrap();
+
+        if is_less {
             Ordering::Less
         } else {
-            Ordering::Equal
+            Ordering::Greater
         }
     }
 }
@@ -505,15 +489,41 @@ impl PartialOrd for Value {
             return Some(Ordering::Equal);
         }
 
-        match self.lt(other) {
-            Ok(result) => {
-                if result {
-                    Some(Ordering::Less)
-                } else {
-                    Some(Ordering::Equal)
-                }
-            }
-            Err(_) => None
-        }
+        Some(self.cmp(other))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::Value;
+
+    #[test]
+    fn compare_strings() {
+        let a = Value::create_string("a".to_string());
+        let b = Value::create_string("b".to_string());
+        assert!(!a.gt(&b));
+        assert!(!a.ge(&b));
+        assert!(!a.eq(&b));
+        assert!(a.le(&b));
+        assert!(a.lt(&b));
+
+        let a = Value::create_string("a".to_string());
+        let b = Value::create_string("a".to_string());
+        assert!(!a.gt(&b));
+        assert!(a.ge(&b));
+        assert!(a.eq(&b));
+        assert!(a.le(&b));
+        assert!(!a.lt(&b));
+    }
+
+    #[test]
+    fn compare_numbers() {
+        let a = Value::create_i64(143);
+        let b = Value::create_i64(13);
+        assert!(a.gt(&b));
+        assert!(a.ge(&b));
+        assert!(!a.eq(&b));
+        assert!(!a.le(&b));
+        assert!(!a.lt(&b));
     }
 }

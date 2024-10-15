@@ -165,9 +165,9 @@ impl RangeScan {
 
 #[cfg(test)]
 mod test {
+    use shared::Value;
     use crate::sql::expression::Expression;
     use crate::sql::plan::scan_type::RangeScan;
-    use crate::value::Value;
 
     //Range(_, 100] AND Range(_, 200) = Range(_, 100)
     #[test]
@@ -176,14 +176,14 @@ mod test {
             column_name: String::from("a"),
             start_inclusive: false,
             start: None,
-            end: Some(Expression::Literal(Value::I64(100))),
+            end: Some(Expression::Literal(Value::create_i64(100))),
             end_inclusive: true,
         };
         let b = RangeScan {
             column_name: String::from("a"),
             start_inclusive: false,
             start: None,
-            end: Some(Expression::Literal(Value::I64(200))),
+            end: Some(Expression::Literal(Value::create_i64(200))),
             end_inclusive: false,
         };
 
@@ -193,7 +193,7 @@ mod test {
             column_name: String::from("a"),
             start: None,
             start_inclusive: false,
-            end: Some(Expression::Literal(Value::I64(100))),
+            end: Some(Expression::Literal(Value::create_i64(100))),
             end_inclusive: true,
         });
     }
@@ -206,14 +206,14 @@ mod test {
             column_name: String::from("a"),
             start_inclusive: false,
             start: None,
-            end: Some(Expression::Literal(Value::I64(100))),
+            end: Some(Expression::Literal(Value::create_i64(100))),
             end_inclusive: false,
         };
         let b = RangeScan {
             column_name: String::from("a"),
             start_inclusive: false,
             start: None,
-            end: Some(Expression::Literal(Value::I64(200))),
+            end: Some(Expression::Literal(Value::create_i64(200))),
             end_inclusive: true,
         };
 
@@ -223,7 +223,7 @@ mod test {
             column_name: String::from("a"),
             start: None,
             start_inclusive: false,
-            end: Some(Expression::Literal(Value::I64(100))),
+            end: Some(Expression::Literal(Value::create_i64(100))),
             end_inclusive: false,
         });
     }
@@ -233,14 +233,14 @@ mod test {
     fn and_3() {
         let a = RangeScan {
             column_name: String::from("a"),
-            start: Some(Expression::Literal(Value::I64(100))),
+            start: Some(Expression::Literal(Value::create_i64(100))),
             start_inclusive: false,
             end: None,
             end_inclusive: false,
         };
         let b = RangeScan {
             column_name: String::from("a"),
-            start: Some(Expression::Literal(Value::I64(200))),
+            start: Some(Expression::Literal(Value::create_i64(200))),
             start_inclusive: true,
             end: None,
             end_inclusive: false,
@@ -250,7 +250,7 @@ mod test {
 
         assert_eq!(result, RangeScan {
             column_name: String::from("a"),
-            start: Some(Expression::Literal(Value::I64(200))),
+            start: Some(Expression::Literal(Value::create_i64(200))),
             start_inclusive: true,
             end: None,
             end_inclusive: false,
@@ -262,7 +262,7 @@ mod test {
     fn and_2() {
         let a = RangeScan {
             column_name: String::from("a"),
-            start: Some(Expression::Literal(Value::I64(200))),
+            start: Some(Expression::Literal(Value::create_i64(200))),
             start_inclusive: false,
             end: None,
             end_inclusive: false,
@@ -271,7 +271,7 @@ mod test {
             column_name: String::from("a"),
             start: None,
             start_inclusive: false,
-            end: Some(Expression::Literal(Value::I64(100))),
+            end: Some(Expression::Literal(Value::create_i64(100))),
             end_inclusive: false,
         };
 
@@ -284,7 +284,7 @@ mod test {
     fn and_1() {
         let a = RangeScan {
             column_name: String::from("a"),
-            start: Some(Expression::Literal(Value::I64(100))),
+            start: Some(Expression::Literal(Value::create_i64(100))),
             start_inclusive: false,
             end: None,
             end_inclusive: false,
@@ -293,7 +293,7 @@ mod test {
             column_name: String::from("a"),
             start: None,
             start_inclusive: false,
-            end: Some(Expression::Literal(Value::I64(200))),
+            end: Some(Expression::Literal(Value::create_i64(200))),
             end_inclusive: false,
         };
 
@@ -301,9 +301,9 @@ mod test {
 
         assert_eq!(result, RangeScan {
             column_name: String::from("a"),
-            start: Some(Expression::Literal(Value::I64(100))),
+            start: Some(Expression::Literal(Value::create_i64(100))),
             start_inclusive: false,
-            end: Some(Expression::Literal(Value::I64(200))),
+            end: Some(Expression::Literal(Value::create_i64(200))),
             end_inclusive: false,
         });
     }

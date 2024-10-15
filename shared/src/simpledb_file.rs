@@ -164,22 +164,32 @@ impl SimpleDbFile {
     }
 
     pub fn safe_replace(&mut self, bytes: &[u8]) -> Result<(), std::io::Error> {
-        let file_path = self.path.clone().unwrap();
+        match self.mode {
+            SimpleDbFileMode::Mock => Ok(()),
+            _ => {
+                let file_path = self.path.clone().unwrap();
 
-        let prev_mode = self.upgrade_mode()?;
-        let mut backup_file = self.copy(Self::create_file_backup_path(&file_path).as_path(), self.mode.clone())?;
-        self.clear()?;
-        self.write(bytes)?;
-        self.fsync()?;
-        self.restore_mode(prev_mode)?;
-        backup_file.delete()?;
+                let prev_mode = self.upgrade_mode()?;
+                let mut backup_file = self.copy(Self::create_file_backup_path(&file_path).as_path(), self.mode.clone())?;
+                self.clear()?;
+                self.write(bytes)?;
+                self.fsync()?;
+                self.restore_mode(prev_mode)?;
+                backup_file.delete()?;
 
-        Ok(())
+                Ok(())
+            }
+        }
     }
 
     pub fn copy(&self, new_path: &Path, mode: SimpleDbFileMode) -> Result<SimpleDbFile, std::io::Error> {
-        fs::copy(self.path.as_ref().unwrap().as_path(), new_path)?;
-        SimpleDbFile::open(new_path, mode)
+        match self.mode {
+            SimpleDbFileMode::Mock => Ok(SimpleDbFile::create_mock()),
+            _ => {
+                fs::copy(self.path.as_ref().unwrap().as_path(), new_path)?;
+                SimpleDbFile::open(new_path, mode)
+            }
+        }
     }
 
     pub fn read(&self, offset: usize, length: usize) -> Result<Vec<u8>, std::io::Error> {

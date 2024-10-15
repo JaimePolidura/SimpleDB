@@ -136,9 +136,8 @@ mod test {
     use crate::table::table_iterator::TableIterator;
     use bytes::Bytes;
     use shared::iterators::mock_iterator::MockIterator;
-    use shared::ColumnId;
+    use shared::{ColumnId, Type, Value};
     use crate::table::schema::Column;
-    use crate::value::{Type, Value};
     //Given records:
     //1 -> (1, 100)
     //1 -> (1, 90), (2, Pago)
@@ -207,7 +206,7 @@ mod test {
         let money = money.get_string().unwrap();
         assert_eq!(money, "350");
         let desc = row3.get_column_value("Desc").unwrap();
-        assert_eq!(desc, Value::Null);
+        assert!(desc.is_null());
 
         //Row 4º
         assert!(iterator.next());
@@ -215,7 +214,7 @@ mod test {
         let id = row4.get_column_value("ID").unwrap().get_i64().unwrap();
         assert_eq!(id, 4);
         let money = row4.get_column_value("Money").unwrap();
-        assert_eq!(money, Value::Null);
+        assert!(desc.is_null());
         let desc = row4.get_column_value("Desc").unwrap();
         let desc = desc.get_string().unwrap();
         assert_eq!(desc, "Pepita");

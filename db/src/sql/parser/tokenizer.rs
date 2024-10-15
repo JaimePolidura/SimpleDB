@@ -424,6 +424,7 @@ impl Tokenizer {
 
 #[cfg(test)]
 mod test {
+    use shared::Type;
     use crate::sql::parser::token::Token;
     use crate::sql::parser::tokenizer::Tokenizer;
 
