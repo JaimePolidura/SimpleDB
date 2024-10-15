@@ -57,7 +57,7 @@ impl KeyspaceDescriptor {
 
     pub fn serialize(&self) -> Vec<u8> {
         let mut serialized: Vec<u8> = Vec::new();
-        serialized.put_u8(self.key_type.clone() as u8);
+        serialized.put_u8(self.key_type.serialize() as u8);
         serialized.put_u64_le(self.flags as u64);
         serialized
     }

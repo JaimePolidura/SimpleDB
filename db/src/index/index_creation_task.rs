@@ -61,8 +61,8 @@ impl IndexCreationTask {
         ).unwrap();
 
         logger().info(DB(self.table.table_name.clone()), &format!(
-            "Creating secondary index for table {} Secondary index keyspace ID: {}",
-            self.table.table_name.clone(), self.index_keyspace_id
+            "Creating secondary index for table {} Secondary index keyspace ID: {} Column indexed: {}",
+            self.table.table_name.clone(), self.index_keyspace_id, self.secondary_indexed_column.column_name
         ));
 
         //This will get unlocked when it goes out of scope
@@ -80,8 +80,8 @@ impl IndexCreationTask {
                 logger().debug(DB(self.table.table_name.clone()), &format!(
                     "Adding secondary index entry. Table: {} Primary key: {:?} Secondary key: {:?}",
                     self.table.table_name,
-                    Value::create(primary_key.as_bytes().clone(), primary_column_type.clone()).unwrap(),
-                    Value::create(value_to_be_indexed.clone(), secondary_column_type.clone()).unwrap(),
+                    Value::create(primary_key.as_bytes().clone(), primary_column_type.clone()).unwrap().to_string(),
+                    Value::create(value_to_be_indexed.clone(), secondary_column_type.clone()).unwrap().to_string(),
                 ));
 
                 if let Err(error) = self.storage.set_with_transaction(

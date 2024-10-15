@@ -238,7 +238,8 @@ mod test {
         ]);
 
         Row {
-            key_bytes: Bytes::copy_from_slice(id.to_le_bytes().as_slice()),
+            primary_column_value: Value::create(Bytes::copy_from_slice(id.to_le_bytes().as_slice()), Type::I64)
+                .unwrap(),
             storage_engine_record: record.build(),
             schema: Schema::create(vec![
                 Column::create_primary("id"),

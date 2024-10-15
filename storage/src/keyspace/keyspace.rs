@@ -42,6 +42,7 @@ impl Keyspace {
         fs::create_dir(path.as_path())
             .map_err(|e| shared::SimpleDbError::CannotCreateKeyspaceDirectory(keyspace_id, e))?;
         KeyspaceDescriptor::create(flags, path.clone(), keyspace_id, key_type)?;
+
         Self::create_and_load(keyspace_id, transaction_manager, options)
     }
 

@@ -47,12 +47,12 @@ impl PlanStepTrait for MergeUnionStep {
                 Some(row) => {
                     let row_primary_key = row.get_primary_column_value();
 
-                    if !self.returned_rows.contains(row_primary_key) {
+                    if !self.returned_rows.contains(row_primary_key.get_bytes()) {
                         self.prev_plan_index_returned = current_plan_index;
                         return Ok(Some(row.clone()));
                     } else {
                         //This can be removed because each row will be scanned at most twice
-                        self.returned_rows.remove(row_primary_key);
+                        self.returned_rows.remove(row_primary_key.get_bytes());
                     }
                 },
                 None => { self.plans.remove(current_plan_index); } //Remove last plan

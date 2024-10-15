@@ -4,7 +4,7 @@ use crate::sql::plan::plan_step::{PlanStepDesc, PlanStepTrait};
 use crate::sql::plan::scan_type::{RangeKeyPosition, RangeScan};
 use crate::table::table::Table;
 use crate::Row;
-use shared::SimpleDbError;
+use shared::{SimpleDbError, Type, Value};
 use std::sync::Arc;
 use shared::key::Key;
 use storage::transactions::transaction::Transaction;
@@ -53,8 +53,8 @@ impl SecondaryRangeScanStep {
 
 impl PlanStepTrait for SecondaryRangeScanStep {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
-        if let Some((primary_key, secondary_value)) = self.secondary_iterator.next() {
-            match self.range.get_position(secondary_value.as_bytes()) {
+        if let Some((indexed_value, primary_key)) = self.secondary_iterator.next() {
+            match self.range.get_position(indexed_value.get_value()) {
                 RangeKeyPosition::Inside => self.get_row_by_primary(primary_key),
                 RangeKeyPosition::Above => Ok(None),
                 //Not possible because, the iterator have been seeked in construction time

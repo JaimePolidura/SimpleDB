@@ -144,7 +144,8 @@ impl MemTable {
     pub fn set(&self, transaction: &Transaction, key: Bytes, value: &[u8]) -> Result<(), shared::SimpleDbError> {
         self.write(
             &Key::create(key, self.keyspace_desc.key_type, transaction.txn_id),
-            Bytes::copy_from_slice(value))
+            Bytes::copy_from_slice(value)
+        )
     }
 
     pub fn delete(&self, transaction: &Transaction, key: Bytes) -> Result<(), shared::SimpleDbError> {

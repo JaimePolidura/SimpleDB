@@ -25,6 +25,10 @@ impl Key {
         }
     }
 
+    pub fn get_value(&self) -> &Value {
+        &self.value
+    }
+
     pub fn get_type(&self) -> Type {
         self.value.get_type()
     }

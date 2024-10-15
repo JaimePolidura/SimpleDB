@@ -52,6 +52,7 @@ impl Table {
             table_keyspace_id,
             options,
             table_name,
+            columns
         )?;
 
         Ok(Arc::new(Table {
@@ -141,7 +142,8 @@ impl Table {
         }
 
         let row = table_iterator.row();
-        if row.get_primary_column_value().eq(key) {
+
+        if row.get_primary_column_value().eq_bytes(key) {
             Ok(Some(row.clone()))
         } else {
             Ok(None)

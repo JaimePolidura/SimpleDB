@@ -1,6 +1,6 @@
 use crate::table::record::Record;
 use crate::table::schema::Schema;
-use bytes::{BufMut, Bytes};
+use bytes::BufMut;
 use shared::{SimpleDbError, Value};
 use std::fmt;
 use std::fmt::Formatter;
@@ -8,7 +8,7 @@ use std::fmt::Formatter;
 #[derive(Clone)]
 pub struct Row {
     pub(crate) storage_engine_record: Record,
-    pub(crate) key_bytes: Bytes,
+    pub(crate) primary_column_value: Value,
 
     pub(crate) schema: Schema
 }
@@ -16,18 +16,18 @@ pub struct Row {
 impl Row {
     pub(crate) fn create(
         storage_engine_record: Record,
-        key_bytes: Bytes,
+        primary_column_value: Value,
         schema: Schema,
     ) -> Row {
         Row {
             storage_engine_record,
-            key_bytes,
+            primary_column_value,
             schema,
         }
     }
 
-    pub fn get_primary_column_value(&self) -> &Bytes {
-        &self.key_bytes
+    pub fn get_primary_column_value(&self) -> &Value {
+        &self.primary_column_value
     }
 
     //Expect column_name to have been validated before calling this function

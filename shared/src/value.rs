@@ -352,12 +352,15 @@ impl Value {
         }
     }
 
+    pub fn eq_bytes(&self, other: &Bytes) -> bool {
+        self.get_bytes().eq(other)
+    }
+
     pub fn gt_bytes(&self, other: &Bytes) -> bool {
         let other_value = Value::create(other.clone(), self.value_type.clone()).unwrap();
         self.comparation_op(&other_value, |a, b| a > b, |a, b| a > b, |a, b| a > b)
             .unwrap()
     }
-
 
     pub fn ge_bytes(&self, other: &Bytes) -> bool {
         let other_value = Value::create(other.clone(), self.value_type.clone()).unwrap();

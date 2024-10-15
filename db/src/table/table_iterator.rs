@@ -3,7 +3,7 @@ use crate::table::row::Row;
 use crate::table::table::Table;
 use bytes::Bytes;
 use shared::iterators::storage_iterator::StorageIterator;
-use shared::ColumnId;
+use shared::{ColumnId, Value};
 use std::sync::Arc;
 
 //This is the iterator that will be exposed to users of the SimpleDB
@@ -60,7 +60,13 @@ impl<I: StorageIterator> TableIterator<I> {
         let row_in_reassembling = self.rows_reassembling.remove(0);
         let key_bytes = row_in_reassembling.key.clone();
         let row_record_reassembled = row_in_reassembling.build();
-        self.current_row = Some(Row::create(row_record_reassembled, key_bytes, self.table.get_schema().clone()));
+        let schema = self.table.get_schema();
+
+        self.current_row = Some(Row::create(
+            row_record_reassembled,
+            Value::create(key_bytes, schema.get_primary_column().column_type).unwrap(),
+            self.table.get_schema().clone())
+        );
 
         true
     }

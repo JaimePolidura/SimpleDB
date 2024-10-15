@@ -47,7 +47,7 @@ impl PlanStepTrait for MergeIntersectionStep {
             match current_plan.next()? {
                 Some(current_row) => {
                     let current_row_primary_value = current_row.get_primary_column_value();
-                    if let Some(row_intersected) = self.rows_not_intersected.remove(current_row_primary_value) {
+                    if let Some(row_intersected) = self.rows_not_intersected.remove(current_row_primary_value.get_bytes()) {
                         self.prev_plan_index = current_index;
                         return Ok(Some(row_intersected)); //Found intersection
                     }

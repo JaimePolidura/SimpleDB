@@ -1,6 +1,6 @@
 use crate::sql::expression::Expression;
 use bytes::Bytes;
-use shared::SimpleDbError;
+use shared::{SimpleDbError, Value};
 use SimpleDbError::MalformedQuery;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -107,19 +107,19 @@ impl RangeScan {
         self.column_name.eq(&other.column_name)
     }
 
-    pub fn get_position(&self, other_key: &Bytes) -> RangeKeyPosition {
+    pub fn get_position(&self, other_value: &Value) -> RangeKeyPosition {
         if let Some(start_key) = self.start.as_ref() {
-            let start_key_bytes = start_key.get_literal_bytes();
-            let is_bellow = (self.start_inclusive && start_key_bytes.gt(other_key)) ||
-                (!self.start_inclusive && start_key_bytes.ge(other_key));
+            let start_key_bytes = start_key.get_value().unwrap();
+            let is_bellow = (self.start_inclusive && start_key_bytes.gt(other_value)) ||
+                (!self.start_inclusive && start_key_bytes.ge(other_value));
             if is_bellow {
                 return RangeKeyPosition::Bellow;
             }
         }
         if let Some(end_key) = self.end.as_ref() {
-            let end_key_bytes = end_key.get_literal_bytes();
-            let is_above = (self.end_inclusive && end_key_bytes.lt(other_key)) ||
-                (!self.end_inclusive && end_key_bytes.le(other_key));
+            let end_key_bytes = end_key.get_value().unwrap();
+            let is_above = (self.end_inclusive && end_key_bytes.lt(other_value)) ||
+                (!self.end_inclusive && end_key_bytes.le(other_value));
             if is_above {
                 return RangeKeyPosition::Above;
             }

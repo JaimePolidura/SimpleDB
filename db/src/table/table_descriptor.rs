@@ -23,30 +23,38 @@ impl TableDescriptor {
         keyspace_id: KeyspaceId,
         options: &Arc<shared::SimpleDbOptions>,
         table_name: &str,
+        columns: Vec<(String, Type, bool)>,
     ) -> Result<TableDescriptor, SimpleDbError> {
-        let emtpy_table_descriptor = TableDescriptor {
+        let mut next_column_id = AtomicUsize::new(0);
+
+        let mut table_descriptor = TableDescriptor {
             file: Mutex::new(SimpleDbFile::create_mock()),
             next_column_id: AtomicUsize::new(0),
             table_name: table_name.to_string(),
-            schema: Schema::emtpy(),
-            storage_keyspace_id: keyspace_id
+            storage_keyspace_id: keyspace_id,
+            schema: Schema::create(columns.iter()
+                .map(|(column_name, column_type, is_primary)| {
+                    Column {
+                        column_id: next_column_id.fetch_add(1, Relaxed) as ColumnId,
+                        column_type: column_type.clone(),
+                        column_name: column_name.clone(),
+                        is_primary: *is_primary,
+                        secondary_index_keyspace_id: None,
+                    }
+                })
+                .collect()),
         };
-
-        let table_descriptor_file_bytes: Vec<u8> = emtpy_table_descriptor.serialize();
 
         let table_descriptor_file = SimpleDbFile::create(
             Self::table_descriptor_file_path(options, keyspace_id).as_path(),
-            &table_descriptor_file_bytes,
+            &table_descriptor.serialize(),
             shared::SimpleDbFileMode::RandomWrites
         ).map_err(|e| SimpleDbError::CannotCreateTableDescriptor(keyspace_id, e))?;
 
-        Ok(TableDescriptor {
-            file: Mutex::new(table_descriptor_file),
-            next_column_id: AtomicUsize::new(1),
-            table_name: table_name.to_string(),
-            schema: Schema::emtpy(),
-            storage_keyspace_id: keyspace_id
-        })
+        table_descriptor.file = Mutex::new(table_descriptor_file);
+        table_descriptor.next_column_id = next_column_id;
+
+        Ok(table_descriptor)
     }
 
     pub fn create_mock(columns: Vec<Column>) -> TableDescriptor {

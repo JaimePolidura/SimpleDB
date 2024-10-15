@@ -101,7 +101,7 @@ impl StatementExecutor {
                 new_values.push((updated_column_name.clone(), new_value_bytes.clone()));
             }
 
-            table.update(transaction, id, &new_values)?;
+            table.update(transaction, id.get_bytes().clone(), &new_values)?;
             updated_rows += 1;
         }
 
@@ -121,7 +121,7 @@ impl StatementExecutor {
 
         while let Some(row_to_delete) = delete_plan.next()? {
             let id = row_to_delete.get_primary_column_value();
-            table.delete(transaction, id.clone())?;
+            table.delete(transaction, id.get_bytes().clone())?;
             deleted_rows += 1;
         }
 
