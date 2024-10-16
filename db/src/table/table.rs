@@ -374,7 +374,7 @@ impl Table {
             Selection::Some(selection) => {
                 let schema = self.table_descriptor.get_schema();
                 for column_name in selection {
-                    if schema.get_column(column_name).is_some() {
+                    if schema.get_column(column_name).is_none() {
                         return Err(ColumnNotFound(column_name.clone()));
                     }
                 }

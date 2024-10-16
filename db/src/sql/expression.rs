@@ -34,6 +34,22 @@ pub enum BinaryOperator {
 }
 
 impl Expression {
+    pub fn get_columns(&self) -> Vec<String> {
+        let mut columns = Vec::new();
+
+        match self {
+            Expression::Binary(_, left, right) => {
+                columns.extend(left.get_columns());
+                columns.extend(right.get_columns());
+            },
+            Expression::Unary(_, expr) => columns.extend(expr.get_columns()),
+            Expression::Identifier(column_name) => columns.push(column_name.clone()),
+            Expression::Literal(_) => {}
+        };
+
+        columns
+    }
+
     pub fn is_null(&self) -> bool {
         match &self {
             Expression::Literal(value) => value.is_null(),

@@ -10,6 +10,8 @@ use crate::sql::plan::steps::secondary_exact_scan_step::SecondaryExactScanStep;
 use crate::{Limit, Row};
 use bytes::Bytes;
 use shared::SimpleDbError;
+use crate::selection::Selection;
+use crate::sql::plan::steps::project_selection_step::ProjectSelectionStep;
 use crate::sql::plan::steps::secondary_range_scan_step::SecondaryRangeScanStep;
 
 pub(crate) trait PlanStepTrait {
@@ -18,6 +20,7 @@ pub(crate) trait PlanStepTrait {
 }
 
 pub enum PlanStep {
+    ProjectSelection(Box<ProjectSelectionStep>),
     Limit(Box<LimitStep>),
     Filter(Box<FilterStep>),
 
@@ -32,6 +35,7 @@ pub enum PlanStep {
 }
 
 pub enum PlanStepDesc {
+    ProjectionSelectionStep(Selection, Box<PlanStepDesc>),
     Limit(Limit, Box<PlanStepDesc>),
     Filter(Box<PlanStepDesc>),
     MergeIntersection(Box<PlanStepDesc>, Box<PlanStepDesc>),
@@ -55,6 +59,7 @@ impl PlanStep {
             PlanStep::PrimaryExactScan(step) => step.next(),
             PlanStep::SecondaryExactExactScan(step) => step.next(),
             PlanStep::SecondaryRangeScan(step) => step.next(),
+            PlanStep::ProjectSelection(step) => step.next(),
         }
     }
 
@@ -68,7 +73,8 @@ impl PlanStep {
             PlanStep::PrimaryRangeScan(step) => step.desc(),
             PlanStep::PrimaryExactScan(step) => step.desc(),
             PlanStep::SecondaryExactExactScan(step) => step.desc(),
-            PlanStep::SecondaryRangeScan(step) => step.desc()
+            PlanStep::SecondaryRangeScan(step) => step.desc(),
+            PlanStep::ProjectSelection(step) => step.desc(),
         }
     }
 }

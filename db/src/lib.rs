@@ -1,6 +1,6 @@
 pub mod simple_db;
 
-mod selection;
+pub mod selection;
 mod database;
 mod table;
 mod sql;

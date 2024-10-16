@@ -43,7 +43,7 @@ impl Record {
         None
     }
 
-    pub fn take_column_bytes(&mut self, column_id_lookup: ColumnId) -> Option<Bytes> {
+    pub fn remove_column(&mut self, column_id_lookup: ColumnId) -> Option<Bytes> {
         for (current_index, current_entry) in self.data_records.iter().enumerate() {
             let (current_column_id, _) = current_entry;
 

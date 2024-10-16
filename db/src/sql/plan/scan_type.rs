@@ -1,7 +1,9 @@
+use std::sync::mpsc::channel;
 use crate::sql::expression::Expression;
-use bytes::Bytes;
 use shared::{SimpleDbError, Value};
 use SimpleDbError::MalformedQuery;
+use crate::Schema;
+use crate::selection::Selection;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScanType {
@@ -165,9 +167,9 @@ impl RangeScan {
 
 #[cfg(test)]
 mod test {
-    use shared::Value;
     use crate::sql::expression::Expression;
     use crate::sql::plan::scan_type::RangeScan;
+    use shared::Value;
 
     //Range(_, 100] AND Range(_, 200) = Range(_, 100)
     #[test]

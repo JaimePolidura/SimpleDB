@@ -13,9 +13,10 @@ use crate::sql::plan::steps::primary_range_scan_step::PrimaryRangeScanStep;
 use crate::sql::plan::steps::secondary_exact_scan_step::SecondaryExactScanStep;
 use crate::sql::statement::{DeleteStatement, Limit, SelectStatement, UpdateStatement};
 use crate::table::table::Table;
-use shared::SimpleDbError;
+use shared::{SimpleDbError, Value};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::sql::plan::steps::project_selection_step::ProjectSelectionStep;
 use crate::sql::plan::steps::secondary_range_scan_step::SecondaryRangeScanStep;
 
 pub struct Planner {}
@@ -31,17 +32,22 @@ impl Planner {
         select_statement: SelectStatement,
         transaction: &Transaction
     ) -> Result<PlanStep, SimpleDbError> {
+        let (needs_projection_of_selection, selection) = Self::get_selection_select(&select_statement);
+
         let scan_type = self.get_scan_type(
             &select_statement.where_expr,
             table,
         )?;
-        let mut last_step = self.build_scan_step(scan_type, transaction, select_statement.selection, table)?;
+        let mut last_step = self.build_scan_step(scan_type, transaction, selection.clone(), table)?;
 
         if let Some(where_expr) = select_statement.where_expr {
             last_step = PlanStep::Filter(Box::new(FilterStep::create(where_expr, last_step)));
         }
         if !matches!(select_statement.limit, Limit::None) {
             last_step = PlanStep::Limit(Box::new(LimitStep::create(select_statement.limit, last_step)));
+        }
+        if needs_projection_of_selection {
+            last_step = PlanStep::ProjectSelection(Box::new(ProjectSelectionStep::create(selection, last_step)))
         }
 
         Ok(last_step)
@@ -146,6 +152,30 @@ impl Planner {
                 scan_type_analyzer.analyze()
             },
             None => Ok(ScanType::Full),
+        }
+    }
+
+    //Returns the selection of columns to be scanned from the storage engine
+    //Returns true if projection will be needed
+    //and the ones being returned from the storage engine
+    //For example: SELECT nombre WHERE dinero > 100. We will need nombre and dinero to be scanned from the stoage engine
+    //But we will only return dinero to the final user.
+    fn get_selection_select(
+        select: &SelectStatement
+    ) -> (bool, Selection) {
+        match &select.where_expr {
+            Some(expression) => {
+                let column_names = expression.get_columns();
+                let query_selection = select.selection.clone();
+
+                match query_selection {
+                    Selection::All => (false, select.selection.clone()),
+                    Selection::Some(_) => {
+                        (true, query_selection.merge(Selection::Some(column_names)))
+                    }
+                }
+            },
+            None => (false, select.selection.clone())
         }
     }
 }

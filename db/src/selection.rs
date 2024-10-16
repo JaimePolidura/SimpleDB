@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use crate::table::schema::Schema;
 use shared::{ColumnId, SimpleDbError};
 
@@ -12,6 +13,19 @@ impl Selection {
         match self {
             Selection::Some(list) => list.is_empty(),
             Selection::All => false,
+        }
+    }
+
+    pub fn merge(self: Selection, other: Selection) -> Selection {
+        match (self, other) {
+            (Selection::All, _) |
+            (_, Selection::All) => Selection::All,
+            (Selection::Some(self_column_names), Selection::Some(other_column_names)) => {
+                let mut column_names = HashSet::new();
+                column_names.extend(self_column_names);
+                column_names.extend(other_column_names);
+                Selection::Some(column_names.into_iter().collect())
+            }
         }
     }
 

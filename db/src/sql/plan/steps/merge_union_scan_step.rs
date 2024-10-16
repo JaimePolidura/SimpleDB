@@ -48,6 +48,7 @@ impl PlanStepTrait for MergeUnionStep {
                     let row_primary_key = row.get_primary_column_value();
 
                     if !self.returned_rows.contains(row_primary_key.get_bytes()) {
+                        self.returned_rows.insert(row_primary_key.get_bytes().clone());
                         self.prev_plan_index_returned = current_plan_index;
                         return Ok(Some(row.clone()));
                     } else {

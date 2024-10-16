@@ -1,6 +1,7 @@
 use bytes::BufMut;
 use serde::Serialize;
 use db::{Column, IndexType, Limit, PlanStepDesc, RangeScan, Row, Schema};
+use db::selection::Selection;
 use shared::{ErrorTypeId, SimpleDbError, Type, Value};
 
 pub enum Response {
@@ -210,6 +211,10 @@ impl StatementResponse {
                     pending.push((depth, source.clone()));
                     strings.push(Self::filter_plan_desc_to_string(depth));
                 },
+                PlanStepDesc::ProjectionSelectionStep(selection, source) => {
+                    pending.push((depth, source.clone()));
+                    strings.push(Self::projection_to_string(depth, selection));
+                },
                 PlanStepDesc::MergeIntersection(left, right) => {
                     pending.push((depth + 1, left.clone()));
                     pending.push((depth + 1, right.clone()));
@@ -340,6 +345,27 @@ impl StatementResponse {
         string.push_str(" (");
         string.push_str(&secondary_column_value.to_string());
         string.push_str(")");
+        string
+    }
+
+    fn projection_to_string(depth: usize, selection: &Selection) -> String {
+        let mut string = Self::explain_plan_new_line(depth);
+        string.push_str("Projection (");
+
+        match selection {
+            Selection::All => string.push_str("*)"),
+            Selection::Some(selected_columns_to_project) => {
+                let mut columns = Vec::new();
+
+                for selected_column_to_project in selected_columns_to_project {
+                    columns.push(selected_column_to_project.clone());
+                }
+
+                string.push_str(&columns.join(", "));
+                string.push_str(")");
+            }
+        }
+
         string
     }
 
