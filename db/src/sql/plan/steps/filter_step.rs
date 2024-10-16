@@ -1,4 +1,4 @@
-use crate::sql::expression::Expression;
+use crate::sql::parser::expression::Expression;
 use crate::sql::expression_evaluator::evaluate_where_expression;
 use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc, PlanStepTrait};
 use crate::Row;

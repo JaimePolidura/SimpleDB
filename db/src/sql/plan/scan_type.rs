@@ -1,5 +1,5 @@
 use std::sync::mpsc::channel;
-use crate::sql::expression::Expression;
+use crate::sql::parser::expression::Expression;
 use shared::{SimpleDbError, Value};
 use SimpleDbError::MalformedQuery;
 use crate::Schema;
@@ -167,7 +167,7 @@ impl RangeScan {
 
 #[cfg(test)]
 mod test {
-    use crate::sql::expression::Expression;
+    use crate::sql::parser::expression::Expression;
     use crate::sql::plan::scan_type::RangeScan;
     use shared::Value;
 

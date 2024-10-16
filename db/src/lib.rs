@@ -12,6 +12,6 @@ pub use index::index_type::IndexType;
 pub use sql::plan::RangeScan;
 pub use simple_db::SimpleDb;
 pub use simple_db::Context;
-pub use sql::statement::*;
+pub use sql::parser::statement::*;
 pub use table::row::Row;
 pub use table::schema::*;

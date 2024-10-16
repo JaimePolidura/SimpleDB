@@ -1,5 +1,5 @@
-use crate::sql::expression::Expression::Binary;
-use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
+use crate::sql::parser::expression::Expression::Binary;
+use crate::sql::parser::expression::{BinaryOperator, Expression, UnaryOperator};
 use crate::Row;
 use shared::{SimpleDbError, Type, Value};
 use SimpleDbError::MalformedQuery;
@@ -117,8 +117,8 @@ fn evaluate_constant_binary_op(
 mod test {
     use crate::database::database::Database;
     use crate::index::secondary_indexes::SecondaryIndexes;
-    use crate::sql::expression::Expression::Binary;
-    use crate::sql::expression::{BinaryOperator, Expression};
+    use crate::sql::parser::expression::Expression::Binary;
+    use crate::sql::parser::expression::{BinaryOperator, Expression};
     use crate::sql::expression_evaluator::{evaluate_constant_expressions, evaluate_where_expression};
     use crate::sql::parser::parser::Parser;
     use crate::table::record::Record;

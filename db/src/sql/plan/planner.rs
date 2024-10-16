@@ -1,6 +1,7 @@
 use crate::selection::Selection;
-use crate::sql::expression::Expression;
-use crate::sql::plan::plan_step::{PlanStep};
+use crate::sql::parser::expression::Expression;
+use crate::sql::parser::statement::{DeleteStatement, Limit, SelectStatement, UpdateStatement};
+use crate::sql::plan::plan_step::PlanStep;
 use crate::sql::plan::scan_type::ScanType;
 use crate::sql::plan::scan_type_analyzer::ScanTypeAnalyzer;
 use crate::sql::plan::steps::filter_step::FilterStep;
@@ -10,14 +11,13 @@ use crate::sql::plan::steps::merge_intersection_scan_step::MergeIntersectionStep
 use crate::sql::plan::steps::merge_union_scan_step::MergeUnionStep;
 use crate::sql::plan::steps::primary_exact_scan_step::PrimaryExactScanStep;
 use crate::sql::plan::steps::primary_range_scan_step::PrimaryRangeScanStep;
+use crate::sql::plan::steps::project_selection_step::ProjectSelectionStep;
 use crate::sql::plan::steps::secondary_exact_scan_step::SecondaryExactScanStep;
-use crate::sql::statement::{DeleteStatement, Limit, SelectStatement, UpdateStatement};
+use crate::sql::plan::steps::secondary_range_scan_step::SecondaryRangeScanStep;
 use crate::table::table::Table;
-use shared::{SimpleDbError, Value};
+use shared::SimpleDbError;
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use crate::sql::plan::steps::project_selection_step::ProjectSelectionStep;
-use crate::sql::plan::steps::secondary_range_scan_step::SecondaryRangeScanStep;
 
 pub struct Planner {}
 

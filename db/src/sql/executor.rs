@@ -1,11 +1,11 @@
 use crate::database::databases::Databases;
 use crate::selection::Selection;
 use crate::simple_db::{Context, StatementResult};
-use crate::sql::expression::Expression;
+use crate::sql::parser::expression::Expression;
 use crate::sql::expression_evaluator::{evaluate_constant_expressions, evaluate_expression};
 use crate::sql::plan::planner::Planner;
 use crate::sql::query_iterator::QueryIterator;
-use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
+use crate::sql::parser::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
 use crate::sql::validator::StatementValidator;
 use crate::table::table::Table;
 use crate::{CreateIndexStatement, IndexType};
@@ -68,6 +68,7 @@ impl StatementExecutor {
         let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table_or_err(&select_statement.table_name)?;
         let select_plan = self.planner.plan_select(&table, select_statement, transaction)?;
+
 
         Ok(StatementResult::Data(QueryIterator::create(
             selection,

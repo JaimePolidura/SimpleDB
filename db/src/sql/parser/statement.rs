@@ -1,6 +1,6 @@
 use shared::{Type, Value};
 use crate::selection::Selection;
-use crate::sql::expression::Expression;
+use crate::sql::parser::expression::Expression;
 
 pub enum Statement {
     Select(SelectStatement),
@@ -107,6 +107,9 @@ impl UpdateStatement {
         let mut column_names = Vec::new();
         for (column_name, _) in &self.updated_values {
             column_names.push(column_name.clone());
+        }
+        if let Some(where_expr) = &self.where_expr {
+            column_names.extend(where_expr.get_columns());
         }
 
         Selection::Some(column_names)

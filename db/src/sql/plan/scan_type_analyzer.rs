@@ -1,4 +1,4 @@
-use crate::sql::expression::{BinaryOperator, Expression};
+use crate::sql::parser::expression::{BinaryOperator, Expression};
 use crate::sql::plan::scan_type::{RangeScan, ScanType};
 use crate::table::schema::Schema;
 use shared::SimpleDbError;
@@ -332,7 +332,7 @@ impl ScanTypeAnalyzer {
 #[cfg(test)]
 mod test {
     use shared::Value;
-    use crate::sql::expression::Expression;
+    use crate::sql::parser::expression::Expression;
     use crate::sql::parser::parser::Parser;
     use crate::sql::plan::scan_type::ScanType;
     use crate::sql::plan::scan_type::ScanType::{ExactPrimary, ExactSecondary, MergeUnion};

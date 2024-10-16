@@ -1,7 +1,7 @@
 use shared::SimpleDbError;
 use crate::Row;
 use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc, PlanStepTrait};
-use crate::sql::statement::Limit;
+use crate::sql::parser::statement::Limit;
 
 pub struct LimitStep {
     limit: Limit,

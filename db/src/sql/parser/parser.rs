@@ -1,11 +1,11 @@
 use crate::selection::Selection;
-use crate::sql::expression::{BinaryOperator, Expression, UnaryOperator};
-use crate::sql::parser::token::Token;
-use crate::sql::parser::tokenizer::Tokenizer;
-use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Limit, SelectStatement, Statement, UpdateStatement};
+use crate::sql::parser::expression::{BinaryOperator, Expression, UnaryOperator};
+use crate::sql::parser::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Limit, SelectStatement, Statement, UpdateStatement};
 use shared::{SimpleDbError, Type, Value};
 use shared::SimpleDbError::IllegalToken;
 use crate::CreateIndexStatement;
+use crate::sql::token::token::Token;
+use crate::sql::token::tokenizer::Tokenizer;
 
 const MAX_PRECEDENCE: u8 = u8::MAX;
 
@@ -484,9 +484,9 @@ impl Parser {
 mod test {
     use shared::{Type, Value};
     use crate::selection::Selection;
-    use crate::sql::expression::{BinaryOperator, Expression};
+    use crate::sql::parser::expression::{BinaryOperator, Expression};
     use crate::sql::parser::parser::Parser;
-    use crate::sql::statement::{Limit, Statement};
+    use crate::sql::parser::statement::{Limit, Statement};
 
     #[test]
     fn update_all() {

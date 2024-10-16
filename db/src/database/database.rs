@@ -1,5 +1,5 @@
 use crate::database::database_descriptor::DatabaseDescriptor;
-use crate::sql::statement::CreateTableStatement;
+use crate::sql::parser::statement::CreateTableStatement;
 use crate::table::table::Table;
 use crossbeam_skiplist::SkipMap;
 use shared::SimpleDbError::{CannotCreateDatabaseFolder, TableAlreadyExists};

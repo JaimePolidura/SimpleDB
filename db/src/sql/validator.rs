@@ -1,7 +1,7 @@
 use crate::database::databases::Databases;
 use crate::simple_db::Context;
-use crate::sql::expression::Expression;
-use crate::sql::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
+use crate::sql::parser::expression::Expression;
+use crate::sql::parser::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
 use crate::table::table::Table;
 use crate::CreateIndexStatement;
 use shared::SimpleDbError::UnknownColumn;
@@ -147,6 +147,10 @@ impl StatementValidator {
     ) -> Result<(), SimpleDbError> {
         match expression {
             Some(expression) => {
+                if expression.is_constant_expression() {
+                    return Err(SimpleDbError::MalformedQuery(String::from("Expression shouldn't produce a constant value")));
+                }
+
                 let type_produced = self.validate_expression(expression, &table)?;
                 if !matches!(type_produced, Type::Boolean) {
                     Err(SimpleDbError::MalformedQuery(String::from("Expression should produce a boolean")))
