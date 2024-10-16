@@ -31,20 +31,9 @@ impl Row {
     pub fn project_selection(&mut self, selection: &Selection) {
         match selection {
             Selection::Some(_) => {
-                let mut columns_id_to_remove = Vec::new();
-                let selection_columns_id: HashSet<ColumnId> = selection.to_columns_id(&self.schema)
+                self.storage_engine_record.project_selection(&selection.to_columns_id(&self.schema)
                     .unwrap().into_iter()
-                    .collect();
-
-                for (column_id_from_row, _) in &self.storage_engine_record.data_records {
-                    if !selection_columns_id.contains(&column_id_from_row) {
-                        columns_id_to_remove.push(*column_id_from_row);
-                    }
-                }
-
-                for column_id_to_remove in columns_id_to_remove {
-                    self.storage_engine_record.remove_column(column_id_to_remove);
-                }
+                    .collect());
             }
             Selection::All => {}
         }

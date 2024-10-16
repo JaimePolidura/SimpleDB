@@ -64,11 +64,16 @@ impl StatementExecutor {
         transaction: &Transaction,
         select_statement: SelectStatement,
     ) -> Result<StatementResult, SimpleDbError> {
+        let selection = select_statement.selection.clone();
         let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table_or_err(&select_statement.table_name)?;
         let select_plan = self.planner.plan_select(&table, select_statement, transaction)?;
 
-        Ok(StatementResult::Data(QueryIterator::create(select_plan, table.get_schema().clone())))
+        Ok(StatementResult::Data(QueryIterator::create(
+            selection,
+            select_plan,
+            table.get_schema().clone()
+        )))
     }
 
     fn update(

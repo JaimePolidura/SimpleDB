@@ -32,13 +32,14 @@ impl Planner {
         select_statement: SelectStatement,
         transaction: &Transaction
     ) -> Result<PlanStep, SimpleDbError> {
-        let (needs_projection_of_selection, selection) = Self::get_selection_select(&select_statement);
+        let query_selection = &select_statement.selection;
+        let (needs_projection_of_selection, storage_engine_selection) = Self::get_selection_select(&select_statement);
 
         let scan_type = self.get_scan_type(
             &select_statement.where_expr,
             table,
         )?;
-        let mut last_step = self.build_scan_step(scan_type, transaction, selection.clone(), table)?;
+        let mut last_step = self.build_scan_step(scan_type, transaction, storage_engine_selection.clone(), table)?;
 
         if let Some(where_expr) = select_statement.where_expr {
             last_step = PlanStep::Filter(Box::new(FilterStep::create(where_expr, last_step)));
@@ -47,7 +48,7 @@ impl Planner {
             last_step = PlanStep::Limit(Box::new(LimitStep::create(select_statement.limit, last_step)));
         }
         if needs_projection_of_selection {
-            last_step = PlanStep::ProjectSelection(Box::new(ProjectSelectionStep::create(selection, last_step)))
+            last_step = PlanStep::ProjectSelection(Box::new(ProjectSelectionStep::create(query_selection.clone(), last_step)))
         }
 
         Ok(last_step)

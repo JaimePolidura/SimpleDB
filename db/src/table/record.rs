@@ -1,4 +1,5 @@
- use bytes::{Buf, BufMut, Bytes};
+use std::collections::HashSet;
+use bytes::{Buf, BufMut, Bytes};
 use shared::ColumnId;
 
 //Represents the row data stored in the storage engine,
@@ -41,6 +42,21 @@ impl Record {
         }
 
         None
+    }
+
+    pub fn project_selection(&mut self, selection_columns_id: &Vec<ColumnId>) {
+        let selection_columns_id: HashSet<ColumnId> = selection_columns_id.clone().into_iter().collect();
+        let mut columns_id_to_remove = Vec::new();
+
+        for (column_id_from_row, _) in &self.data_records {
+            if !selection_columns_id.contains(&column_id_from_row) {
+                columns_id_to_remove.push(*column_id_from_row);
+            }
+        }
+
+        for column_id_to_remove in columns_id_to_remove {
+            self.remove_column(column_id_to_remove);
+        }
     }
 
     pub fn remove_column(&mut self, column_id_lookup: ColumnId) -> Option<Bytes> {

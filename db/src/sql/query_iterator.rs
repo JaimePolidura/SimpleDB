@@ -1,5 +1,6 @@
 use shared::SimpleDbError;
-use crate::{Row};
+use crate::{Column, Row};
+use crate::selection::Selection;
 use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc};
 use crate::table::schema::Schema;
 
@@ -7,16 +8,40 @@ use crate::table::schema::Schema;
 //This is simple wrapper around a Plan
 pub struct QueryIterator {
     plan: PlanStep,
-    schema: Schema
+    schema: Schema,
+    selection: Selection,
 }
 
 impl QueryIterator {
-    pub fn create(plan: PlanStep, columns_descriptor_selection: Schema) -> QueryIterator {
-        QueryIterator { plan, schema: columns_descriptor_selection }
+    pub fn create(
+        selection: Selection,
+        plan: PlanStep,
+        schema: Schema
+    ) -> QueryIterator {
+        QueryIterator { plan, schema, selection }
     }
 
     pub fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         self.plan.next()
+    }
+
+    pub fn get_selected_columns(&self) -> Vec<Column> {
+        match &self.selection {
+            Selection::All => {
+                self.schema.get_columns()
+            },
+            Selection::Some(selected_columns_names) => {
+                let mut selected_columns = Vec::new();
+
+                for selected_columns_name in selected_columns_names {
+                    let column = self.schema.get_column(selected_columns_name)
+                        .unwrap();
+                    selected_columns.push(column);
+                }
+
+                selected_columns
+            }
+        }
     }
 
     pub fn next_n(&mut self, n: usize) -> Result<Vec<Row>, SimpleDbError> {

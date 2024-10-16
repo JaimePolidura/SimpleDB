@@ -15,12 +15,13 @@ struct RowReassemble {
     record_builder: RecordBuilder,
     key: Bytes,
 
-    selection: Arc<Vec<ColumnId>>
+    selection: Vec<ColumnId>
 }
 
 pub struct TableIterator<I: StorageIterator> {
     simple_db_storage_iterator: I,
-    selection: Arc<Vec<ColumnId>>, //Columns ID to retrieve from storage engine
+    selection: Vec<ColumnId>, //Columns ID to retrieve from storage engine
+
     rows_reassembling: Vec<RowReassemble>,
     current_row: Option<Row>,
 
@@ -34,10 +35,10 @@ impl<I: StorageIterator> TableIterator<I> {
         table: Arc<Table>
     ) -> TableIterator<I> {
         TableIterator {
-            selection: Arc::new(selection),
             rows_reassembling: Vec::new(),
             simple_db_storage_iterator,
             current_row: None,
+            selection,
             table,
         }
     }
@@ -59,7 +60,9 @@ impl<I: StorageIterator> TableIterator<I> {
 
         let row_in_reassembling = self.rows_reassembling.remove(0);
         let key_bytes = row_in_reassembling.key.clone();
-        let row_record_reassembled = row_in_reassembling.build();
+        let mut row_record_reassembled = row_in_reassembling.build();
+        row_record_reassembled.project_selection(&self.selection);
+
         let schema = self.table.get_schema();
 
         self.current_row = Some(Row::create(

@@ -241,7 +241,7 @@ impl Server {
                         connection_id, rows.len(), statement
                     ));
                     Ok(StatementResponse::Rows(RowsResponse::create(
-                        query_iterator.schema().get_columns(),
+                        query_iterator.get_selected_columns(),
                         rows
                     )))
                 } else {
