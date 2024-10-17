@@ -43,6 +43,7 @@ The DB layer uses the storage engine layer to create tables, rows and databases.
   - <b>Validation (validator.rs)</b>. The AST is validated by checking the types, column names, and table names to ensure they are correct and consistent.
   - <b>Scan type analysis (scan_type_analyzer.rs)</b>. For expressions that require scanning a table, an analysis is performed to determine the appropriate scan method: full scan, range scan, secondary index scan, or merge index scan.
   - <b>Plan creation (planner.rs)</b>. Given a scan type and a statement, a plan is created. A plan is just a series of steps to execute a query. 
+  - <b>Plan optimizer (optimizer.rs)</b> 
   - <b>Execution (executor.rs)</b>. Finally, the query is executed according to the generated plan.
 
 ## Server (/server)
