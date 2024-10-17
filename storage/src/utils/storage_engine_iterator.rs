@@ -132,9 +132,15 @@ impl<I: StorageIterator> StorageEngineIterator<I> {
             }
         }
 
-        let (final_key, final_value) = prev_merged_value.take().unwrap();
-        self.entries_to_return.push_front((final_key, final_value));
-        self.check_some_keys_in_entries_to_return_readable()
+        match prev_merged_value {
+            Some((final_key, final_value)) => {
+                self.entries_to_return.push_front((final_key, final_value));
+                self.check_some_keys_in_entries_to_return_readable()
+            }
+            None => {
+                false
+            }
+        }
     }
 
     fn check_some_keys_in_entries_to_return_readable(&self) -> bool {

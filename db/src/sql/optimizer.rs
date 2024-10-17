@@ -19,8 +19,7 @@ impl PlanOptimizer {
         mut plan: PlanStep,
         table: &Arc<Table>
     ) -> Result<PlanStep, SimpleDbError> {
-        plan = self.merge_scans(plan, &table)?;
-
+        // plan = self.merge_scans(plan, &table)?;
 
         Ok(plan)
     }
