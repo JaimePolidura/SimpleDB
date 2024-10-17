@@ -430,7 +430,11 @@ impl Value {
             return Err(SimpleDbError::IllegalTypeOperation("Cannot compare values"));
         }
 
-        if self.is_fp_number() && other.is_fp_number() {
+        if self.is_fp_number() && other.is_integer_number() {
+            Ok(fp_op(self.get_f64()?, other.get_i64()? as f64))
+        } else if self.is_integer_number() && other.is_fp_number() {
+            Ok(fp_op(self.get_i64()? as f64, other.get_f64()?))
+        } else if self.is_fp_number() && other.is_fp_number() {
             Ok(fp_op(self.get_f64()?, other.get_f64()?))
         } else if self.is_integer_number() && other.is_integer_number() {
             Ok(int_op(self.get_i64()?, other.get_i64()? ))

@@ -3,7 +3,10 @@ use shared::SimpleDbError;
 use shared::SimpleDbError::MalformedQuery;
 use crate::sql::plan::plan_step::PlanStep;
 use crate::sql::plan::plan_step::PlanStep::{PrimaryRangeScan, SecondaryRangeScan};
+use crate::sql::plan::steps::filter_step::FilterStep;
+use crate::sql::plan::steps::limit_step::LimitStep;
 use crate::sql::plan::steps::primary_range_scan_step::PrimaryRangeScanStep;
+use crate::sql::plan::steps::project_selection_step::ProjectSelectionStep;
 use crate::sql::plan::steps::secondary_range_scan_step::SecondaryRangeScanStep;
 use crate::table::table::Table;
 
@@ -19,16 +22,28 @@ impl PlanOptimizer {
         mut plan: PlanStep,
         table: &Arc<Table>
     ) -> Result<PlanStep, SimpleDbError> {
-        // plan = self.merge_scans(plan, &table)?;
+        plan = self.merge_scans(plan, &table)?;
 
         Ok(plan)
     }
 
     fn merge_scans(&self, parent_plan: PlanStep, table: &Arc<Table>) -> Result<PlanStep, SimpleDbError> {
         match &parent_plan {
-            PlanStep::ProjectSelection(projection_step) => self.merge_scans(projection_step.source.clone(), table),
-            PlanStep::Limit(limit_step) => self.merge_scans(limit_step.source.clone(), table),
-            PlanStep::Filter(filter_step) => self.merge_scans(filter_step.source.clone(), table),
+            PlanStep::ProjectSelection(projection_step) => {
+                Ok(PlanStep::ProjectSelection(Box::new(ProjectSelectionStep::create(
+                    projection_step.selection_to_project.clone(), self.merge_scans(projection_step.source.clone(), table)?
+                ))))
+            },
+            PlanStep::Limit(limit_step) => {
+                Ok(PlanStep::Limit(Box::new(
+                    LimitStep::create(limit_step.limit.clone(), self.merge_scans(limit_step.source.clone(), table)?)
+                )))
+            },
+            PlanStep::Filter(filter_step) => {
+                Ok(PlanStep::Filter(Box::new(FilterStep::create(
+                    filter_step.filter_expression.clone(), self.merge_scans(filter_step.source.clone(), table)?
+                ))))
+            },
 
             PlanStep::MergeIntersection(_) |
             PlanStep::MergeUnion(_) => {
@@ -60,6 +75,9 @@ impl PlanOptimizer {
         }
 
         if left_child.is_same_column(&right_child) && is_or {
+            let mut parent = parent.clone();
+            parent.set_merge_right(right_child.clone());
+            parent.set_merge_left(left_child.clone());
             self.merge_or(table, left_child, right_child, parent)
         } else if left_child.is_same_column(&right_child) && !is_or {
             self.merge_and(table, left_child, right_child)
@@ -128,12 +146,10 @@ impl PlanOptimizer {
         table: &Arc<Table>,
         left: PlanStep,
         right: PlanStep,
-        parent: &PlanStep,
+        parent: PlanStep,
     ) -> Result<PlanStep, SimpleDbError> {
-        if left.is_exact() && right.is_exact() {
-            Ok(parent.clone())
-        } else if left.is_range() && right.is_range() {
-            //There is small benefit when trying to optimize OR scans!
+        //There is small benefit when trying to optimize OR scans!
+        if (left.is_exact() && right.is_exact()) || (left.is_range() && right.is_range())  {
             Ok(parent.clone())
         } else if left.is_exact() && right.is_range() {
             let exact_value_left = left.get_exact_value();
