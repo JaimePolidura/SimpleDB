@@ -1,15 +1,16 @@
 use crate::selection::Selection;
 use crate::{Row};
 use bytes::Bytes;
-use shared::SimpleDbError;
+use shared::{SimpleDbError, Value};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use crate::sql::plan::plan_step::{PlanStepDesc, PlanStepTrait};
 use crate::table::table::Table;
 
+#[derive(Clone)]
 pub struct PrimaryExactScanStep {
-    row: Option<Row>,
-    primary_key_value: Bytes,
+    pub(crate) row: Option<Row>,
+    pub(crate) primary_key_value: Value,
 }
 
 impl PrimaryExactScanStep {
@@ -19,9 +20,12 @@ impl PrimaryExactScanStep {
         selection: Selection,
         transaction: &Transaction
     ) -> Result<PrimaryExactScanStep, SimpleDbError> {
+        let primary_column_type = table.get_schema().get_primary_column()
+            .column_type;
+
         Ok(PrimaryExactScanStep {
             row: table.get_by_primary_column(&id, transaction, &selection)?,
-            primary_key_value: id,
+            primary_key_value: Value::create(id, primary_column_type)?,
         })
     }
 }
@@ -32,6 +36,6 @@ impl PlanStepTrait for PrimaryExactScanStep {
     }
 
     fn desc(&self) -> PlanStepDesc {
-        PlanStepDesc::PrimaryExactScan(self.primary_key_value.clone())
+        PlanStepDesc::PrimaryExactScan(self.primary_key_value.get_bytes().clone())
     }
 }

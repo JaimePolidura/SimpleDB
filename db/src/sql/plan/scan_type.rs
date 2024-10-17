@@ -1,9 +1,7 @@
-use std::sync::mpsc::channel;
+use bytes::Bytes;
 use crate::sql::parser::expression::Expression;
 use shared::{SimpleDbError, Value};
 use SimpleDbError::MalformedQuery;
-use crate::Schema;
-use crate::selection::Selection;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScanType {
@@ -38,10 +36,10 @@ pub enum RangeKeyPosition {
 }
 
 impl RangeScan {
-    // WHERE id > 100 AND id < 200 -> Range(100, _) AND Range(_, 200) = Range(100, 200)
-    // WHERE id > 200 AND id < 100 -> Range(200, _) AND Range(_, 100) = Range(_, _) Invalid!
-    // WHERE id > 100 AND id > 200 -> Range(100, _) AND Range(200, _) = Range(200, _)
-    // WHERE id < 100 AND id < 200 -> Range(_, 100) AND Range(_, 200) = Range(_, 100)
+    //Range(100, _) AND Range(_, 200) = Range(100, 200)
+    //Range(200, _) AND Range(_, 100) = Range(_, _) Invalid!
+    //Range(100, _) AND Range(200, _) = Range(200, _)
+    //Range(_, 100) AND Range(_, 200) = Range(_, 100)
     pub fn and(&self, other: RangeScan) -> Result<RangeScan, SimpleDbError> {
         if self.has_only_start() && other.has_only_end() {
             let range_scan = RangeScan {
@@ -107,6 +105,10 @@ impl RangeScan {
 
     pub fn same_column(&self, other: &RangeScan) -> bool {
         self.column_name.eq(&other.column_name)
+    }
+
+    pub fn is_inside_range(&self, other_value: &Value) -> bool {
+        matches!(self.get_position(other_value), RangeKeyPosition::Inside)
     }
 
     pub fn get_position(&self, other_value: &Value) -> RangeKeyPosition {

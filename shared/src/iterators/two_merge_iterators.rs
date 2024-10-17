@@ -2,6 +2,7 @@ use crate::iterators::storage_iterator::StorageIterator;
 use bytes::Bytes;
 use crate::key::Key;
 
+#[derive(Clone)]
 pub struct TwoMergeIterator<A: StorageIterator, B: StorageIterator> {
     a: A,
     b: B,

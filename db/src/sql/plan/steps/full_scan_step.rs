@@ -8,8 +8,9 @@ use storage::transactions::transaction::Transaction;
 use storage::SimpleDbStorageIterator;
 use crate::sql::plan::plan_step::{PlanStepDesc, PlanStepTrait};
 
+#[derive(Clone)]
 pub struct FullScanStep {
-    iterator: TableIterator<SimpleDbStorageIterator>,
+    pub(crate) iterator: TableIterator<SimpleDbStorageIterator>,
 }
 
 impl FullScanStep {
@@ -19,7 +20,7 @@ impl FullScanStep {
         transaction: &Transaction
     ) -> Result<FullScanStep, SimpleDbError> {
         Ok(FullScanStep {
-            iterator: table.scan_all(transaction, selection)?
+            iterator: table.scan_all(transaction, &selection)?
         })
     }
 }

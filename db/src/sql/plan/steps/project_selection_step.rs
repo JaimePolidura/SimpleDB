@@ -3,9 +3,10 @@ use crate::{PlanStepDesc, Row};
 use crate::selection::Selection;
 use crate::sql::plan::plan_step::{PlanStep, PlanStepTrait};
 
+#[derive(Clone)]
 pub struct ProjectSelectionStep {
-    source: PlanStep,
-    selection_to_project: Selection,
+    pub(crate) source: PlanStep,
+    pub(crate) selection_to_project: Selection,
 }
 
 impl ProjectSelectionStep {

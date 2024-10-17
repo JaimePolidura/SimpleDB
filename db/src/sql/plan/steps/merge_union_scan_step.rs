@@ -4,11 +4,11 @@ use shared::SimpleDbError;
 use crate::Row;
 use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc, PlanStepTrait};
 
+#[derive(Clone)]
 pub struct MergeUnionStep {
-    plans: Vec<PlanStep>,
-    returned_rows: HashSet<Bytes>,
-
-    prev_plan_index_returned: usize,
+    pub(crate) plans: Vec<PlanStep>,
+    pub(crate) returned_rows: HashSet<Bytes>,
+    pub(crate) prev_plan_index_returned: usize,
 }
 
 impl MergeUnionStep {

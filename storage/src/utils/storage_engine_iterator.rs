@@ -202,6 +202,23 @@ impl<I: StorageIterator> Drop for StorageEngineIterator<I> {
     }
 }
 
+impl<I: StorageIterator + Clone> Clone for StorageEngineIterator<I> {
+    fn clone(&self) -> Self {
+        StorageEngineIterator {
+            options: self.options.clone(),
+            inner_iterator: self.inner_iterator.clone(),
+            entries_to_return: self.entries_to_return.clone(),
+            current_value: self.current_value.clone(),
+            current_key: self.current_key.clone(),
+            transaction_manager: self.transaction_manager.clone(),
+            transaction: self.transaction.clone(),
+            is_finished: self.is_finished,
+            keyspace_desc: self.keyspace_desc,
+            first_iteration: self.first_iteration
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::memtables::memtable::MemTable;

@@ -4,7 +4,7 @@ use bytes::Bytes;
 use crossbeam_skiplist::SkipSet;
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::key::Key;
-use shared::{TxnId, Type};
+use shared::{utils, TxnId, Type};
 use storage::transactions::transaction::Transaction;
 
 //This iterator will return the primary keys indexed::
@@ -97,6 +97,18 @@ impl<I: StorageIterator> SecondaryIndexIterator<I> {
 
     pub fn seek(&mut self, key: &Bytes, inclusive: bool) {
         self.storage_iterator.seek(key, inclusive);
+    }
+}
+
+impl<I: Clone + StorageIterator> Clone for SecondaryIndexIterator<I> {
+    fn clone(&self) -> Self {
+        SecondaryIndexIterator {
+            transaction: self.transaction.clone(),
+            primary_column_type: self.primary_column_type,
+            posting_list_iterator: self.posting_list_iterator.clone(),
+            storage_iterator: self.storage_iterator.clone(),
+            deleted_entries: utils::clone_skipset(&self.deleted_entries)
+        }
     }
 }
 

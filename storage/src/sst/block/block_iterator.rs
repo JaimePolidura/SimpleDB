@@ -6,6 +6,7 @@ use shared::key::Key;
 use shared::MAX_TXN_ID;
 use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct BlockIterator {
     block: Arc<Block>,
     keyspace_desc: KeyspaceDescriptor,

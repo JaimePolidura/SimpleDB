@@ -3,6 +3,7 @@ use crate::key::Key;
 use bytes::Bytes;
 use std::collections::HashSet;
 
+#[derive(Clone)]
 pub struct MergeIterator<I: StorageIterator> {
     //We use Option so that when an iterator has not next, we can remove it by placing None
     iterators: Vec<Option<Box<I>>>,

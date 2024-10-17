@@ -4,9 +4,10 @@ use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc, PlanStepTrait};
 use crate::Row;
 use shared::SimpleDbError;
 
+#[derive(Clone)]
 pub struct FilterStep {
-    filter_expression: Expression,
-    source: PlanStep,
+    pub(crate) filter_expression: Expression,
+    pub(crate) source: PlanStep,
 }
 
 impl FilterStep {

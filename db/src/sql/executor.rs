@@ -14,11 +14,13 @@ use shared::SimpleDbError::MalformedQuery;
 use shared::{SimpleDbError, Value};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::sql::optimizer::PlanOptimizer;
 use crate::table::schema::Column;
 
 pub struct StatementExecutor {
     databases: Arc<Databases>,
 
+    optimizer: PlanOptimizer,
     validator: StatementValidator,
     planner: Planner
 }
@@ -27,8 +29,9 @@ impl StatementExecutor {
     pub fn create(databases: &Arc<Databases>) -> StatementExecutor {
         StatementExecutor {
             validator: StatementValidator::create(databases),
+            optimizer: PlanOptimizer::create(),
+            databases: databases.clone(),
             planner: Planner::create(),
-            databases: databases.clone()
         }
     }
 
@@ -68,7 +71,7 @@ impl StatementExecutor {
         let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table_or_err(&select_statement.table_name)?;
         let select_plan = self.planner.plan_select(&table, select_statement, transaction)?;
-
+        let select_plan = self.optimizer.optimize(select_plan, &table)?;
 
         Ok(StatementResult::Data(QueryIterator::create(
             selection,
@@ -86,6 +89,8 @@ impl StatementExecutor {
         let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table_or_err(&update_statement.table_name)?;
         let mut update_plan = self.planner.plan_update(&table, &update_statement, transaction)?;
+        let mut update_plan = self.optimizer.optimize(update_plan, &table)?;
+
         let mut updated_rows = 0;
 
         while let Some(row_to_update) = update_plan.next()? {

@@ -10,12 +10,14 @@ use shared::key::Key;
 use storage::transactions::transaction::Transaction;
 use storage::{SimpleDbStorageIterator, Storage};
 
+#[derive(Clone)]
 pub struct SecondaryRangeScanStep {
-    secondary_iterator: SecondaryIndexIterator<SimpleDbStorageIterator>,
-    selection: Selection,
-    range: RangeScan,
-    table: Arc<Table>,
-    transaction: Transaction
+    pub(crate) secondary_iterator: SecondaryIndexIterator<SimpleDbStorageIterator>,
+    pub(crate) selection: Selection,
+    pub(crate) range: RangeScan,
+    pub(crate) table: Arc<Table>,
+    pub(crate) transaction: Transaction,
+    pub(crate) column_name: String,
 }
 
 impl SecondaryRangeScanStep {
@@ -34,6 +36,7 @@ impl SecondaryRangeScanStep {
         }?;
 
         Ok(SecondaryRangeScanStep {
+            column_name: column_name.to_string(),
             transaction: transaction.clone(),
             secondary_iterator: iterator,
             selection,

@@ -9,9 +9,13 @@ use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use storage::SimpleDbStorageIterator;
 
+#[derive(Clone)]
 pub struct PrimaryRangeScanStep {
-    range: RangeScan,
-    iterator: TableIterator<SimpleDbStorageIterator>
+    pub(crate) range: RangeScan,
+    pub(crate) iterator: TableIterator<SimpleDbStorageIterator>,
+
+    pub(crate) transaction: Transaction,
+    pub(crate) selection: Selection,
 }
 
 impl PrimaryRangeScanStep {
@@ -25,10 +29,12 @@ impl PrimaryRangeScanStep {
             let star_range_key_bytes = star_range_key_expr.get_literal_bytes();
             table.scan_from_key(&star_range_key_bytes, range.is_start_inclusive(), transaction, &selection)
         } else {
-            table.scan_all(transaction, selection)
+            table.scan_all(transaction, &selection)
         }?;
 
         Ok(PrimaryRangeScanStep {
+            transaction: transaction.clone(),
+            selection,
             iterator,
             range,
         })

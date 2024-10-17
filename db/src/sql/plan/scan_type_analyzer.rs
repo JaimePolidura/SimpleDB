@@ -304,11 +304,8 @@ impl ScanTypeAnalyzer {
                 }
             },
             //Range rules
-            (ScanType::Range(range_left), ScanType::Range(range_right)) => {
-                if matches!(binary_operator, BinaryOperator::And) && range_left.same_column(range_right){
-                    //Merge ranges
-                    Ok(ScanType::Range(range_left.and(range_right.clone())?))
-                } else if matches!(binary_operator, BinaryOperator::And) && !range_left.same_column(range_right) {
+            (ScanType::Range(_), ScanType::Range(_)) => {
+                if matches!(binary_operator, BinaryOperator::And) {
                     Ok(ScanType::MergeIntersection(Box::new(a.clone()), Box::new(b.clone())))
                 } else if matches!(binary_operator, BinaryOperator::Or) {
                     Ok(ScanType::MergeUnion(Box::new(a.clone()), Box::new(b.clone())))

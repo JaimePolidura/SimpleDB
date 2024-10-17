@@ -3,11 +3,11 @@ use crate::Row;
 use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc, PlanStepTrait};
 use crate::sql::parser::statement::Limit;
 
+#[derive(Clone)]
 pub struct LimitStep {
-    limit: Limit,
-    source: PlanStep,
-
-    count: usize
+    pub(crate) limit: Limit,
+    pub(crate) source: PlanStep,
+    pub(crate) count: usize
 }
 
 impl LimitStep {

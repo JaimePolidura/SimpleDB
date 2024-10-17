@@ -15,6 +15,7 @@ use std::sync::Arc;
 //
 //   For example (bytes, txn_id): (A, 1), (A, 2), (A, 3) with iterator txn_id = 2,
 //   the iterator will return: (A, 1) and (A, 2)
+#[derive(Clone)]
 pub struct MemtableIterator {
     memtable: Arc<MemTable>,
 

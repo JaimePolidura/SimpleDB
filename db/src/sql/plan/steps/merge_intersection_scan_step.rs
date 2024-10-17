@@ -4,10 +4,11 @@ use shared::SimpleDbError;
 use crate::Row;
 use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc, PlanStepTrait};
 
+#[derive(Clone)]
 pub struct MergeIntersectionStep {
-    plans: Vec<PlanStep>,
-    rows_not_intersected: HashMap<Bytes, Row>,
-    prev_plan_index: usize,
+    pub(crate) plans: Vec<PlanStep>,
+    pub(crate) rows_not_intersected: HashMap<Bytes, Row>,
+    pub(crate) prev_plan_index: usize,
 }
 
 impl MergeIntersectionStep {

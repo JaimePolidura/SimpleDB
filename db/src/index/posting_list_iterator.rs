@@ -4,6 +4,7 @@ use storage::transactions::transaction::Transaction;
 
 //This iterator:
 // - Will only return posting list entries that are readable by the current transaction
+#[derive(Clone)]
 pub struct PostingListIterator {
     transaction: Transaction,
     posting_list: Vec<PostingListEntry>,

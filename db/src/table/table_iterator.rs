@@ -5,11 +5,13 @@ use bytes::Bytes;
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::{ColumnId, Value};
 use std::sync::Arc;
+use crate::selection::Selection;
 
 //This is the iterator that will be exposed to users of the SimpleDB
 //As data is stored in LSM engine, which is "only" append only, update records of rows are stored as ID -> [updated column id, new column value]
 //So if we want to get all the columns of a row existing row by its ID, we will need to reassemble it because column values will
 //scatter over sstables and memtables.
+#[derive(Clone)]
 struct RowReassemble {
     is_fully_reassembled: bool,
     record_builder: RecordBuilder,
@@ -18,6 +20,7 @@ struct RowReassemble {
     selection: Vec<ColumnId>
 }
 
+#[derive(Clone)]
 pub struct TableIterator<I: StorageIterator> {
     simple_db_storage_iterator: I,
     selection: Vec<ColumnId>, //Columns ID to retrieve from storage engine
