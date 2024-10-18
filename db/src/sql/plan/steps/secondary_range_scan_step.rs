@@ -1,5 +1,5 @@
 use crate::index::secondary_index_iterator::SecondaryIndexIterator;
-use crate::selection::Selection;
+use crate::selection::{IndexSelectionType, Selection};
 use crate::sql::plan::plan_step::{PlanStepDesc, PlanStepTrait};
 use crate::sql::plan::scan_type::{RangeKeyPosition, RangeScan};
 use crate::table::table::Table;
@@ -9,6 +9,7 @@ use std::sync::Arc;
 use shared::key::Key;
 use storage::transactions::transaction::Transaction;
 use storage::{SimpleDbStorageIterator, Storage};
+use crate::table::row::RowBuilder;
 
 #[derive(Clone)]
 pub struct SecondaryRangeScanStep {
@@ -18,6 +19,7 @@ pub struct SecondaryRangeScanStep {
     pub(crate) table: Arc<Table>,
     pub(crate) transaction: Transaction,
     pub(crate) column_name: String,
+    pub(crate) index_selection_type: IndexSelectionType,
 }
 
 impl SecondaryRangeScanStep {
@@ -36,6 +38,7 @@ impl SecondaryRangeScanStep {
         }?;
 
         Ok(SecondaryRangeScanStep {
+            index_selection_type: selection.get_index_selection_type(table.get_schema()),
             column_name: column_name.to_string(),
             transaction: transaction.clone(),
             secondary_iterator: iterator,
@@ -44,21 +47,29 @@ impl SecondaryRangeScanStep {
             range,
         })
     }
-
-    fn get_row_by_primary(&self, primary_key: Key) -> Result<Option<Row>, SimpleDbError> {
-        self.table.get_by_primary_column(
-            primary_key.as_bytes(),
-            &self.transaction,
-            &self.selection,
-        )
-    }
 }
 
 impl PlanStepTrait for SecondaryRangeScanStep {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         if let Some((indexed_value, primary_key)) = self.secondary_iterator.next() {
             match self.range.get_position(indexed_value.get_value()) {
-                RangeKeyPosition::Inside => self.get_row_by_primary(primary_key),
+                RangeKeyPosition::Inside => {
+                    match self.index_selection_type {
+                        IndexSelectionType::Primary |
+                        IndexSelectionType::Secondary |
+                        IndexSelectionType::OnlyPrimaryAndSecondary => {
+                            let mut row_builder = RowBuilder::create(self.table.get_schema().clone());
+                            row_builder.add_primary_value(primary_key.get_value().clone());
+                            row_builder.add_by_column_name(indexed_value.get_value().get_bytes().clone(), &self.column_name);
+                            Ok(Some(row_builder.build()))
+                        },
+                        IndexSelectionType::All => self.table.get_by_primary_column(
+                            primary_key.as_bytes(),
+                            &self.transaction,
+                            &self.selection,
+                        ),
+                    }
+                },
                 RangeKeyPosition::Above => Ok(None),
                 //Not possible because, the iterator have been seeked in construction time
                 RangeKeyPosition::Bellow => panic!(""),
@@ -66,7 +77,6 @@ impl PlanStepTrait for SecondaryRangeScanStep {
         } else {
             Ok(None)
         }
-
     }
 
     fn desc(&self) -> PlanStepDesc {

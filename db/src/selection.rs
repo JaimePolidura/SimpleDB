@@ -1,11 +1,20 @@
-use std::collections::HashSet;
 use crate::table::schema::Schema;
 use shared::{ColumnId, SimpleDbError};
+use std::collections::HashSet;
 
 #[derive(Clone)]
 pub enum Selection {
     All,
     Some(Vec<String>)
+}
+
+//Describes the type of columns present in the selection.
+#[derive(Clone)]
+pub enum IndexSelectionType {
+    Primary, //Only primary has been selected.
+    Secondary, //Only secondary has been selected.
+    OnlyPrimaryAndSecondary, //Only primary and one secondary column have been selected
+    All //Other rows have been selected
 }
 
 impl Selection {
@@ -56,6 +65,37 @@ impl Selection {
                     .map(|column| column.column_id)
                     .collect())
             }
+        }
+    }
+
+    pub fn get_index_selection_type(&self, schema: &Schema) -> IndexSelectionType {
+        match &self {
+            Selection::Some(selected_columns) => {
+                let mut one_secondary_indexed_column_selected = false;
+                let mut primary_column_selected = false;
+
+                for selected_column_name in selected_columns {
+                    let column = schema.get_column(selected_column_name).unwrap();
+                    if column.is_primary {
+                        primary_column_selected = true;
+                    } else if column.is_secondary_indexed() && !one_secondary_indexed_column_selected {
+                        one_secondary_indexed_column_selected = true;
+                    } else {
+                        return IndexSelectionType::All;
+                    }
+                }
+
+                if one_secondary_indexed_column_selected && primary_column_selected {
+                    IndexSelectionType::OnlyPrimaryAndSecondary
+                } else if one_secondary_indexed_column_selected {
+                    IndexSelectionType::Secondary
+                } else if primary_column_selected {
+                    IndexSelectionType::Primary
+                } else {
+                    return IndexSelectionType::All;
+                }
+            }
+            Selection::All => IndexSelectionType::All,
         }
     }
 }

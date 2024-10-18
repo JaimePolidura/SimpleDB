@@ -1,11 +1,11 @@
-use std::collections::HashSet;
-use crate::table::record::Record;
+use crate::selection::Selection;
+use crate::table::record::{Record, RecordBuilder};
 use crate::table::schema::Schema;
-use bytes::BufMut;
-use shared::{ColumnId, SimpleDbError, Value};
+use bytes::{BufMut, Bytes};
+use shared::{SimpleDbError, Value};
+pub use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Formatter;
-use crate::selection::Selection;
 
 #[derive(Clone)]
 pub struct Row {
@@ -96,5 +96,40 @@ impl fmt::Display for Row {
         string.push_str("]");
 
         write!(f, "{}", string.as_str())
+    }
+}
+
+pub struct RowBuilder {
+    pub(crate) storage_record_builder: RecordBuilder,
+    pub(crate) schema: Schema,
+    pub(crate) primary_value: Option<Value>,
+}
+
+impl RowBuilder {
+    pub fn create(schema: Schema) -> RowBuilder {
+        RowBuilder {
+            storage_record_builder: Record::builder(),
+            primary_value: None,
+            schema,
+        }
+    }
+
+    pub fn add_by_column_name(&mut self, value: Bytes, column_name: &str) {
+        let column = self.schema.get_column(column_name).unwrap();
+        self.storage_record_builder.add_column(column.column_id, value);
+    }
+
+    pub fn add_primary_value(&mut self, value: Value) {
+        let primary_value_column = self.schema.get_primary_column();
+        self.storage_record_builder.add_column(primary_value_column.column_id, value.get_bytes().clone());
+        self.primary_value = Some(value);
+    }
+
+    pub fn build(self) -> Row {
+        Row {
+            storage_engine_record: self.storage_record_builder.build(),
+            primary_column_value: self.primary_value.unwrap(),
+            schema: self.schema
+        }
     }
 }

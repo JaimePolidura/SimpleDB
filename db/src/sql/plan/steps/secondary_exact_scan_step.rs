@@ -1,5 +1,5 @@
 use crate::index::secondary_index_iterator::SecondaryIndexIterator;
-use crate::selection::Selection;
+use crate::selection::{IndexSelectionType, Selection};
 use crate::table::table::Table;
 use bytes::Bytes;
 use shared::{SimpleDbError, Value};
@@ -8,6 +8,7 @@ use storage::transactions::transaction::Transaction;
 use storage::SimpleDbStorageIterator;
 use crate::Row;
 use crate::sql::plan::plan_step::{PlanStepDesc, PlanStepTrait};
+use crate::table::row::RowBuilder;
 
 #[derive(Clone)]
 pub struct SecondaryExactScanStep {
@@ -17,6 +18,7 @@ pub struct SecondaryExactScanStep {
     pub(crate) table: Arc<Table>,
     pub(crate) column_name: String,
     pub(crate) secondary_column_value: Value,
+    pub(crate) index_selection_type: IndexSelectionType,
 }
 
 impl SecondaryExactScanStep {
@@ -39,6 +41,7 @@ impl SecondaryExactScanStep {
         let secondary_column_value = Value::create(secondary_index_value_lookup, column_type)?;
 
         Ok(SecondaryExactScanStep {
+            index_selection_type: selection.get_index_selection_type(table.get_schema()),
             column_name: secondary_column_name.to_string(),
             transaction: transaction.clone(),
             secondary_index_iterator,
@@ -56,16 +59,28 @@ impl PlanStepTrait for SecondaryExactScanStep {
                 return Ok(None);
             }
 
-            let mut primary_key_iterator = self.table.scan_from_key(
-                &primary_key.as_bytes(),
-                true,
-                &self.transaction,
-                &self.selection,
-            )?;
+            match self.index_selection_type {
+                IndexSelectionType::Primary |
+                IndexSelectionType::Secondary |
+                IndexSelectionType::OnlyPrimaryAndSecondary => {
+                    let mut row_builder = RowBuilder::create(self.table.get_schema().clone());
+                    row_builder.add_primary_value(primary_key.get_value().clone());
+                    row_builder.add_by_column_name(secondary_indexed_value.get_value().get_bytes().clone(), &self.column_name);
+                    return Ok(Some(row_builder.build()));
+                }
+                IndexSelectionType::All => {
+                    let mut primary_key_iterator = self.table.scan_from_key(
+                        &primary_key.as_bytes(),
+                        true,
+                        &self.transaction,
+                        &self.selection,
+                    )?;
 
-            primary_key_iterator.next();
+                    primary_key_iterator.next();
 
-            return Ok(Some(primary_key_iterator.row().clone()));
+                    return Ok(Some(primary_key_iterator.row().clone()));
+                }
+            }
         }
 
         Ok(None)
