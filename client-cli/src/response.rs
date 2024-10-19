@@ -10,7 +10,7 @@ pub enum IndexType {
 
 pub enum Response {
     Statement(StatementResponse),
-    Error(ErrorTypeId), //Error number
+    Error(ErrorTypeId, String), //Error number, error message
     Ok,
 }
 
@@ -73,10 +73,18 @@ impl Response {
                     _ => panic!("Invalid statement response type Id")
                 })
             },
-            2 => Response::Error(connection.read_u8().expect("Cannot read response error type ID")),
+            2 => Response::Error(connection.read_u8().expect("Cannot read response error type ID"), Self::deserialize_error_message(connection)),
             3 => Response::Ok,
             _ => panic!("Invalid server response type Id")
         }
+    }
+
+    fn deserialize_error_message(connection: &mut Connection) -> String {
+        let error_message_length = connection.read_u32().expect("Cannot read error message length");
+        let error_message_bytes = connection.read_n(error_message_length as usize).expect("Cannot read error message bytes");
+
+        String::from_utf8(error_message_bytes)
+            .expect("Cannot convert error message bytes to UTF-8 String")
     }
 
     fn deserialize_explain(connection: &mut Connection) -> Vec<String> {

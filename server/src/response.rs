@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use bytes::BufMut;
 use serde::Serialize;
 use db::{Column, IndexType, Limit, PlanStepDesc, RangeScan, Row, Schema};
@@ -6,7 +7,7 @@ use shared::{ErrorTypeId, SimpleDbError, Type, Value};
 
 pub enum Response {
     Statement(StatementResponse),
-    Error(ErrorTypeId), //Error number
+    Error(ErrorTypeId, String), //Error number, error message
     Ok,
 }
 
@@ -27,7 +28,7 @@ pub struct RowsResponse {
 
 impl Response {
     pub fn from_simpledb_error(error: SimpleDbError) -> Response {
-        Response::Error(error.serialize())
+        Response::Error(error.serialize(), format!("{:?}", error))
     }
 
     pub fn serialize(&self) -> Vec<u8> {
@@ -44,7 +45,11 @@ impl Response {
 
         match self {
             Response::Statement(result) => serialized.extend(result.serialize()),
-            Response::Error(error_type_id) => serialized.put_u8(*error_type_id as u8),
+            Response::Error(error_type_id, error_message) => {
+                serialized.put_u8(*error_type_id as u8);
+                serialized.put_u32_le(error_message.len() as u32);
+                serialized.extend(error_message.bytes());
+            },
             Response::Ok => {},
         };
 
@@ -54,7 +59,7 @@ impl Response {
     fn message_type_id(&self) -> u8 {
         match self {
             Response::Statement(_) => 1,
-            Response::Error(_) => 2,
+            Response::Error(_, _) => 2,
             Response::Ok => 3
         }
     }

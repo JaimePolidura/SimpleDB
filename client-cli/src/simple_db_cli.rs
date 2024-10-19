@@ -73,8 +73,8 @@ impl SimpleDbCli {
                     StatementResponse::Indexes(indexes) => self.print_show_indexes(indexes, duration),
                 };
             }
-            Response::Error(error_type_id) => {
-                Self::print_error(error_type_id);
+            Response::Error(error_type_id, error_message) => {
+                Self::print_error(error_type_id, error_message);
             }
             Response::Ok => {
                 println!("Ok ({})", duration_to_string(duration));
@@ -223,25 +223,27 @@ impl SimpleDbCli {
         line
     }
 
-    fn print_error(error_type_id: ErrorTypeId) {
+    fn print_error(error_type_id: ErrorTypeId, error_message: String) {
         match error_type_id {
-            57 => println!("Invalid password!"),
-            56 => println!("Invalid request binary format!"),
-            2 => println!("Range scan is not allowed!"),
-            5 => println!("Full scan is not allowed!"),
-            3 | 4 => println!("Invalid query syntax"),
-            6 => println!("You should connect to a database or start a transaction first"),
-            7 => println!("Column not found"),
-            8 => println!("Table not found"),
-            9 => println!("Table already exists"),
-            10 => println!("Primary column should be included when creating a table"),
-            11 => println!("Only one primary column can be created in a table"),
-            12 => println!("Column already exists"),
-            13 => println!("Column not found"),
-            14 => println!("Invalid column type"),
-            16 => println!("Database already exists"),
-            17 => println!("Database not found"),
-            _ => println!("Received error {} code from server", error_type_id)
-        }
+            57 => print!("Invalid password!"),
+            56 => print!("Invalid request binary format!"),
+            2 => print!("Range scan is not allowed!"),
+            5 => print!("Full scan is not allowed!"),
+            3 | 4 => print!("Invalid query syntax"),
+            6 => print!("You should connect to a database or start a transaction first"),
+            7 => print!("Column not found"),
+            8 => print!("Table not found"),
+            9 => print!("Table already exists"),
+            10 => print!("Primary column should be included when creating a table"),
+            11 => print!("Only one primary column can be created in a table"),
+            12 => print!("Column already exists"),
+            13 => print!("Column not found"),
+            14 => print!("Invalid column type"),
+            16 => print!("Database already exists"),
+            17 => print!("Database not found"),
+            _ => print!("Received error {} code from server", error_type_id)
+        };
+
+        print!(" Message: {}\n", error_message);
     }
 }
