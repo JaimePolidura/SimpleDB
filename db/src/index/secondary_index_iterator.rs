@@ -171,16 +171,16 @@ mod test  {
 
     fn create_secondary_index_iterator() -> SecondaryIndexIterator<MockIterator> {
         let mut inner_iterator = storage::MockIterator::create();
-        inner_iterator.add_entry("1", 1, Bytes::from(PostingList::create(vec![
+        inner_iterator.add_entry("1", 1, Bytes::from(PostingList::create_mock(vec![
             ("Jaime", 1, true),
             ("Molon", 2, true),
             ("Wili", 3, false)
         ]).serialize()));
-        inner_iterator.add_entry("2", 1, Bytes::from(PostingList::create(vec![
+        inner_iterator.add_entry("2", 1, Bytes::from(PostingList::create_mock(vec![
             ("Wili", 4, true),
             ("Walo", 2, true)
         ]).serialize()));
-        inner_iterator.add_entry("3", 1, Bytes::from(PostingList::create(vec![
+        inner_iterator.add_entry("3", 1, Bytes::from(PostingList::create_mock(vec![
             ("Juanxli", 10, true),
             ("Alvaro", 2, true)
         ]).serialize()));

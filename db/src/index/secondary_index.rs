@@ -5,6 +5,7 @@ use shared::logger::logger;
 use shared::logger::SimpleDbLayer::DB;
 use shared::{KeyspaceId, SimpleDbError, SimpleDbOptions, Type};
 use std::sync::Arc;
+use shared::key::Key;
 use storage::transactions::transaction::Transaction;
 use storage::{SimpleDbStorageIterator, Storage};
 
@@ -57,8 +58,8 @@ impl SecondaryIndex {
         if let Some(old_value) = old_value {
             self.delete(transaction, old_value.clone(), primary_key.clone())?;
         }
-
-        let new_entry = PostingList::create_deleted(primary_key, self.primary_column_type, transaction)
+        
+        let new_entry = PostingList::crate_only_one_entry(&Key::create(primary_key, self.primary_column_type, transaction.id()))
             .serialize();
 
         self.storage.set_with_transaction(

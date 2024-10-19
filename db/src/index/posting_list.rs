@@ -43,7 +43,7 @@ impl PostingList {
     }
 
     //Used for testing
-    pub fn create(
+    pub fn create_mock(
         values: Vec<(&str, TxnId, bool)>
     ) -> PostingList {
         let mut entries = Vec::new();
@@ -130,7 +130,7 @@ mod test {
 
     #[test]
     fn serialize_deserialize() {
-        let posting_list = PostingList::create(vec![
+        let posting_list = PostingList::create_mock(vec![
             ("Jaime", 1, true),
             ("Juan", 2, false),
             ("Walo", 1, true),
@@ -148,12 +148,12 @@ mod test {
 
     #[test]
     fn merge() {
-        let posting_list_a = PostingList::create(vec![
+        let posting_list_a = PostingList::create_mock(vec![
             ("Jaime", 1, true),
             ("Juan", 2, false),
             ("Walo", 1, true),
         ]);
-        let posting_list_b = PostingList::create(vec![
+        let posting_list_b = PostingList::create_mock(vec![
             ("Juan", 3, true),
             ("Pedro", 1, true),
         ]);
