@@ -9,6 +9,7 @@ const COMMIT_BINARY_CODE: u8 = 0x02;
 const WRITE_BINARY_CODE: u8 = 0x03;
 const START_ROLLBACK_BINARY_CODE: u8 = 0x04;
 const ROLLEDBACK_WRITE_BINARY_CODE: u8 = 0x05;
+const MAX_TXNID_BINARY_CODE: u8 = 0x06;
 
 #[derive(Clone, Debug, PartialOrd, PartialEq)]
 pub enum TransactionLogEntry {
@@ -19,6 +20,10 @@ pub enum TransactionLogEntry {
     //Transaction has been rolledback
     StartRollback(TxnId),
     RolledbackWrite(TxnId),
+
+    //After we read the transaction log, we write the max txn id found. So in this way
+    //We can conserve the max txnId,
+    MaxTxnId(TxnId),
 }
 
 pub struct TransactionLog {
@@ -107,6 +112,7 @@ impl TransactionLogEntry {
             WRITE_BINARY_CODE => TransactionLogEntry::Write(current_ptr.get_u64_le() as TxnId),
             START_ROLLBACK_BINARY_CODE => TransactionLogEntry::StartRollback(current_ptr.get_u64_le() as TxnId),
             ROLLEDBACK_WRITE_BINARY_CODE => TransactionLogEntry::RolledbackWrite(current_ptr.get_u64_le() as TxnId),
+            MAX_TXNID_BINARY_CODE => TransactionLogEntry::MaxTxnId(current_ptr.get_u64_le() as TxnId),
             unknown_flag => return Err(SimpleDbError::CannotDecodeTransactionLogEntry(shared::DecodeError {
                 offset: n_entry_index,
                 index: n_entry_index,
@@ -133,6 +139,7 @@ impl TransactionLogEntry {
         match &self {
             TransactionLogEntry::RolledbackWrite(id) => *id,
             TransactionLogEntry::StartRollback(id) => *id,
+            TransactionLogEntry::MaxTxnId(id) => *id,
             TransactionLogEntry::Commit(id) => *id,
             TransactionLogEntry::Start(id) => *id,
             TransactionLogEntry::Write(id) => *id,
@@ -151,6 +158,7 @@ impl TransactionLogEntry {
         match &self {
             TransactionLogEntry::RolledbackWrite(_) => ROLLEDBACK_WRITE_BINARY_CODE,
             TransactionLogEntry::StartRollback(_) => START_ROLLBACK_BINARY_CODE,
+            TransactionLogEntry::MaxTxnId(_) => MAX_TXNID_BINARY_CODE,
             TransactionLogEntry::Commit(_) => COMMIT_BINARY_CODE,
             TransactionLogEntry::Start(_) => START_BINARY_CODE,
             TransactionLogEntry::Write(_) => WRITE_BINARY_CODE,

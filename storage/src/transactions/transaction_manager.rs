@@ -32,6 +32,7 @@ impl TransactionManager {
         let mut new_log_entries = Vec::new();
         new_log_entries.extend(Self::pending_transactions_to_log_entries(&active_transactions));
         new_log_entries.extend(Self::pending_transactions_to_log_entries(&pending_to_rollback));
+        new_log_entries.push(TransactionLogEntry::MaxTxnId(max_txn_id));
         log.replace_entries(&new_log_entries)?;
 
         Ok(TransactionManager {
@@ -139,6 +140,10 @@ impl TransactionManager {
         active_transactions
     }
 
+    //Returns:
+    //Active transactions
+    //Transactions being rolledback
+    //Max txn id found
     fn get_pending_transactions(
         entries: &Vec<TransactionLogEntry>
     ) -> (SkipMap<TxnId, usize>, SkipMap<TxnId, usize>, TxnId) {
@@ -179,7 +184,8 @@ impl TransactionManager {
                         }
                     }
                 },
-                _ => {  },
+                TransactionLogEntry::MaxTxnId(last_max_txn_id) => max_txn_id = max(max_txn_id, *last_max_txn_id),
+                TransactionLogEntry::Start(_) => {}
             };
         }
 

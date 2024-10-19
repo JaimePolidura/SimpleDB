@@ -1,3 +1,4 @@
+use std::ptr::write_unaligned;
 use crate::sql::plan::scan_type::RangeScan;
 use crate::sql::plan::steps::filter_step::FilterStep;
 use crate::sql::plan::steps::full_scan_step::FullScanStep;
@@ -7,7 +8,7 @@ use crate::sql::plan::steps::merge_union_scan_step::MergeUnionStep;
 use crate::sql::plan::steps::primary_exact_scan_step::PrimaryExactScanStep;
 use crate::sql::plan::steps::primary_range_scan_step::PrimaryRangeScanStep;
 use crate::sql::plan::steps::secondary_exact_scan_step::SecondaryExactScanStep;
-use crate::{Limit, Row};
+use crate::{Limit, Row, Schema};
 use bytes::Bytes;
 use shared::{SimpleDbError, Value};
 use crate::selection::Selection;
@@ -61,6 +62,71 @@ impl PlanStep {
             PlanStep::SecondaryExactExactScan(step) => step.next(),
             PlanStep::SecondaryRangeScan(step) => step.next(),
             PlanStep::ProjectSelection(step) => step.next(),
+        }
+    }
+
+    pub fn get_column_sorted_by_plans(
+        schema: &Schema,
+        left: &PlanStep,
+        right: &PlanStep
+    ) -> Option<String> {
+        let sorted_right = right.get_column_sorted(schema);
+        let sorted_left = left.get_column_sorted(schema);
+
+        match (sorted_left, sorted_right) {
+            (Option::None, _) |
+            (_, Option::None) => None,
+            (Option::Some(sorted_left), Option::Some(sorted_right)) => {
+                if sorted_left.eq(&sorted_right) {
+                    Some(sorted_left)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    //Returns the column name if the plan produces a sorted result.
+    //If the plan produces a result which is not sorted, it will return None
+    pub fn get_column_sorted(&self, schema: &Schema) -> Option<String> {
+        match &self {
+            PlanStep::ProjectSelection(_) => self.get_column_sorted(schema),
+            PlanStep::Limit(_) => self.get_column_sorted(schema),
+            PlanStep::Filter(_) => self.get_column_sorted(schema),
+            PlanStep::MergeIntersection(_) |
+            PlanStep::MergeUnion(_) => {
+                let left = self.get_merge_left();
+                let right = self.get_merge_right();
+                let column_sorted_left = left.get_column_sorted(schema);
+                let column_sorted_right = right.get_column_sorted(schema);
+
+                match (column_sorted_left, column_sorted_right) {
+                    (None, _) |
+                    (_, None) => None,
+                    (Some(left_column_name), Some(right_column_name)) => {
+                        if left_column_name.eq(&right_column_name) {
+                            Some(left_column_name)
+                        } else {
+                            None
+                        }
+                    },
+                }
+            },
+            PlanStep::FullScan(_) => {
+                None
+            }
+            PlanStep::PrimaryRangeScan(_) => {
+                Some(schema.get_primary_column().column_name)
+            }
+            PlanStep::SecondaryRangeScan(range) => {
+                Some(range.column_name.clone())
+            }
+            PlanStep::PrimaryExactScan(step) => {
+                Some(schema.get_primary_column().column_name)
+            },
+            PlanStep::SecondaryExactExactScan(step) => {
+                Some(step.column_name.clone())
+            }
         }
     }
 

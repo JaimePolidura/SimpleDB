@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use crate::sql::parser::expression::Expression;
 use shared::{SimpleDbError, Value};
 use SimpleDbError::MalformedQuery;

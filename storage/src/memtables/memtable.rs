@@ -11,8 +11,9 @@ use crossbeam_skiplist::SkipMap;
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::key::Key;
 use shared::logger::{logger, SimpleDbLayer};
-use shared::StorageValueMergeResult;
+use shared::{utils, StorageValueMergeResult};
 use std::cell::UnsafeCell;
+use std::io::Read;
 use std::ops::Bound::Excluded;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
@@ -236,6 +237,12 @@ impl MemTable {
         );
 
         while let Some(entry) = entries.pop() {
+            logger().debug(SimpleDbLayer::StorageKeyspace(self.keyspace_desc.keyspace_id), &format!(
+                "Applying write operation from WAL Key = (TxnID: {}, Bytes: {}) Value = {}",
+                entry.key.txn_id(), utils::bytes_to_u8_array_string(entry.key.as_bytes()),
+                utils::bytes_to_u8_array_string(&entry.value)
+            ));
+
             self.write(&entry.key, entry.value)?;
         }
 

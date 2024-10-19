@@ -4,6 +4,15 @@ use std::fs::DirEntry;
 use std::path::PathBuf;
 use crossbeam_skiplist::{SkipMap, SkipSet};
 
+pub fn bytes_to_u8_array_string(bytes: &Bytes) -> String {
+    let mut array = Vec::new();
+    for value in bytes.to_vec() {
+        array.push(value.to_string());
+    }
+
+    format!("[{}]", array.join(", "))
+}
+
 pub fn bytes_to_f64_le(bytes: &Bytes) -> f64 {
     let byte_array: [u8; 8] = bytes[..8].try_into().expect("Slice must be 8 bytes long");
     f64::from_le_bytes(byte_array)

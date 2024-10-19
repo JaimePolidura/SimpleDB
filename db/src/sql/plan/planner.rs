@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use crate::selection::Selection;
 use crate::sql::parser::expression::Expression;
 use crate::sql::parser::statement::{DeleteStatement, Limit, SelectStatement, UpdateStatement};
@@ -129,12 +130,12 @@ impl Planner {
             ScanType::MergeUnion(left_scan_type, right_scan_type) => {
                 let left_scan_step = self.build_scan_step(*left_scan_type, transaction, selection.clone(), table)?;
                 let right_scan_step = self.build_scan_step(*right_scan_type, transaction, selection.clone(), table)?;
-                Ok(PlanStep::MergeUnion(MergeUnionStep::create(left_scan_step, right_scan_step)?))
+                Ok(PlanStep::MergeUnion(MergeUnionStep::create(schema, left_scan_step, right_scan_step)?))
             }
             ScanType::MergeIntersection(left_scan_type, right_scan_type) => {
                 let left_scan_step = self.build_scan_step(*left_scan_type, transaction, selection.clone(), table)?;
                 let right_scan_step = self.build_scan_step(*right_scan_type, transaction, selection.clone(), table)?;
-                Ok(PlanStep::MergeIntersection(MergeIntersectionStep::create(left_scan_step, right_scan_step)?))
+                Ok(PlanStep::MergeIntersection(MergeIntersectionStep::create(schema, left_scan_step, right_scan_step)?))
             }
         }
     }
@@ -164,19 +165,24 @@ impl Planner {
     fn get_selection_select(
         select: &SelectStatement
     ) -> (bool, Selection) {
-        match &select.where_expr {
-            Some(expression) => {
-                let column_names = expression.get_columns();
-                let query_selection = select.selection.clone();
+        match &select.selection {
+            Selection::All => (false, Selection::All),
+            Selection::Some(query_selection) => {
+                let mut storage_engine_selection = HashSet::new();
 
-                match query_selection {
-                    Selection::All => (false, select.selection.clone()),
-                    Selection::Some(_) => {
-                        (true, query_selection.merge(Selection::Some(column_names)))
-                    }
+                storage_engine_selection.extend(query_selection.iter().map(|it| it.clone()));
+
+                if let Some(sort) = &select.sort {
+                    storage_engine_selection.insert(sort.column_name.clone());
                 }
-            },
-            None => (false, select.selection.clone())
+                if let Some(where_expr) = &select.where_expr {
+                    storage_engine_selection.extend(where_expr.get_identifiers());
+                }
+
+                let mut projection_needed = query_selection.len() != storage_engine_selection.len();
+
+                (projection_needed, Selection::Some(storage_engine_selection.into_iter().collect()))
+            }
         }
     }
 }

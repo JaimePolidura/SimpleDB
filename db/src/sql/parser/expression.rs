@@ -1,6 +1,7 @@
 use bytes::Bytes;
 use shared::{SimpleDbError, Value};
 use std::cmp::PartialEq;
+use std::collections::HashSet;
 use SimpleDbError::MalformedQuery;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -34,16 +35,22 @@ pub enum BinaryOperator {
 }
 
 impl Expression {
-    pub fn get_columns(&self) -> Vec<String> {
-        let mut columns = Vec::new();
+    pub fn get_identifiers(&self) -> Vec<String> {
+        let columns = self.get_identifiers_recursive();
+        columns.into_iter().collect()
+    }
+
+    pub fn get_identifiers_recursive(&self) -> HashSet<String> {
+        //Hashset to avoid duplicates
+        let mut columns = HashSet::new();
 
         match self {
             Expression::Binary(_, left, right) => {
-                columns.extend(left.get_columns());
-                columns.extend(right.get_columns());
+                columns.extend(left.get_identifiers());
+                columns.extend(right.get_identifiers());
             },
-            Expression::Unary(_, expr) => columns.extend(expr.get_columns()),
-            Expression::Identifier(column_name) => columns.push(column_name.clone()),
+            Expression::Unary(_, expr) => columns.extend(expr.get_identifiers()),
+            Expression::Identifier(column_name) => { columns.insert(column_name.clone()); },
             Expression::Literal(_) => {}
         };
 

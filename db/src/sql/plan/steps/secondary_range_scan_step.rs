@@ -63,11 +63,13 @@ impl PlanStepTrait for SecondaryRangeScanStep {
                             row_builder.add_by_column_name(indexed_value.get_value().get_bytes().clone(), &self.column_name);
                             Ok(Some(row_builder.build()))
                         },
-                        IndexSelectionType::All => self.table.get_by_primary_column(
-                            primary_key.as_bytes(),
-                            &self.transaction,
-                            &self.selection,
-                        ),
+                        IndexSelectionType::All => {
+                            self.table.get_by_primary_column(
+                                primary_key.as_bytes(),
+                                &self.transaction,
+                                &self.selection,
+                            )
+                        },
                     }
                 },
                 RangeKeyPosition::Above => Ok(None),

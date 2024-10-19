@@ -175,7 +175,7 @@ mod test {
                 (3, record(vec![(2, "350")])),
                 (4, record(vec![(3, "Pepita"), (4, "1999")])),
             ]),
-            vec![2, 3],
+            vec![1, 2, 3],
             Table::create_mock(vec![
                 Column{column_id: 1, column_type: Type::I64, column_name: String::from("ID"), is_primary: true, secondary_index_keyspace_id: None },
                 Column{column_id: 2, column_type: Type::String, column_name: String::from("Money"), is_primary: false, secondary_index_keyspace_id: None },

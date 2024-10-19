@@ -7,6 +7,7 @@ use crate::CreateIndexStatement;
 use shared::SimpleDbError::UnknownColumn;
 use shared::{SimpleDbError, Type};
 use std::sync::Arc;
+use crate::sort::sort::Sort;
 
 pub struct StatementValidator {
     databases: Arc<Databases>,
@@ -74,8 +75,26 @@ impl StatementValidator {
         let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table_or_err(&statement.table_name)?;
         self.validate_where_expression(&statement.where_expr, &table)?;
+        self.validate_sort(&table, &statement.sort);
         table.validate_selection(&statement.selection)?;
         Ok(())
+    }
+
+    fn validate_sort(
+        &self,
+        table: &Arc<Table>,
+        sort: &Option<Sort>
+    ) -> Result<(), SimpleDbError> {
+        match sort {
+            Some(sort) => {
+                let schema = table.get_schema();
+                schema.get_column_or_err(&sort.column_name)?;
+                Ok(())
+            },
+            None => {
+                Ok(())
+            }
+        }
     }
 
     fn validate_update(

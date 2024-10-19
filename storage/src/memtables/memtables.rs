@@ -5,7 +5,6 @@ use crate::memtables::wal::Wal;
 use crate::transactions::transaction::Transaction;
 use bytes::Bytes;
 use shared::iterators::merge_iterator::MergeIterator;
-use shared::Flag;
 use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::{Arc, RwLock};

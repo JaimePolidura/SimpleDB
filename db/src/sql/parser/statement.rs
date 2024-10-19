@@ -111,7 +111,7 @@ impl UpdateStatement {
             column_names.push(column_name.clone());
         }
         if let Some(where_expr) = &self.where_expr {
-            column_names.extend(where_expr.get_columns());
+            column_names.extend(where_expr.get_identifiers());
         }
 
         Selection::Some(column_names)

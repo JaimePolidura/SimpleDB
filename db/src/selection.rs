@@ -25,19 +25,6 @@ impl Selection {
         }
     }
 
-    pub fn merge(self: Selection, other: Selection) -> Selection {
-        match (self, other) {
-            (Selection::All, _) |
-            (_, Selection::All) => Selection::All,
-            (Selection::Some(self_column_names), Selection::Some(other_column_names)) => {
-                let mut column_names = HashSet::new();
-                column_names.extend(self_column_names);
-                column_names.extend(other_column_names);
-                Selection::Some(column_names.into_iter().collect())
-            }
-        }
-    }
-
     pub fn get_some_selected_columns(&self) -> Vec<String> {
         match &self {
             Selection::Some(values) => values.clone(),
