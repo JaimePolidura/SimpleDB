@@ -4,6 +4,7 @@ use crate::sql::parser::statement::{CreateTableStatement, DeleteStatement, Inser
 use shared::{SimpleDbError, Type, Value};
 use shared::SimpleDbError::IllegalToken;
 use crate::CreateIndexStatement;
+use crate::sort::sort::{Sort, SortOrder};
 use crate::sql::token::token::Token;
 use crate::sql::token::tokenizer::Tokenizer;
 
@@ -60,6 +61,7 @@ impl Parser {
         let table_name = self.identifier()?;
         let mut limit = Limit::None;
         let mut expression = None;
+        let mut sort = None;
 
         if self.maybe_expect_token(Token::Limit)? {
             limit = self.limit()?;
@@ -67,6 +69,10 @@ impl Parser {
         if self.maybe_expect_token(Token::Where)? {
             expression = Some(self.expression(0)?);
         }
+        if self.maybe_expect_token(Token::Sort)? {
+            sort = Some(self.sort()?);
+        }
+
         if self.maybe_expect_token(Token::Limit)? {
             limit = self.limit()?;
         }
@@ -76,7 +82,8 @@ impl Parser {
             table_name,
             selection,
             explain,
-            limit
+            limit,
+            sort
         }))
     }
 
@@ -132,6 +139,19 @@ impl Parser {
             },
             _ => Err(IllegalToken(self.tokenizer.current_location(), String::from("Token cannot be parsed")))
         }
+    }
+
+    fn sort(&mut self) -> Result<Sort, SimpleDbError> {
+        self.expect_token(Token::By)?;
+        let column_name = self.identifier()?;
+
+        let mut order = SortOrder::Asc;
+        self.maybe_expect_token(Token::Asc)?;
+        if self.maybe_expect_token(Token::Desc)? {
+            order = SortOrder::Desc;
+        }
+
+        Ok(Sort{column_name, order})
     }
 
     fn limit(&mut self) -> Result<Limit, SimpleDbError> {
@@ -484,6 +504,7 @@ impl Parser {
 mod test {
     use shared::{Type, Value};
     use crate::selection::Selection;
+    use crate::sort::sort::{Sort, SortOrder};
     use crate::sql::parser::expression::{BinaryOperator, Expression};
     use crate::sql::parser::parser::Parser;
     use crate::sql::parser::statement::{Limit, Statement};
@@ -549,8 +570,8 @@ mod test {
     }
 
     #[test]
-    fn select_with_expression_with_limit() {
-        let mut parser = Parser::create(String::from("SELECT dinero FROM personas WHERE dinero > 10 LIMIT 10;"));
+    fn select_with_expression_with_limit_and_sort() {
+        let mut parser = Parser::create(String::from("SELECT dinero FROM personas WHERE dinero > 10 SORT BY fecha LIMIT 10;"));
         let statement = parser.next_statement().unwrap().unwrap();
         assert!(matches!(statement, Statement::Select(_)));
 
@@ -566,6 +587,10 @@ mod test {
             Box::new(Expression::Identifier(String::from("dinero"))),
             Box::new(Expression::Literal(Value::create_i64(10))),
         ));
+        assert_eq!(select_statement.sort, Some(Sort{
+            column_name: String::from("fecha"),
+            order: SortOrder::Asc
+        }));
     }
 
     #[test]
@@ -602,6 +627,23 @@ mod test {
             Box::new(Expression::Identifier(String::from("id"))),
             Box::new(Expression::Literal(Value::create_i64(1))),
         ));
+    }
+
+    #[test]
+    fn select_with_sort() {
+        let mut parser = Parser::create(String::from(
+            "SELECT * FROM personas SORT BY dinero DESC;"
+        ));
+        let statement = parser.next_statement().unwrap().unwrap();
+        assert!(matches!(statement, Statement::Select(_)));
+        let select_statement = match statement {
+            Statement::Select(s) => s, _ => panic!(),
+        };
+
+        assert_eq!(select_statement.sort, Some(Sort{
+            column_name: String::from("dinero"),
+            order: SortOrder::Desc
+        }));
     }
 
     #[test]

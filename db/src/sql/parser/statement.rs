@@ -1,5 +1,6 @@
 use shared::{Type, Value};
 use crate::selection::Selection;
+use crate::sort::sort::Sort;
 use crate::sql::parser::expression::Expression;
 
 pub enum Statement {
@@ -26,10 +27,11 @@ pub enum Limit {
 }
 
 pub struct SelectStatement {
-    pub(crate) where_expr: Option<Expression>,
+    pub(crate) explain: bool,
     pub(crate) selection: Selection,
     pub(crate) table_name: String,
-    pub(crate) explain: bool,
+    pub(crate) where_expr: Option<Expression>,
+    pub(crate) sort: Option<Sort>,
     pub(crate) limit: Limit,
 }
 

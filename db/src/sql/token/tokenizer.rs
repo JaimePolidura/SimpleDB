@@ -84,6 +84,8 @@ impl Tokenizer {
             'A' => {
                 if self.advance_if_next_string_eq("ND") {
                     Ok(Token::And)
+                } else if self.advance_if_next_string_eq("SC") {
+                    Ok(Token::Asc)
                 } else if self.advance_if_next_string_eq("SYNC") {
                     Ok(Token::Async)
                 } else {
@@ -94,6 +96,8 @@ impl Tokenizer {
             'B' => {
                 if self.advance_if_next_string_eq("OOLEAN") {
                     Ok(Token::ColumnType(Type::Boolean))
+                } else if self.advance_if_next_string_eq("Y") {
+                    Ok(Token::By)
                 } else if self.advance_if_next_string_eq("LOB") {
                     Ok(Token::ColumnType(Type::Blob))
                 } else {
@@ -127,6 +131,8 @@ impl Tokenizer {
             'S' => {
                 if self.advance_if_next_string_eq("ELECT") {
                     Ok(Token::Select)
+                } else if self.advance_if_next_string_eq("ORT") {
+                    Ok(Token::Sort)
                 } else if self.advance_if_next_string_eq("HOW") {
                     Ok(Token::Show)
                 } else if self.advance_if_next_string_eq("TART_TRANSACTION") {
@@ -197,6 +203,8 @@ impl Tokenizer {
                     Ok(Token::ColumnType(Type::Date))
                 } else if self.advance_if_next_string_eq("ESCRIBE"){
                     Ok(Token::Describe)
+                } else if self.advance_if_next_string_eq("ESC"){
+                    Ok(Token::Desc)
                 } else if self.advance_if_next_string_eq("ATABASES"){
                     Ok(Token::Databases)
                 } else if self.advance_if_next_string_eq("ELETE"){

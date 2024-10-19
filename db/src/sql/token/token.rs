@@ -49,6 +49,10 @@ pub enum Token {
     Async,
     On,
     Explain,
+    Sort,
+    Asc,
+    Desc,
+    By,
 
     Identifier(String), //Ohter identifier, like table or column names
     ColumnType(Type),
