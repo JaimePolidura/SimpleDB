@@ -2,7 +2,7 @@ use crate::sql::execution::sort::sorter::Sorter;
 use crate::sql::plan::plan_step::{PlanStep, PlanStepTrait};
 use crate::table::table::Table;
 use crate::{PlanStepDesc, QueryIterator, Row, Sort};
-use shared::SimpleDbError;
+use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -27,18 +27,19 @@ pub struct SortStep {
 
 impl SortStep {
     pub fn create(
+        options: Arc<SimpleDbOptions>,
         table: Arc<Table>,
         source: PlanStep,
         sort: Sort,
-    ) -> SortStep {
-        SortStep {
+    ) -> Result<SortStep, SimpleDbError> {
+        Ok(SortStep {
+            sorter: Sorter::create(options, table.clone(), source.clone(), sort.clone())?,
             state: SortStepState::PendingSort,
             sorted_rows_iterator: None,
-            sorter: Sorter::create(),
             sort: sort.clone(),
             source,
             table,
-        }
+        })
     }
 }
 
@@ -46,9 +47,7 @@ impl PlanStepTrait for SortStep {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         match self.state {
             SortStepState::PendingSort => {
-                let mut sorted_rows_iterator = self.sorter.sort(
-                    self.source.clone(), self.table.clone(), self.sort.clone()
-                )?;
+                let mut sorted_rows_iterator = self.sorter.sort()?;
                 let sorted_row = sorted_rows_iterator.next();
                 self.state = SortStepState::Sorted;
                 self.sorted_rows_iterator = Some(sorted_rows_iterator);

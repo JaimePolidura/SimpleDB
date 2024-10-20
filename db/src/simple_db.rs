@@ -31,7 +31,7 @@ pub fn create(
     let databases = Arc::new(Databases::create(options.clone())?);
     
     Ok(SimpleDb {
-        statement_executor: StatementExecutor::create(&databases),
+        statement_executor: StatementExecutor::create(&databases, options),
         databases,
     })
 }

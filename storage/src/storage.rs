@@ -11,8 +11,8 @@ use shared::{Flag, KeyspaceId, SimpleDbError, SimpleDbOptions, Type};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use shared::logger::{logger, SimpleDbLayer};
-use crate::temp::temporary_space::TemporarySpace;
-use crate::temp::temporary_spaces::TemporarySpaces;
+use crate::temporary::temporary_space::TemporarySpace;
+use crate::temporary::temporary_spaces::TemporarySpaces;
 
 pub struct Storage {
     transaction_manager: Arc<TransactionManager>,

@@ -16,16 +16,20 @@ use crate::sql::plan::steps::project_selection_step::ProjectSelectionStep;
 use crate::sql::plan::steps::secondary_exact_scan_step::SecondaryExactScanStep;
 use crate::sql::plan::steps::secondary_range_scan_step::SecondaryRangeScanStep;
 use crate::table::table::Table;
-use shared::SimpleDbError;
+use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use crate::sql::plan::steps::sort_step::SortStep;
 
-pub struct Planner {}
+pub struct Planner {
+    options: Arc<SimpleDbOptions>
+}
 
 impl Planner {
-    pub fn create() -> Planner {
-        Planner {}
+    pub fn create(
+        options: Arc<SimpleDbOptions>
+    ) -> Planner {
+        Planner { options }
     }
 
     pub fn plan_select(
@@ -49,7 +53,7 @@ impl Planner {
         if let Some(sort) = select_statement.sort {
             let produced_rows_sorted_by = last_step.get_column_sorted(table.get_schema());
             if produced_rows_sorted_by.is_none() || !produced_rows_sorted_by.as_ref().unwrap().eq(&sort.column_name) {
-                last_step = PlanStep::Sort(Box::new(SortStep::create(table.clone(), last_step, sort)))
+                last_step = PlanStep::Sort(Box::new(SortStep::create(self.options.clone(), table.clone(), last_step, sort)?))
             }
         }
         if !matches!(select_statement.limit, Limit::None) {

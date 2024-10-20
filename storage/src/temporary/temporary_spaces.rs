@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use shared::{SimpleDbError, SimpleDbOptions};
 use shared::SimpleDbError::{CannotCreateTemporarySpace, CannotInitTemporarySpaces};
-use crate::temp::temporary_space::TemporarySpace;
+use crate::temporary::temporary_space::TemporarySpace;
 
 //This is not used by the storage engine, this is exposed to the user, so that it can create its own temporary files
 pub struct TemporarySpaces {

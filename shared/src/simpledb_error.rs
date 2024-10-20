@@ -72,6 +72,7 @@ pub enum SimpleDbError {
     CannotCreateDatabaseDescriptor(String, std::io::Error),
     CannotWriteDatabaseDescriptor(std::io::Error),
     CannotCreateDatabaseFolder(String, std::io::Error),
+    CannotWriteSortFile(std::io::Error),
 
     //Storage layer errors
     CannotCreateKeyspaceDescriptorFile(types::KeyspaceId, std::io::Error),
@@ -319,6 +320,9 @@ impl Debug for SimpleDbError {
             SimpleDbError::CannotCreateTemporaryFile(io_error) => {
                 write!(f, "Cannot create temporary file: {}", io_error)
             }
+            SimpleDbError::CannotWriteSortFile(io_error) => {
+                write!(f, "Cannot write to sort file: {}", io_error)
+            }
         }
     }
 }
@@ -394,6 +398,7 @@ impl SimpleDbError {
             SimpleDbError::CannotInitTemporarySpaces(_) => 67,
             SimpleDbError::CannotCreateTemporarySpace(_) => 68,
             SimpleDbError::CannotCreateTemporaryFile(_) => 69,
+            SimpleDbError::CannotWriteSortFile(_) => 70
         }
     }
 }

@@ -35,7 +35,7 @@ pub struct SimpleDbOptions {
     pub server_port: u16,
 
     //DB Layer options
-    sort_page_size_bytes: usize,
+    pub sort_page_size_bytes: usize,
 
     //Storage engine layer options
     pub simple_leveled_compaction_options: SimpleLeveledCompactionOptions,

@@ -45,6 +45,11 @@ impl QueryIterator {
         }
     }
 
+    //Returns rows & is the last row is going to overflow (the row size is more than the requested bytes)
+    pub fn next_bytes(&mut self, bytes: usize) -> Result<Option<(Vec<Row>, bool)>, SimpleDbError> {
+        Ok(Some((Vec::new(), false)))
+    }
+
     pub fn next_n(&mut self, n: usize) -> Result<Vec<Row>, SimpleDbError> {
         let mut results = Vec::new();
 

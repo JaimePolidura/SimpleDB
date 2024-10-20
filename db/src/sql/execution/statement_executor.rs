@@ -10,7 +10,7 @@ use crate::table::table::Table;
 use crate::{CreateIndexStatement, IndexType};
 use bytes::Bytes;
 use shared::SimpleDbError::MalformedQuery;
-use shared::{SimpleDbError, Value};
+use shared::{SimpleDbError, SimpleDbOptions, Value};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use crate::sql::execution::expression_evaluator::{evaluate_constant_expressions, evaluate_expression};
@@ -26,12 +26,12 @@ pub struct StatementExecutor {
 }
 
 impl StatementExecutor {
-    pub fn create(databases: &Arc<Databases>) -> StatementExecutor {
+    pub fn create(databases: &Arc<Databases>, options: Arc<SimpleDbOptions>) -> StatementExecutor {
         StatementExecutor {
             validator: StatementValidator::create(databases),
             optimizer: PlanOptimizer::create(),
+            planner: Planner::create(options),
             databases: databases.clone(),
-            planner: Planner::create(),
         }
     }
 

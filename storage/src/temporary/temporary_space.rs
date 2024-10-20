@@ -1,8 +1,9 @@
-use std::fs;
-use shared::SimpleDbError::{CannotCreateTemporaryFile, CannotInitTemporarySpaces};
+use shared::SimpleDbError::CannotCreateTemporaryFile;
 use shared::{SimpleDbError, SimpleDbFile, SimpleDbFileMode};
+use std::fs;
 use std::path::PathBuf;
 
+#[derive(Clone)]
 pub struct TemporarySpace {
     base_path: PathBuf,
 }
@@ -14,7 +15,7 @@ impl TemporarySpace {
         }
     }
 
-    pub fn create_file(&self, file_name: String) -> Result<SimpleDbFile, SimpleDbError> {
+    pub fn create_file(&self, file_name: &str) -> Result<SimpleDbFile, SimpleDbError> {
         let mut file_path = self.base_path.clone();
         file_path.push(file_name);
         SimpleDbFile::create(self.base_path.as_path(), &vec![], SimpleDbFileMode::RandomWrites)
