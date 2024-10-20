@@ -1,4 +1,4 @@
-use std::ptr::write_unaligned;
+use crate::selection::Selection;
 use crate::sql::plan::scan_type::RangeScan;
 use crate::sql::plan::steps::filter_step::FilterStep;
 use crate::sql::plan::steps::full_scan_step::FullScanStep;
@@ -7,13 +7,12 @@ use crate::sql::plan::steps::merge_intersection_scan_step::MergeIntersectionStep
 use crate::sql::plan::steps::merge_union_scan_step::MergeUnionStep;
 use crate::sql::plan::steps::primary_exact_scan_step::PrimaryExactScanStep;
 use crate::sql::plan::steps::primary_range_scan_step::PrimaryRangeScanStep;
+use crate::sql::plan::steps::project_selection_step::ProjectSelectionStep;
 use crate::sql::plan::steps::secondary_exact_scan_step::SecondaryExactScanStep;
+use crate::sql::plan::steps::secondary_range_scan_step::SecondaryRangeScanStep;
 use crate::{Limit, Row, Schema};
 use bytes::Bytes;
 use shared::{SimpleDbError, Value};
-use crate::selection::Selection;
-use crate::sql::plan::steps::project_selection_step::ProjectSelectionStep;
-use crate::sql::plan::steps::secondary_range_scan_step::SecondaryRangeScanStep;
 
 pub(crate) trait PlanStepTrait {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError>;
@@ -34,6 +33,9 @@ pub enum PlanStep {
     SecondaryRangeScan(SecondaryRangeScanStep),
     PrimaryExactScan(PrimaryExactScanStep),
     SecondaryExactExactScan(SecondaryExactScanStep),
+
+    //Only used for testing
+    Mock(MockStep)
 }
 
 pub enum PlanStepDesc {
@@ -62,6 +64,7 @@ impl PlanStep {
             PlanStep::SecondaryExactExactScan(step) => step.next(),
             PlanStep::SecondaryRangeScan(step) => step.next(),
             PlanStep::ProjectSelection(step) => step.next(),
+            PlanStep::Mock(step) => step.next(),
         }
     }
 
@@ -97,23 +100,11 @@ impl PlanStep {
             PlanStep::MergeUnion(_) => {
                 let left = self.get_merge_left();
                 let right = self.get_merge_right();
-                let column_sorted_left = left.get_column_sorted(schema);
-                let column_sorted_right = right.get_column_sorted(schema);
-
-                match (column_sorted_left, column_sorted_right) {
-                    (None, _) |
-                    (_, None) => None,
-                    (Some(left_column_name), Some(right_column_name)) => {
-                        if left_column_name.eq(&right_column_name) {
-                            Some(left_column_name)
-                        } else {
-                            None
-                        }
-                    },
-                }
+                Self::get_column_sorted_by_plans(schema, left, right)
             },
             PlanStep::FullScan(_) => {
-                None
+                //Full scans are always ordered by primary key
+                Some(schema.get_primary_column().column_name)
             }
             PlanStep::PrimaryRangeScan(_) => {
                 Some(schema.get_primary_column().column_name)
@@ -126,6 +117,13 @@ impl PlanStep {
             },
             PlanStep::SecondaryExactExactScan(step) => {
                 Some(step.column_name.clone())
+            }
+            PlanStep::Mock(step) => {
+                if step.sorted_by_primary {
+                    Some(schema.get_primary_column().column_name)
+                } else {
+                    None
+                }
             }
         }
     }
@@ -142,6 +140,7 @@ impl PlanStep {
             PlanStep::SecondaryExactExactScan(step) => step.desc(),
             PlanStep::SecondaryRangeScan(step) => step.desc(),
             PlanStep::ProjectSelection(step) => step.desc(),
+            PlanStep::Mock(step) => step.desc(),
         }
     }
 
@@ -237,5 +236,34 @@ impl PlanStep {
             PlanStep::PrimaryRangeScan(_) => true,
             _ => false
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct MockStep {
+    pub(crate) sorted_by_primary: bool,
+    pub(crate) rows: Vec<Row>,
+}
+
+impl MockStep {
+    pub fn create(sorted_by_primary: bool, rows: Vec<Row>) -> MockStep {
+        MockStep {
+            sorted_by_primary,
+            rows
+        }
+    }
+}
+
+impl PlanStepTrait for MockStep {
+    fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
+        if !self.rows.is_empty() {
+            Ok(Some(self.rows.remove(0)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn desc(&self) -> PlanStepDesc {
+        unimplemented!()
     }
 }

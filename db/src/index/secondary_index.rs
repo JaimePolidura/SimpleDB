@@ -58,7 +58,7 @@ impl SecondaryIndex {
         if let Some(old_value) = old_value {
             self.delete(transaction, old_value.clone(), primary_key.clone())?;
         }
-        
+
         let new_entry = PostingList::crate_only_one_entry(&Key::create(primary_key, self.primary_column_type, transaction.id()))
             .serialize();
 

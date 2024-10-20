@@ -55,6 +55,7 @@ impl PlanOptimizer {
             PlanStep::SecondaryRangeScan(_) => Ok(parent_plan),
             PlanStep::PrimaryExactScan(_) => Ok(parent_plan),
             PlanStep::SecondaryExactExactScan(_) => Ok(parent_plan),
+            PlanStep::Mock(_) => panic!("")
         }
     }
 

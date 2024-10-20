@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc, PlanStepTrait};
+use crate::{Row, Schema};
 use bytes::Bytes;
 use shared::{SimpleDbError, Value};
-use crate::{Row, Schema};
-use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc, PlanStepTrait};
+use std::collections::HashMap;
 
 //Given two plan steps this step performs the set "intersection" operation by the primary key.
 //Produces sorted rows if both source plans, produced rows sorted by the same key
@@ -49,50 +49,24 @@ impl MergeIntersectionStep {
     fn next_sorted_row(&mut self) -> Result<Option<Row>, SimpleDbError> {
         //Init "merge join" data
         if self.smaller.is_none() && self.greater.is_none() {
-            let mut smaller = self.plans.remove(0);
-            let greater = self.plans.remove(0);
-            let smaller_row = smaller.next()?;
-            let greater_row = smaller.next()?;
-
-            //There won't be any intersection
-            if smaller_row.is_none() || greater_row.is_none() {
-                return Ok(None);
-            }
-
-            let row_from_greater = greater_row.unwrap();
-            let value_from_greater = row_from_greater
-                .get_column_value(&self.sort_column_name)
-                .unwrap();
-            let row_from_smaller = smaller_row.unwrap();
-            let value_from_smaller = row_from_smaller
-                .get_column_value(&self.sort_column_name)
-                .unwrap();
-
-            if value_from_greater.eq(&value_from_smaller) {
-                self.last_greater_value = Some(value_from_greater);
-                self.greater = Some(Box::new(greater));
-                self.smaller = Some(Box::new(smaller));
-                return Ok(Some(row_from_smaller));
-            }
-
-            if value_from_greater.ge(&value_from_smaller) {
-                self.last_greater_value = Some(value_from_greater);
-                self.greater = Some(Box::new(greater));
-                self.smaller = Some(Box::new(smaller));
-            } else {
-                self.last_greater_value = Some(value_from_smaller);
-                self.greater = Some(Box::new(smaller));
-                self.smaller = Some(Box::new(greater));
-            }
+            self.smaller = Some(Box::new(self.plans.remove(0)));
+            self.greater = Some(Box::new(self.plans.remove(0)));
         }
 
-        let mut current_value_greater = self.last_greater_value.take().unwrap();
         let mut smaller = self.smaller.take().unwrap();
         let mut greater = self.greater.take().unwrap();
+        let mut current_value_greater = if self.last_greater_value.is_none() {
+            match greater.next()? {
+                Some(row) => row.get_column_value(&self.sort_column_name).unwrap(),
+                None => { return Ok(None); }, //No intersection
+            }
+        } else {
+            self.last_greater_value.take().unwrap()
+        };
 
         loop {
             let mut current_row_smaller = smaller.next()?;
-
+            
             match current_row_smaller {
                 Some(current_row_smaller) => {
                     let current_value_smaller = current_row_smaller.get_column_value(&self.sort_column_name)
@@ -167,5 +141,56 @@ impl PlanStepTrait for MergeIntersectionStep {
         let right = self.plans[1].desc();
         let left = self.plans[0].desc();
         PlanStepDesc::MergeIntersection(Box::new(left), Box::new(right))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::sql::plan::plan_step::{MockStep, PlanStep, PlanStepTrait};
+    use crate::sql::plan::steps::merge_intersection_scan_step::MergeIntersectionStep;
+    use crate::table::record::Record;
+    use crate::{Column, Row, Schema};
+    use bytes::Bytes;
+    use shared::Value;
+
+    //left:  1 3 5 9
+    //right: 2 3 4 7 9
+    //Expected: 3 9
+    #[test]
+    fn should_sort() {
+        let schema = Schema::create(vec![
+            Column::create_primary("ID")
+        ]);
+
+        let left = PlanStep::Mock(MockStep::create(true, vec![
+            row(&schema, 1), row(&schema, 3), row(&schema, 5), row(&schema, 9)
+        ]));
+        let right = PlanStep::Mock(MockStep::create(true, vec![
+            row(&schema, 2), row(&schema, 3), row(&schema, 4), row(&schema, 7), row(&schema, 9)
+        ]));
+
+        let mut step = MergeIntersectionStep::create(&schema, left, right)
+            .unwrap();
+
+        assert_row_id(&mut step, 3);
+        assert_row_id(&mut step, 9);
+        assert_emtpy(&mut step);
+    }
+
+    fn assert_emtpy(step: &mut MergeIntersectionStep) {
+        let row = step.next().unwrap();
+        assert!(row.is_none());
+    }
+
+    fn assert_row_id(step: &mut MergeIntersectionStep, expected_id: i64) {
+        let row = step.next().unwrap();
+        let row = row.unwrap();
+        assert_eq!(row.get_primary_column_value().get_i64().unwrap(), expected_id);
+    }
+
+    fn row(schema: &Schema, id: i64) -> Row {
+        let mut record_builder = Record::builder();
+        record_builder.add_column(0, Bytes::from(id.to_le_bytes().to_vec()));
+        Row::create(record_builder.build(), Value::create_i64(id), schema.clone())
     }
 }

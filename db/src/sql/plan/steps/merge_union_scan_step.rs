@@ -5,7 +5,7 @@ use crate::{Row, Schema};
 use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc, PlanStepTrait};
 
 //Given two plan steps this step performs the set "union" operation by the primary key.
-//Produces sorted rows if both source plans, produced rows sorted by the same key
+//Produces sorted rows if the source plans produce rows sorted by the same key.
 #[derive(Clone)]
 pub struct MergeUnionStep {
     pub(crate) plans: Vec<PlanStep>,
@@ -143,5 +143,62 @@ impl PlanStepTrait for MergeUnionStep {
         let right = self.plans[1].desc();
         let left = self.plans[0].desc();
         PlanStepDesc::MergeUnion(Box::new(left), Box::new(right))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use bytes::Bytes;
+    use shared::Value;
+    use crate::{Column, Row, Schema};
+    use crate::sql::plan::plan_step::{MockStep, PlanStep, PlanStepTrait};
+    use crate::sql::plan::steps::merge_union_scan_step::MergeUnionStep;
+    use crate::table::record::Record;
+
+    //left:  1 3 5 6
+    //right: 2 3 4 7 9
+    //Expected: 1 2 3 4 5 6 7 9
+    #[test]
+    fn should_sort() {
+        let schema = Schema::create(vec![
+            Column::create_primary("ID")
+        ]);
+
+        let left = PlanStep::Mock(MockStep::create(true, vec![
+            row(&schema, 1), row(&schema, 3), row(&schema, 5), row(&schema, 6)
+        ]));
+        let right = PlanStep::Mock(MockStep::create(true, vec![
+            row(&schema, 2), row(&schema, 3), row(&schema, 4), row(&schema, 7), row(&schema, 9)
+        ]));
+
+        let mut union_step = MergeUnionStep::create(&schema, left, right)
+            .unwrap();
+
+        assert_row_id(&mut union_step, 1);
+        assert_row_id(&mut union_step, 2);
+        assert_row_id(&mut union_step, 3);
+        assert_row_id(&mut union_step, 4);
+        assert_row_id(&mut union_step, 5);
+        assert_row_id(&mut union_step, 6);
+        assert_row_id(&mut union_step, 7);
+        assert_row_id(&mut union_step, 9);
+        assert_emtpy(&mut union_step);
+    }
+
+    fn assert_emtpy(step: &mut MergeUnionStep) {
+        let row = step.next().unwrap();
+        assert!(row.is_none());
+    }
+
+    fn assert_row_id(step: &mut MergeUnionStep, expected_id: i64) {
+        let row = step.next().unwrap();
+        let row = row.unwrap();
+        assert_eq!(row.get_primary_column_value().get_i64().unwrap(), expected_id);
+    }
+
+    fn row(schema: &Schema, id: i64) -> Row {
+        let mut record_builder = Record::builder();
+        record_builder.add_column(0, Bytes::from(id.to_le_bytes().to_vec()));
+        Row::create(record_builder.build(), Value::create_i64(id), schema.clone())
     }
 }
