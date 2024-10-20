@@ -66,7 +66,7 @@ impl MergeIntersectionStep {
 
         loop {
             let mut current_row_smaller = smaller.next()?;
-            
+
             match current_row_smaller {
                 Some(current_row_smaller) => {
                     let current_value_smaller = current_row_smaller.get_column_value(&self.sort_column_name)

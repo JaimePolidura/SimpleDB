@@ -2,7 +2,6 @@ use crate::database::databases::Databases;
 use crate::selection::Selection;
 use crate::simple_db::{Context, StatementResult};
 use crate::sql::parser::expression::Expression;
-use crate::sql::expression_evaluator::{evaluate_constant_expressions, evaluate_expression};
 use crate::sql::plan::planner::Planner;
 use crate::sql::query_iterator::QueryIterator;
 use crate::sql::parser::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
@@ -14,6 +13,7 @@ use shared::SimpleDbError::MalformedQuery;
 use shared::{SimpleDbError, Value};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::sql::execution::expression_evaluator::{evaluate_constant_expressions, evaluate_expression};
 use crate::sql::optimizer::PlanOptimizer;
 use crate::table::schema::Column;
 

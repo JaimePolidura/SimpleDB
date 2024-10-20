@@ -10,9 +10,10 @@ use crate::sql::plan::steps::primary_range_scan_step::PrimaryRangeScanStep;
 use crate::sql::plan::steps::project_selection_step::ProjectSelectionStep;
 use crate::sql::plan::steps::secondary_exact_scan_step::SecondaryExactScanStep;
 use crate::sql::plan::steps::secondary_range_scan_step::SecondaryRangeScanStep;
-use crate::{Limit, Row, Schema};
+use crate::{Limit, Row, Schema, Sort};
 use bytes::Bytes;
 use shared::{SimpleDbError, Value};
+use crate::sql::plan::steps::sort_step::SortStep;
 
 pub(crate) trait PlanStepTrait {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError>;
@@ -23,6 +24,7 @@ pub(crate) trait PlanStepTrait {
 pub enum PlanStep {
     ProjectSelection(Box<ProjectSelectionStep>),
     Limit(Box<LimitStep>),
+    Sort(Box<SortStep>),
     Filter(Box<FilterStep>),
 
     MergeIntersection(MergeIntersectionStep),
@@ -44,6 +46,7 @@ pub enum PlanStepDesc {
     Filter(Box<PlanStepDesc>),
     MergeIntersection(Box<PlanStepDesc>, Box<PlanStepDesc>),
     MergeUnion(Box<PlanStepDesc>, Box<PlanStepDesc>),
+    Sort(Sort),
 
     FullScan,
     RangeScan(RangeScan),
@@ -64,6 +67,7 @@ impl PlanStep {
             PlanStep::SecondaryExactExactScan(step) => step.next(),
             PlanStep::SecondaryRangeScan(step) => step.next(),
             PlanStep::ProjectSelection(step) => step.next(),
+            PlanStep::Sort(step) => step.next(),
             PlanStep::Mock(step) => step.next(),
         }
     }
@@ -95,6 +99,7 @@ impl PlanStep {
         match &self {
             PlanStep::ProjectSelection(_) => self.get_column_sorted(schema),
             PlanStep::Limit(_) => self.get_column_sorted(schema),
+            PlanStep::Sort(step) => Some(step.sort.column_name.clone()),
             PlanStep::Filter(_) => self.get_column_sorted(schema),
             PlanStep::MergeIntersection(_) |
             PlanStep::MergeUnion(_) => {
@@ -132,6 +137,7 @@ impl PlanStep {
         match self {
             PlanStep::Limit(step) => step.desc(),
             PlanStep::Filter(step) => step.desc(),
+            PlanStep::Sort(step) => step.desc(),
             PlanStep::MergeIntersection(step) => step.desc(),
             PlanStep::MergeUnion(step) => step.desc(),
             PlanStep::FullScan(step) => step.desc(),

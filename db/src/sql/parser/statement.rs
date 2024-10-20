@@ -1,6 +1,6 @@
 use shared::{Type, Value};
+use crate::Schema;
 use crate::selection::Selection;
-use crate::sort::sort::Sort;
 use crate::sql::parser::expression::Expression;
 
 pub enum Statement {
@@ -18,12 +18,6 @@ pub enum Statement {
     ShowIndexes(String), //Table name
     ShowDatabases,
     ShowTables,
-}
-
-#[derive(Clone)]
-pub enum Limit {
-    None,
-    Some(usize)
 }
 
 pub struct SelectStatement {
@@ -63,6 +57,30 @@ pub struct CreateTableStatement {
     pub(crate) table_name: String,
     //Column name, Column type, is primary
     pub(crate) columns: Vec<(String, Type, bool)>
+}
+
+#[derive(Clone)]
+pub enum Limit {
+    None,
+    Some(usize)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Sort {
+    pub(crate) column_name: String,
+    pub(crate) order: SortOrder
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SortOrder {
+    Asc, Desc
+}
+
+impl Sort {
+    pub fn is_indexed(&self, schema: Schema) -> bool {
+        let column = schema.get_column(&self.column_name).unwrap();
+        column.is_secondary_indexed() || column.is_primary
+    }
 }
 
 enum Requirement {

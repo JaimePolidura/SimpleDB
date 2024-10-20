@@ -19,6 +19,7 @@ use crate::table::table::Table;
 use shared::SimpleDbError;
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::sql::plan::steps::sort_step::SortStep;
 
 pub struct Planner {}
 
@@ -44,6 +45,12 @@ impl Planner {
 
         if let Some(where_expr) = select_statement.where_expr {
             last_step = PlanStep::Filter(Box::new(FilterStep::create(where_expr, last_step)));
+        }
+        if let Some(sort) = select_statement.sort {
+            let produced_rows_sorted_by = last_step.get_column_sorted(table.get_schema());
+            if produced_rows_sorted_by.is_none() || !produced_rows_sorted_by.as_ref().unwrap().eq(&sort.column_name) {
+                last_step = PlanStep::Sort(Box::new(SortStep::create(sort)))
+            }
         }
         if !matches!(select_statement.limit, Limit::None) {
             last_step = PlanStep::Limit(Box::new(LimitStep::create(select_statement.limit, last_step)));

@@ -6,6 +6,7 @@ use crate::table::schema::Schema;
 
 //This will be returned to the user of SimpleDb when it queries data
 //This is simple wrapper around a Plan
+#[derive(Clone)]
 pub struct QueryIterator {
     plan: PlanStep,
     schema: Schema,

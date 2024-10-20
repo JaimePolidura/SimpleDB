@@ -5,7 +5,6 @@ mod database;
 mod table;
 mod sql;
 mod index;
-mod sort;
 
 pub use sql::plan::plan_step::PlanStepDesc;
 pub use sql::query_iterator::QueryIterator;

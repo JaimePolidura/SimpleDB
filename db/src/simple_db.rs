@@ -1,12 +1,12 @@
 use crate::database::databases::Databases;
 use crate::index::index_type::IndexType;
-use crate::sql::executor::StatementExecutor;
 use crate::sql::parser::parser::Parser;
 use crate::sql::query_iterator::QueryIterator;
 use crate::sql::parser::statement::Statement;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::sql::StatementExecutor;
 use crate::table::schema::Column;
 
 pub struct SimpleDb {

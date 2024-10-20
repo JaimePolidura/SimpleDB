@@ -3,8 +3,7 @@ use crate::sql::parser::expression::{BinaryOperator, Expression, UnaryOperator};
 use crate::sql::parser::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Limit, SelectStatement, Statement, UpdateStatement};
 use shared::{SimpleDbError, Type, Value};
 use shared::SimpleDbError::IllegalToken;
-use crate::CreateIndexStatement;
-use crate::sort::sort::{Sort, SortOrder};
+use crate::{CreateIndexStatement, Sort, SortOrder};
 use crate::sql::token::token::Token;
 use crate::sql::token::tokenizer::Tokenizer;
 
@@ -83,7 +82,7 @@ impl Parser {
             selection,
             explain,
             limit,
-            sort
+            sort: sort
         }))
     }
 
@@ -504,6 +503,7 @@ impl Parser {
 mod test {
     use shared::{Type, Value};
     use crate::selection::Selection;
+    use crate::{Sort, SortOrder};
     use crate::sort::sort::{Sort, SortOrder};
     use crate::sql::parser::expression::{BinaryOperator, Expression};
     use crate::sql::parser::parser::Parser;

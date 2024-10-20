@@ -3,11 +3,10 @@ use crate::simple_db::Context;
 use crate::sql::parser::expression::Expression;
 use crate::sql::parser::statement::{CreateTableStatement, DeleteStatement, InsertStatement, SelectStatement, Statement, UpdateStatement};
 use crate::table::table::Table;
-use crate::CreateIndexStatement;
+use crate::{CreateIndexStatement, Sort};
 use shared::SimpleDbError::UnknownColumn;
 use shared::{SimpleDbError, Type};
 use std::sync::Arc;
-use crate::sort::sort::Sort;
 
 pub struct StatementValidator {
     databases: Arc<Databases>,
