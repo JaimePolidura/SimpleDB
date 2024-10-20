@@ -42,7 +42,7 @@ impl SimpleDbFile {
         }
     }
 
-    pub fn create (
+    pub fn create(
         path: &Path,
         data: &Vec<u8>,
         mode: SimpleDbFileMode

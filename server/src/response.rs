@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use bytes::BufMut;
 use serde::Serialize;
-use db::{Column, IndexType, Limit, PlanStepDesc, RangeScan, Row, Schema};
+use db::{Column, IndexType, Limit, PlanStepDesc, RangeScan, Row, Schema, Sort, SortOrder};
 use db::selection::Selection;
 use shared::{ErrorTypeId, SimpleDbError, Type, Value};
 
@@ -212,6 +212,10 @@ impl StatementResponse {
                     pending.push((depth, source.clone()));
                     strings.push(Self::limit_plan_desc_to_string(depth, limit));
                 },
+                PlanStepDesc::Sort(sort, source) => {
+                    pending.push((depth, source.clone()));
+                    strings.push(Self::sort_plan_desc_to_string(depth, sort));
+                }
                 PlanStepDesc::Filter(source) => {
                     pending.push((depth, source.clone()));
                     strings.push(Self::filter_plan_desc_to_string(depth));
@@ -270,6 +274,21 @@ impl StatementResponse {
                 string.push_str(&format!("Limit ({})", limit_n));
             }
         };
+        string
+    }
+
+
+    fn sort_plan_desc_to_string(depth: usize, sort: &Sort) -> String {
+        let mut string = Self::explain_plan_new_line(depth);
+        string.push_str("Sort (");
+        string.push_str(&sort.column_name);
+        string.push_str(" ");
+        match sort.order {
+            SortOrder::Asc => string.push_str("ASC"),
+            SortOrder::Desc => string.push_str("DESC"),
+        }
+        string.push_str(")");
+
         string
     }
 

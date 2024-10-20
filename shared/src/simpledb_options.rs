@@ -34,6 +34,9 @@ pub struct SimpleDbOptions {
     pub server_password: String,
     pub server_port: u16,
 
+    //DB Layer options
+    sort_page_size_bytes: usize,
+
     //Storage engine layer options
     pub simple_leveled_compaction_options: SimpleLeveledCompactionOptions,
     #[serde(skip)]
@@ -85,6 +88,7 @@ impl Default for SimpleDbOptions {
             storage_value_merger: None,
             sst_size_bytes: 268435456, //256 MB ~ 64 blocks
             max_memtables_inactive: 8,
+            sort_page_size_bytes: 4096, //Kb
             block_size_bytes: 4096, //4kb
             use_debug_logging: true,
             server_port: 8888,

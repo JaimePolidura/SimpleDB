@@ -103,6 +103,9 @@ pub enum SimpleDbError {
     CannotReadTransactionLogEntries(std::io::Error),
     CannotDecodeTransactionLogEntry(DecodeError),
     CannotResetTransactionLog(std::io::Error),
+    CannotInitTemporarySpaces(std::io::Error),
+    CannotCreateTemporarySpace(std::io::Error),
+    CannotCreateTemporaryFile(std::io::Error),
 
     //This error cannot be returned to the final user,
     //It will only be used internally in the storage engine code
@@ -307,6 +310,15 @@ impl Debug for SimpleDbError {
             SimpleDbError::IllegalTypeOperation(message) => {
                 write!(f, "{}", message)
             }
+            SimpleDbError::CannotInitTemporarySpaces(io_error) => {
+                write!(f, "Cannot innit temporary space: {}", io_error)
+            }
+            SimpleDbError::CannotCreateTemporarySpace(io_error) => {
+                write!(f, "Cannot create temporary space: {}", io_error)
+            }
+            SimpleDbError::CannotCreateTemporaryFile(io_error) => {
+                write!(f, "Cannot create temporary file: {}", io_error)
+            }
         }
     }
 }
@@ -379,6 +391,9 @@ impl SimpleDbError {
             SimpleDbError::CannotDecodeKeyspaceDescriptor(_, _) => 64,
             SimpleDbError::IllegalTypeCastFromBytes(_) => 65,
             SimpleDbError::IllegalTypeOperation(_) => 66,
+            SimpleDbError::CannotInitTemporarySpaces(_) => 67,
+            SimpleDbError::CannotCreateTemporarySpace(_) => 68,
+            SimpleDbError::CannotCreateTemporaryFile(_) => 69,
         }
     }
 }

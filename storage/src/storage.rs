@@ -11,9 +11,12 @@ use shared::{Flag, KeyspaceId, SimpleDbError, SimpleDbOptions, Type};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use shared::logger::{logger, SimpleDbLayer};
+use crate::temp::temporary_space::TemporarySpace;
+use crate::temp::temporary_spaces::TemporarySpaces;
 
 pub struct Storage {
     transaction_manager: Arc<TransactionManager>,
+    temporary_spaces: TemporarySpaces,
     keyspaces: Keyspaces,
 }
 
@@ -39,6 +42,7 @@ impl Storage {
         )?;
 
         let mut storage = Storage {
+            temporary_spaces: TemporarySpaces::create(options.clone())?,
             transaction_manager,
             keyspaces,
         };
@@ -55,6 +59,7 @@ impl Storage {
         Storage {
             transaction_manager: Arc::new(TransactionManager::create_mock(simple_db_options.clone())),
             keyspaces: Keyspaces::mock(simple_db_options.clone()),
+            temporary_spaces: TemporarySpaces::create_mock(),
         }
     }
 
@@ -199,6 +204,10 @@ impl Storage {
         let keyspace = self.keyspaces.create_keyspace(flag, key_type)?;
         keyspace.start_compaction_thread();
         Ok(keyspace.keyspace_id())
+    }
+
+    pub fn create_temporary_space(&self) -> Result<TemporarySpace, SimpleDbError> {
+        self.temporary_spaces.create_temporary_space()
     }
 
     pub fn get_keyspaces_id(&self) -> Vec<KeyspaceId> {

@@ -49,7 +49,7 @@ impl Planner {
         if let Some(sort) = select_statement.sort {
             let produced_rows_sorted_by = last_step.get_column_sorted(table.get_schema());
             if produced_rows_sorted_by.is_none() || !produced_rows_sorted_by.as_ref().unwrap().eq(&sort.column_name) {
-                last_step = PlanStep::Sort(Box::new(SortStep::create(sort)))
+                last_step = PlanStep::Sort(Box::new(SortStep::create(table.clone(), last_step, sort)))
             }
         }
         if !matches!(select_statement.limit, Limit::None) {

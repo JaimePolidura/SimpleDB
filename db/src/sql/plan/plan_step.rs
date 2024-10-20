@@ -46,7 +46,7 @@ pub enum PlanStepDesc {
     Filter(Box<PlanStepDesc>),
     MergeIntersection(Box<PlanStepDesc>, Box<PlanStepDesc>),
     MergeUnion(Box<PlanStepDesc>, Box<PlanStepDesc>),
-    Sort(Sort),
+    Sort(Sort, Box<PlanStepDesc>),
 
     FullScan,
     RangeScan(RangeScan),
