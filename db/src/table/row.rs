@@ -61,6 +61,10 @@ impl Row {
         serialized.extend(self.storage_engine_record.serialize());
         serialized
     }
+
+    pub fn serialized_size(&self) -> usize {
+        todo!()
+    }
 }
 
 impl fmt::Display for Row {

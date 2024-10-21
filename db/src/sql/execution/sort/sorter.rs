@@ -1,13 +1,14 @@
-use std::sync::Arc;
-use bytes::{Buf, BufMut};
-use crate::{QueryIterator, Row, Sort};
-use shared::{utils, SimpleDbError, SimpleDbFile, SimpleDbOptions};
-use shared::SimpleDbError::CannotWriteSortFile;
-use storage::TemporarySpace;
 use crate::selection::Selection;
 use crate::sql::execution::sort::sort_page::SortPage;
 use crate::sql::plan::plan_step::PlanStep;
+use crate::sql::query_iterator::{BlockQueryIterator, RowBlock};
 use crate::table::table::Table;
+use crate::{QueryIterator, Row, Sort, SortOrder};
+use bytes::{Buf, BufMut};
+use shared::SimpleDbError::CannotWriteSortFile;
+use shared::{SimpleDbError, SimpleDbFile, SimpleDbOptions};
+use std::sync::Arc;
+use storage::TemporarySpace;
 
 #[derive(Clone)]
 pub struct Sorter {
@@ -47,25 +48,29 @@ impl Sorter {
     }
 
     //In pass one we split the rows by pages, sort them and store them in the page.
-    fn pass1(&mut self, input: &mut SimpleDbFile) -> Result<(), SimpleDbError> {
-        let mut query_iterator = QueryIterator::create(
+    fn pass1(
+        &mut self,
+        input: &mut SimpleDbFile
+    ) -> Result<(), SimpleDbError> {
+        let mut query_iterator = BlockQueryIterator::create(self.row_bytes_per_sort_page(), QueryIterator::create(
             Selection::All, self.source.clone(), self.table.get_schema().clone()
-        );
+        ));
 
-        while let Some((mut rows, is_overflow)) = query_iterator.next_bytes(self.row_bytes_per_sort_page())? {
-            if is_overflow {
-                let overflow_row = rows.pop().unwrap();
-                self.write_normal_row_pages_to_input(input, rows)?;
-                self.write_overflow_row_pages_to_input(input, overflow_row)?
-            } else {
-                self.write_normal_row_pages_to_input(input, rows)?;
-            }
+        while let block_of_rows = query_iterator.next_block()? {
+            match block_of_rows {
+                RowBlock::Overflow(overflow_row) => self.write_overflow_row_pages_to_input(input, overflow_row)?,
+                RowBlock::Rows(rows) => self.write_normal_row_pages_to_input(input, rows)?
+            };
         }
 
         Ok(())
     }
 
-    fn write_overflow_row_pages_to_input(&self, input: &mut SimpleDbFile, overflow_row: Row) -> Result<(), SimpleDbError> {
+    fn write_overflow_row_pages_to_input(
+        &self,
+        input: &mut SimpleDbFile,
+        overflow_row: Row
+    ) -> Result<(), SimpleDbError> {
         let row_serialized = overflow_row.serialize();
         let mut current_ptr = &mut row_serialized.as_slice();
         let mut pages = Vec::new();
@@ -83,21 +88,25 @@ impl Sorter {
         }
 
         for page in pages {
-            input.write(&page.serialize())
+            input.write(&page.serialize(self.options.sort_page_size_bytes))
                 .map_err(|e| CannotWriteSortFile(e))?;
         }
 
         Ok(())
     }
 
-    fn write_normal_row_pages_to_input(&self, input: &mut SimpleDbFile, mut rows: Vec<Row>) -> Result<(), SimpleDbError> {
+    fn write_normal_row_pages_to_input(
+        &self,
+        input: &mut SimpleDbFile,
+        mut rows: Vec<Row>
+    ) -> Result<(), SimpleDbError> {
         if rows.len() > 0 {
             self.sort_rows(&mut rows);
 
             let n_rows = rows.len();
             let serialized_rows = Self::serialize_rows(rows);
             let sort_page = SortPage::create_normal(serialized_rows, n_rows);
-            input.write(&sort_page.serialize())
+            input.write(&sort_page.serialize(self.options.sort_page_size_bytes))
                 .map_err(|e| CannotWriteSortFile(e))?;
         }
 
@@ -118,6 +127,14 @@ impl Sorter {
     }
 
     fn sort_rows(&self, rows: &mut Vec<Row>) {
-        todo!()
+        rows.sort_by(|a, b| {
+            let value_a = a.get_column_value(&self.sort.column_name).unwrap();
+            let value_b = b.get_column_value(&self.sort.column_name).unwrap();
+
+            match self.sort.order {
+                SortOrder::Desc => value_b.cmp(&value_a),
+                SortOrder::Asc => value_a.cmp(&value_b)
+            }
+        });
     }
 }
