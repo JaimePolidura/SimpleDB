@@ -2,6 +2,7 @@ use std::cell::UnsafeCell;
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
+use std::io::ErrorKind::Other;
 use std::os::windows::fs::FileExt;
 use std::path::{Path, PathBuf};
 
@@ -263,5 +264,23 @@ impl SimpleDbFile {
             .create(true) //Create file if it doest exist
             .read(true)
             .clone()
+    }
+}
+
+impl Clone for SimpleDbFile {
+    fn clone(&self) -> Self {
+        match &self.mode {
+            SimpleDbFileMode::Mock => SimpleDbFile::create_mock(),
+            _ => {
+                let open_options = Self::create_open_options_from_mode(&self.mode);
+
+                SimpleDbFile {
+                    file: Some(open_options.open(self.path.as_ref().unwrap().as_path()).expect("Cannot clone file")),
+                    size_bytes: self.size_bytes,
+                    mode: self.mode.clone(),
+                    path: self.path.clone(),
+                }
+            },
+        }
     }
 }

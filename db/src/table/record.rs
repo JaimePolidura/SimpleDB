@@ -86,6 +86,17 @@ impl Record {
         None
     }
 
+    pub fn serialize_size(&self) -> usize {
+        let mut size_bytes = 0;
+        for (_, column_value) in &self.data_records {
+            size_bytes += 2;
+            size_bytes += 4;
+            size_bytes += column_value.len();
+        }
+
+        size_bytes
+    }
+
     pub fn serialize(&self) -> Vec<u8> {
         let mut result = Vec::new();
         for (column_id, column_value) in &self.data_records {

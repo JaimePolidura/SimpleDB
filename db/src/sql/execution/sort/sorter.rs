@@ -1,18 +1,17 @@
 use crate::selection::Selection;
+use crate::sql::execution::sort::sort_files::SortFiles;
 use crate::sql::execution::sort::sort_page::SortPage;
 use crate::sql::plan::plan_step::PlanStep;
 use crate::sql::query_iterator::{BlockQueryIterator, RowBlock};
 use crate::table::table::Table;
 use crate::{QueryIterator, Row, Sort, SortOrder};
 use bytes::{Buf, BufMut};
-use shared::SimpleDbError::CannotWriteSortFile;
-use shared::{SimpleDbError, SimpleDbFile, SimpleDbOptions};
+use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
-use storage::TemporarySpace;
 
 #[derive(Clone)]
 pub struct Sorter {
-    temporary_space: TemporarySpace,
+    sort_files: SortFiles,
 
     options: Arc<SimpleDbOptions>,
     table: Arc<Table>,
@@ -28,7 +27,11 @@ impl Sorter {
         sort: Sort,
     ) -> Result<Sorter, SimpleDbError> {
         Ok(Sorter {
-            temporary_space: table.storage.create_temporary_space()?,
+            sort_files: SortFiles::create(
+                table.storage.create_temporary_space()?,
+                options.clone(),
+                table.get_schema().clone()
+            )?,
             options,
             source,
             table,
@@ -39,36 +42,38 @@ impl Sorter {
     pub fn sort(
         &mut self,
     ) -> Result<QueryIterator, SimpleDbError> {
-        let mut output = self.temporary_space.create_file("output")?;
-        let mut input = self.temporary_space.create_file("input")?;
+        let n_pages_written_pass1 = self.pass1()?;
 
-        self.pass1(&mut input);
+        for n_pass in 0..self.calculate_n_total_passes(n_pages_written_pass1) {
+
+        }
 
         todo!()
     }
 
     //In pass one we split the rows by pages, sort them and store them in the page.
+    //This function returns the number of pages written. (Overflow pages only count for 1 page written)
     fn pass1(
         &mut self,
-        input: &mut SimpleDbFile
-    ) -> Result<(), SimpleDbError> {
+    ) -> Result<usize, SimpleDbError> {
         let mut query_iterator = BlockQueryIterator::create(self.row_bytes_per_sort_page(), QueryIterator::create(
             Selection::All, self.source.clone(), self.table.get_schema().clone()
         ));
+        let mut n_pages_written = 0;
 
         while let block_of_rows = query_iterator.next_block()? {
+            n_pages_written += 1;
             match block_of_rows {
-                RowBlock::Overflow(overflow_row) => self.write_overflow_row_pages_to_input(input, overflow_row)?,
-                RowBlock::Rows(rows) => self.write_normal_row_pages_to_input(input, rows)?
+                RowBlock::Overflow(overflow_row) => self.write_overflow_row_pages_to_input(overflow_row)?,
+                RowBlock::Rows(rows) => self.write_normal_row_pages_to_input(rows)?
             };
         }
 
-        Ok(())
+        Ok(n_pages_written)
     }
 
     fn write_overflow_row_pages_to_input(
-        &self,
-        input: &mut SimpleDbFile,
+        &mut self,
         overflow_row: Row
     ) -> Result<(), SimpleDbError> {
         let row_serialized = overflow_row.serialize();
@@ -88,16 +93,14 @@ impl Sorter {
         }
 
         for page in pages {
-            input.write(&page.serialize(self.options.sort_page_size_bytes))
-                .map_err(|e| CannotWriteSortFile(e))?;
+            self.sort_files.write_sort_page_to_input(page)?;
         }
 
         Ok(())
     }
 
     fn write_normal_row_pages_to_input(
-        &self,
-        input: &mut SimpleDbFile,
+        &mut self,
         mut rows: Vec<Row>
     ) -> Result<(), SimpleDbError> {
         if rows.len() > 0 {
@@ -106,8 +109,8 @@ impl Sorter {
             let n_rows = rows.len();
             let serialized_rows = Self::serialize_rows(rows);
             let sort_page = SortPage::create_normal(serialized_rows, n_rows);
-            input.write(&sort_page.serialize(self.options.sort_page_size_bytes))
-                .map_err(|e| CannotWriteSortFile(e))?;
+
+            self.sort_files.write_sort_page_to_input(sort_page)?;
         }
 
         Ok(())
@@ -136,5 +139,9 @@ impl Sorter {
                 SortOrder::Asc => value_a.cmp(&value_b)
             }
         });
+    }
+
+    fn calculate_n_total_passes(&self, n_pages_written_pass1: usize) -> usize {
+        (n_pages_written_pass1 as f64).log2().ceil() as usize
     }
 }

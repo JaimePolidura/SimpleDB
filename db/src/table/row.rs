@@ -55,6 +55,21 @@ impl Row {
         }
     }
 
+    pub fn deserialize(bytes: Vec<u8>, schema: &Schema) -> Row {
+        let primary_column = schema.get_primary_column();
+        let record = Record::deserialize(bytes);
+        let primary_column_value = Value::create(
+            record.get_column_bytes(primary_column.column_id).unwrap().clone(),
+            primary_column.column_type
+        ).unwrap();
+
+        Row {
+            storage_engine_record: record,
+            schema: schema.clone(),
+            primary_column_value
+        }
+    }
+
     pub fn serialize(self) -> Vec<u8> {
         let mut serialized: Vec<u8> = Vec::new();
         serialized.put_u32_le(self.storage_engine_record.get_n_columns() as u32);
@@ -63,7 +78,7 @@ impl Row {
     }
 
     pub fn serialized_size(&self) -> usize {
-        todo!()
+        self.storage_engine_record.serialize_size() + 4
     }
 }
 
