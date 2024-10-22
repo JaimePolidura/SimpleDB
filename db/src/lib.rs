@@ -1,6 +1,5 @@
 pub mod simple_db;
 
-pub mod selection;
 mod database;
 mod table;
 mod sql;
@@ -15,3 +14,4 @@ pub use simple_db::Context;
 pub use sql::parser::statement::*;
 pub use table::row::Row;
 pub use table::schema::*;
+pub use table::selection::Selection;

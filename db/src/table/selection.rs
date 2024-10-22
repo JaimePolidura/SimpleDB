@@ -1,6 +1,5 @@
 use crate::table::schema::Schema;
 use shared::{ColumnId, SimpleDbError};
-use std::collections::HashSet;
 
 #[derive(Clone)]
 pub enum Selection {

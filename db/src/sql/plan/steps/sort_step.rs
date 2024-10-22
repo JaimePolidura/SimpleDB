@@ -4,6 +4,7 @@ use crate::table::table::Table;
 use crate::{PlanStepDesc, QueryIterator, Row, Sort};
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
+use crate::table::row::RowIterator;
 
 #[derive(Clone)]
 enum SortStepState {

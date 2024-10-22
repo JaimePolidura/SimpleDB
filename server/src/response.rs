@@ -1,8 +1,7 @@
 use std::fmt::Debug;
 use bytes::BufMut;
 use serde::Serialize;
-use db::{Column, IndexType, Limit, PlanStepDesc, RangeScan, Row, Schema, Sort, SortOrder};
-use db::selection::Selection;
+use db::{Column, IndexType, Limit, PlanStepDesc, RangeScan, Row, Schema, Selection, Sort, SortOrder};
 use shared::{ErrorTypeId, SimpleDbError, Type, Value};
 
 pub enum Response {

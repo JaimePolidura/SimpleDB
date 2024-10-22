@@ -2,7 +2,7 @@ use crate::database::database::Database;
 use crate::index::index_creation_task::IndexCreationTask;
 use crate::index::secondary_index_iterator::SecondaryIndexIterator;
 use crate::index::secondary_indexes::SecondaryIndexes;
-use crate::selection::Selection;
+use crate::table::selection::Selection;
 use crate::table::record::Record;
 use crate::table::row::Row;
 use crate::table::schema::{Column, Schema};

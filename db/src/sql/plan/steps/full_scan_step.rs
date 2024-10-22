@@ -1,4 +1,4 @@
-use crate::selection::Selection;
+use crate::table::selection::Selection;
 use crate::table::table::Table;
 use crate::table::table_iterator::TableIterator;
 use crate::Row;

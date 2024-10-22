@@ -109,8 +109,8 @@ impl Databases {
             if prev.eq(&tombstone) || new.eq(&tombstone) {
                 StorageValueMergeResult::DiscardPreviousKeepNew
             } else {
-                let mut prev = Record::deserialize(prev.to_vec());
-                let new = Record::deserialize(new.to_vec());
+                let mut prev = Record::deserialize(&mut prev.as_ref());
+                let new = Record::deserialize(&mut new.as_ref());
                 prev.merge(new);
 
                 StorageValueMergeResult::Ok(Bytes::from(prev.serialize()))

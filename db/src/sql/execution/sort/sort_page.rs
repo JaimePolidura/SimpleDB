@@ -1,5 +1,6 @@
 use bytes::{Buf, BufMut};
 use shared::{utils, Flag, FlagMethods};
+use crate::{Row, Schema};
 
 pub const SORT_PAGE_NORMAL_PAGE: Flag = 1 << 0;
 pub const SORT_PAGE_LAST_PAGE_OVERFLOW: Flag = 1 << 2;
@@ -24,6 +25,18 @@ impl SortPage {
         n_rows: usize
     ) -> SortPage {
         SortPage { flags: SORT_PAGE_OVERFLOW_PAGE as Flag, row_bytes, n_rows, }
+    }
+
+    pub fn deserialize_rows(&self, schema: &Schema) -> Vec<Row> {
+        let mut rows = Vec::new();
+        let current_ptr = &mut self.row_bytes.as_slice();
+
+        for _ in 0..self.n_rows {
+            let row = Row::deserialize(current_ptr, schema);
+            rows.push(row);
+        }
+
+        rows
     }
 
     pub fn create_last_page_overflow(

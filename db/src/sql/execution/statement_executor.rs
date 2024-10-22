@@ -1,5 +1,5 @@
 use crate::database::databases::Databases;
-use crate::selection::Selection;
+use crate::table::selection::Selection;
 use crate::simple_db::{Context, StatementResult};
 use crate::sql::parser::expression::Expression;
 use crate::sql::plan::planner::Planner;

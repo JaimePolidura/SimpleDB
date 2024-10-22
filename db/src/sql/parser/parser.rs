@@ -1,4 +1,4 @@
-use crate::selection::Selection;
+use crate::table::selection::Selection;
 use crate::sql::parser::expression::{BinaryOperator, Expression, UnaryOperator};
 use crate::sql::parser::statement::{CreateTableStatement, DeleteStatement, InsertStatement, Limit, SelectStatement, Statement, UpdateStatement};
 use shared::{SimpleDbError, Type, Value};
@@ -502,7 +502,7 @@ impl Parser {
 #[cfg(test)]
 mod test {
     use shared::{Type, Value};
-    use crate::selection::Selection;
+    use crate::table::selection::Selection;
     use crate::{Sort, SortOrder};
     use crate::sort::sort::{Sort, SortOrder};
     use crate::sql::parser::expression::{BinaryOperator, Expression};

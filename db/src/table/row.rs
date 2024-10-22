@@ -1,4 +1,4 @@
-use crate::selection::Selection;
+use crate::table::selection::Selection;
 use crate::table::record::{Record, RecordBuilder};
 use crate::table::schema::Schema;
 use bytes::{BufMut, Bytes};
@@ -6,6 +6,10 @@ use shared::{SimpleDbError, Value};
 pub use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Formatter;
+
+pub trait RowIterator {
+    fn next(&mut self) -> Result<Option<Row>, SimpleDbError>;
+}
 
 #[derive(Clone)]
 pub struct Row {
@@ -55,7 +59,7 @@ impl Row {
         }
     }
 
-    pub fn deserialize(bytes: Vec<u8>, schema: &Schema) -> Row {
+    pub fn deserialize(bytes: &mut &[u8], schema: &Schema) -> Row {
         let primary_column = schema.get_primary_column();
         let record = Record::deserialize(bytes);
         let primary_column_value = Value::create(
@@ -149,6 +153,28 @@ impl RowBuilder {
             storage_engine_record: self.storage_record_builder.build(),
             primary_column_value: self.primary_value.unwrap(),
             schema: self.schema
+        }
+    }
+}
+
+pub struct MockRowIterator {
+    rows: Vec<Row>,
+}
+
+impl MockRowIterator {
+    pub fn create(rows: Vec<Row>) -> MockRowIterator {
+        MockRowIterator {
+            rows,
+        }
+    }
+}
+
+impl RowIterator for MockRowIterator {
+    fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
+        if !self.rows.is_empty() {
+            Ok(Some(self.rows.remove(0)))
+        } else {
+            Ok(None)
         }
     }
 }

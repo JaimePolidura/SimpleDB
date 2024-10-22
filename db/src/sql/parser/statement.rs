@@ -1,6 +1,6 @@
 use shared::{Type, Value};
 use crate::Schema;
-use crate::selection::Selection;
+use crate::table::selection::Selection;
 use crate::sql::parser::expression::Expression;
 
 pub enum Statement {

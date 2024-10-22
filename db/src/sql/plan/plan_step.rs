@@ -1,4 +1,4 @@
-use crate::selection::Selection;
+use crate::table::selection::Selection;
 use crate::sql::plan::scan_type::RangeScan;
 use crate::sql::plan::steps::filter_step::FilterStep;
 use crate::sql::plan::steps::full_scan_step::FullScanStep;

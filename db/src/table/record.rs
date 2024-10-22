@@ -108,8 +108,7 @@ impl Record {
         result
     }
 
-    pub fn deserialize(bytes: Vec<u8>) -> Record {
-        let mut current_ptr = bytes.as_slice();
+    pub fn deserialize(current_ptr: &mut &[u8]) -> Record {
         let mut data_records: Vec<(ColumnId, Bytes)> = Vec::new();
 
         while current_ptr.has_remaining() {

@@ -1,6 +1,6 @@
 use shared::SimpleDbError;
 use crate::{PlanStepDesc, Row};
-use crate::selection::Selection;
+use crate::table::selection::Selection;
 use crate::sql::plan::plan_step::{PlanStep, PlanStepTrait};
 
 #[derive(Clone)]

@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use crate::selection::Selection;
+use crate::table::selection::Selection;
 use crate::sql::parser::expression::Expression;
 use crate::sql::parser::statement::{DeleteStatement, Limit, SelectStatement, UpdateStatement};
 use crate::sql::plan::plan_step::PlanStep;

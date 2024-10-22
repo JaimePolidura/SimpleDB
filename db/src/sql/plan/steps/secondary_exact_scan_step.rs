@@ -1,5 +1,5 @@
 use crate::index::secondary_index_iterator::SecondaryIndexIterator;
-use crate::selection::{IndexSelectionType, Selection};
+use crate::table::selection::{IndexSelectionType, Selection};
 use crate::table::table::Table;
 use bytes::Bytes;
 use shared::{SimpleDbError, Value};

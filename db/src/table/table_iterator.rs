@@ -5,7 +5,7 @@ use bytes::Bytes;
 use shared::iterators::storage_iterator::StorageIterator;
 use shared::{ColumnId, Value};
 use std::sync::Arc;
-use crate::selection::Selection;
+use crate::table::selection::Selection;
 
 //This is the iterator that will be exposed to users of the SimpleDB
 //As data is stored in LSM engine, which is "only" append only, update records of rows are stored as ID -> [updated column id, new column value]
@@ -52,7 +52,7 @@ impl<I: StorageIterator> TableIterator<I> {
                 break;
             }
 
-            let record = Record::deserialize(self.simple_db_storage_iterator.value().to_vec());
+            let record = Record::deserialize(&mut self.simple_db_storage_iterator.value().as_ref());
             let key = Bytes::copy_from_slice(self.simple_db_storage_iterator.key().as_bytes());
             self.reassemble_row(key, record);
         }

@@ -1,18 +1,25 @@
-use crate::selection::Selection;
+use std::cell::UnsafeCell;
+use crate::table::selection::Selection;
 use crate::sql::execution::sort::sort_files::SortFiles;
 use crate::sql::execution::sort::sort_page::SortPage;
 use crate::sql::plan::plan_step::PlanStep;
-use crate::sql::query_iterator::{BlockQueryIterator, RowBlock};
 use crate::table::table::Table;
 use crate::{QueryIterator, Row, Sort, SortOrder};
 use bytes::{Buf, BufMut};
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
+use crate::table::block_row_iterator::{RowBlockIterator, RowBlock};
+use crate::table::row::MockRowIterator;
 
-#[derive(Clone)]
+//Used in write_normal_row_pages() and write_overflow_row_pages() methods
+const WRITE_TO_OUTPUT: bool = false;
+const WRITE_TO_INPUT: bool = true;
+
 pub struct Sorter {
-    sort_files: SortFiles,
-
+    //We need to wrap it with UnsafeCell because in pass_n() method, we need to take a mutable reference
+    //(to write to the output file) and an immutable reference to iterate the input file.
+    sort_files: UnsafeCell<SortFiles>,
+    
     options: Arc<SimpleDbOptions>,
     table: Arc<Table>,
     source: PlanStep,
@@ -27,11 +34,11 @@ impl Sorter {
         sort: Sort,
     ) -> Result<Sorter, SimpleDbError> {
         Ok(Sorter {
-            sort_files: SortFiles::create(
+            sort_files: UnsafeCell::new(SortFiles::create(
                 table.storage.create_temporary_space()?,
                 options.clone(),
                 table.get_schema().clone()
-            )?,
+            )?),
             options,
             source,
             table,
@@ -45,7 +52,7 @@ impl Sorter {
         let n_pages_written_pass1 = self.pass1()?;
 
         for n_pass in 0..self.calculate_n_total_passes(n_pages_written_pass1) {
-
+            self.pass_n(n_pass)?;
         }
 
         todo!()
@@ -56,7 +63,7 @@ impl Sorter {
     fn pass1(
         &mut self,
     ) -> Result<usize, SimpleDbError> {
-        let mut query_iterator = BlockQueryIterator::create(self.row_bytes_per_sort_page(), QueryIterator::create(
+        let mut query_iterator = RowBlockIterator::create(self.row_bytes_per_sort_page(), QueryIterator::create(
             Selection::All, self.source.clone(), self.table.get_schema().clone()
         ));
         let mut n_pages_written = 0;
@@ -64,17 +71,68 @@ impl Sorter {
         while let block_of_rows = query_iterator.next_block()? {
             n_pages_written += 1;
             match block_of_rows {
-                RowBlock::Overflow(overflow_row) => self.write_overflow_row_pages_to_input(overflow_row)?,
-                RowBlock::Rows(rows) => self.write_normal_row_pages_to_input(rows)?
+                RowBlock::Overflow(overflow_row) => self.write_overflow_row_pages(overflow_row, WRITE_TO_INPUT)?,
+                RowBlock::Rows(mut rows) => {
+                    self.sort_rows(&mut rows);
+                    self.write_normal_row_pages(rows, WRITE_TO_INPUT)?
+                }
             };
         }
 
         Ok(n_pages_written)
     }
 
-    fn write_overflow_row_pages_to_input(
-        &mut self,
-        overflow_row: Row
+    fn pass_n(&mut self, n_pass: usize) -> Result<(), SimpleDbError> {
+        let mut input_iterator = self.get_sort_files().input_iterator(n_pass * 2);
+        let mut buffer_right: Option<Vec<Row>> = None;
+        let mut buffer_left: Option<Vec<Row>> = None;
+
+        while input_iterator.has_next() {
+            //Load left & right buffers
+            match (&buffer_left, &buffer_right) {
+                (Some(left), None) => {
+                    buffer_right = input_iterator.next_right()?;
+                },
+                (None, Some(right)) => {
+                    buffer_left = input_iterator.next_left()?;
+                },
+                (None, None) => {
+                    buffer_right = input_iterator.next_right()?;
+                    buffer_left = input_iterator.next_left()?;
+                },
+                _ => panic!("Illegal code path")
+            }
+
+            //Sort left & right buffers
+            let rows_right = buffer_left.take().unwrap();
+            let rows_left = buffer_left.take().unwrap();
+            let mut sorted_rows = Vec::new();
+            sorted_rows.extend(rows_left);
+            sorted_rows.extend(rows_right);
+            self.sort_rows(&mut sorted_rows);
+
+            //Write to output
+            let mut rows_iterator = RowBlockIterator::<MockRowIterator>::create_from_vec(
+                self.row_bytes_per_sort_page(), sorted_rows
+            );
+            while let block_of_rows = rows_iterator.next_block()? {
+                match block_of_rows {
+                    RowBlock::Overflow(overflow_row) => self.write_overflow_row_pages(overflow_row, WRITE_TO_OUTPUT)?,
+                    RowBlock::Rows(rows) => self.write_normal_row_pages(rows, WRITE_TO_OUTPUT)?,
+                }
+            }
+        }
+
+        //Swap files
+        self.get_sort_files().swap_input_output_files();
+
+        Ok(())
+    }
+
+    fn write_overflow_row_pages(
+        &self,
+        overflow_row: Row,
+        write_to_input_file: bool
     ) -> Result<(), SimpleDbError> {
         let row_serialized = overflow_row.serialize();
         let mut current_ptr = &mut row_serialized.as_slice();
@@ -93,24 +151,35 @@ impl Sorter {
         }
 
         for page in pages {
-            self.sort_files.write_sort_page_to_input(page)?;
+            if write_to_input_file {
+                self.get_sort_files()
+                    .write_sort_page_to_input(page)?;
+            } else {
+                self.get_sort_files()
+                    .write_sort_page_to_output(page)?;
+            }
         }
 
         Ok(())
     }
 
-    fn write_normal_row_pages_to_input(
-        &mut self,
-        mut rows: Vec<Row>
+    fn write_normal_row_pages(
+        &self,
+        mut rows: Vec<Row>,
+        write_to_input_file: bool
     ) -> Result<(), SimpleDbError> {
         if rows.len() > 0 {
-            self.sort_rows(&mut rows);
-
             let n_rows = rows.len();
             let serialized_rows = Self::serialize_rows(rows);
             let sort_page = SortPage::create_normal(serialized_rows, n_rows);
 
-            self.sort_files.write_sort_page_to_input(sort_page)?;
+            if write_to_input_file {
+                self.get_sort_files()
+                    .write_sort_page_to_input(sort_page)?;
+            } else {
+                self.get_sort_files()
+                    .write_sort_page_to_output(sort_page)?;
+            }
         }
 
         Ok(())
@@ -143,5 +212,21 @@ impl Sorter {
 
     fn calculate_n_total_passes(&self, n_pages_written_pass1: usize) -> usize {
         (n_pages_written_pass1 as f64).log2().ceil() as usize
+    }
+
+    fn get_sort_files(&self) -> &mut SortFiles {
+        unsafe { &mut (*self.sort_files.get()) }
+    }
+}
+
+impl Clone for Sorter {
+    fn clone(&self) -> Self {
+        Sorter {
+            sort_files: UnsafeCell::new(unsafe { (*self.sort_files.get()).clone() }),
+            options: self.options.clone(),
+            table: self.table.clone(),
+            source: self.source.clone(),
+            sort: self.sort.clone()
+        }
     }
 }

@@ -70,8 +70,8 @@ impl IndexCreationTask {
 
         while iterator.next() {
             let primary_key = iterator.key();
-            let record_bytes = iterator.value();
-            let mut record = Record::deserialize(record_bytes.to_vec());
+            let mut record_bytes = iterator.value();
+            let mut record = Record::deserialize(&mut record_bytes);
 
             if let Some(value_to_be_indexed) = record.remove_column(self.secondary_indexed_column.column_id) {
                 let posting_list = PostingList::crate_only_one_entry(primary_key);

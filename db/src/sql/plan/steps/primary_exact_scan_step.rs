@@ -1,4 +1,4 @@
-use crate::selection::Selection;
+use crate::table::selection::Selection;
 use crate::{Row};
 use bytes::Bytes;
 use shared::{SimpleDbError, Value};

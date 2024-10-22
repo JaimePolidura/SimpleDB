@@ -1,4 +1,4 @@
-use crate::selection::Selection;
+use crate::table::selection::Selection;
 use crate::sql::plan::plan_step::{PlanStepDesc, PlanStepTrait};
 use crate::sql::plan::scan_type::{RangeKeyPosition, RangeScan};
 use crate::table::table::Table;

@@ -1,5 +1,5 @@
 use crate::index::secondary_index_iterator::SecondaryIndexIterator;
-use crate::selection::{IndexSelectionType, Selection};
+use crate::table::selection::{IndexSelectionType, Selection};
 use crate::sql::plan::plan_step::{PlanStepDesc, PlanStepTrait};
 use crate::sql::plan::scan_type::{RangeKeyPosition, RangeScan};
 use crate::table::table::Table;
