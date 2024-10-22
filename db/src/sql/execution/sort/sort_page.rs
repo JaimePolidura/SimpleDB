@@ -2,9 +2,10 @@ use bytes::{Buf, BufMut};
 use shared::{utils, Flag, FlagMethods};
 use crate::{Row, Schema};
 
+pub const SORT_PAGE_FIRST_PAGE_OVERFLOW: Flag = 1 << 3;
+pub const SORT_PAGE_OVERFLOW_PAGE: Flag = 1 << 2;
+pub const SORT_PAGE_LAST_PAGE_OVERFLOW: Flag = 1 << 1;
 pub const SORT_PAGE_NORMAL_PAGE: Flag = 1 << 0;
-pub const SORT_PAGE_LAST_PAGE_OVERFLOW: Flag = 1 << 2;
-pub const SORT_PAGE_OVERFLOW_PAGE: Flag = 1 << 1;
 
 pub struct SortPage {
     flags: Flag,
@@ -39,6 +40,13 @@ impl SortPage {
         rows
     }
 
+    pub fn create_first_page_overflow(
+        row_bytes: Vec<u8>,
+        n_rows: usize
+    ) -> SortPage {
+        SortPage { flags: SORT_PAGE_FIRST_PAGE_OVERFLOW as Flag, row_bytes, n_rows, }
+    }
+
     pub fn create_last_page_overflow(
         row_bytes: Vec<u8>,
         n_rows: usize
@@ -56,6 +64,10 @@ impl SortPage {
 
     pub fn is_last_overflow_page(&self) -> bool {
         self.flags.has(SORT_PAGE_LAST_PAGE_OVERFLOW)
+    }
+
+    pub fn is_first_overflow_page(&self) -> bool {
+        self.flags.has(SORT_PAGE_FIRST_PAGE_OVERFLOW)
     }
 
     pub fn is_normal_page(&self) -> bool {

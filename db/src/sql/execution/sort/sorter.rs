@@ -1,4 +1,5 @@
 use std::cell::UnsafeCell;
+use std::cmp::Ordering;
 use crate::table::selection::Selection;
 use crate::sql::execution::sort::sort_files::SortFiles;
 use crate::sql::execution::sort::sort_page::SortPage;
@@ -19,7 +20,7 @@ pub struct Sorter {
     //We need to wrap it with UnsafeCell because in pass_n() method, we need to take a mutable reference
     //(to write to the output file) and an immutable reference to iterate the input file.
     sort_files: UnsafeCell<SortFiles>,
-    
+
     options: Arc<SimpleDbOptions>,
     table: Arc<Table>,
     source: PlanStep,
@@ -49,18 +50,65 @@ impl Sorter {
     pub fn sort(
         &mut self,
     ) -> Result<QueryIterator, SimpleDbError> {
-        let n_pages_written_pass1 = self.pass1()?;
+        let n_pages_written_pass1 = self.pass_0()?;
 
-        for n_pass in 0..self.calculate_n_total_passes(n_pages_written_pass1) {
-            self.pass_n(n_pass)?;
+        for n_pass in 1..self.calculate_n_total_passes(n_pages_written_pass1) {
+            if n_pass == 1 {
+                self.pass_1()?;
+            } else {
+                self.pass_n(n_pass)?;
+            }
         }
 
         todo!()
     }
 
+    fn pass_n (
+        &mut self,
+        n_pass: usize
+    ) -> Result<(), SimpleDbError> {
+        let mut input_iterator = self.get_sort_files().input_iterator(n_pass)?;
+        let mut buffer_right: Vec<Row> = Vec::new();
+        let mut buffer_left: Vec<Row> = Vec::new();
+        let mut output_buffer = Vec::new();
+        let mut current_size_bytes_output_buffer = 0;
+
+        while input_iterator.has_next() {
+            if buffer_left.is_empty() {
+                buffer_left = input_iterator.next_left()?.unwrap_or(Vec::new());
+            }
+            if buffer_right.is_empty() {
+                buffer_right = input_iterator.next_right()?.unwrap_or(Vec::new());
+            }
+
+            match self.take_min(&mut buffer_left, &mut buffer_right) {
+                Some(min_row) => {
+                    let min_row_size_bytes = min_row.serialized_size();
+
+                    if min_row_size_bytes > self.row_bytes_per_sort_page() {
+                        //Write output buffer, Clear it
+                        //Write min row to overflow pages
+                    }
+                    if current_size_bytes_output_buffer + min_row_size_bytes > self.row_bytes_per_sort_page() {
+                        //Write output buffer, Clear it
+                        //Write min row to new output buffer
+                    }
+                    if current_size_bytes_output_buffer + min_row_size_bytes <= self.row_bytes_per_sort_page() {
+                        //Write it to output buffer
+                    }
+                },
+                None => {}
+            }
+        }
+
+        self.get_sort_files().swap_input_output_files();
+
+        Ok(())
+    }
+
     //In pass one we split the rows by pages, sort them and store them in the page.
     //This function returns the number of pages written. (Overflow pages only count for 1 page written)
-    fn pass1(
+    fn pass_0(
         &mut self,
     ) -> Result<usize, SimpleDbError> {
         let mut query_iterator = RowBlockIterator::create(self.row_bytes_per_sort_page(), QueryIterator::create(
@@ -82,8 +130,8 @@ impl Sorter {
         Ok(n_pages_written)
     }
 
-    fn pass_n(&mut self, n_pass: usize) -> Result<(), SimpleDbError> {
-        let mut input_iterator = self.get_sort_files().input_iterator(n_pass * 2);
+    fn pass_1(&mut self) -> Result<(), SimpleDbError> {
+        let mut input_iterator = self.get_sort_files().input_iterator(1)?;
         let mut buffer_right: Option<Vec<Row>> = None;
         let mut buffer_left: Option<Vec<Row>> = None;
 
@@ -104,8 +152,8 @@ impl Sorter {
             }
 
             //Sort left & right buffers
-            let rows_right = buffer_left.take().unwrap();
-            let rows_left = buffer_left.take().unwrap();
+            let rows_right = buffer_left.take().unwrap_or(Vec::new());
+            let rows_left = buffer_left.take().unwrap_or(Vec::new());
             let mut sorted_rows = Vec::new();
             sorted_rows.extend(rows_left);
             sorted_rows.extend(rows_right);
@@ -140,7 +188,11 @@ impl Sorter {
         let n_pages = (row_serialized.len() / self.row_bytes_per_sort_page()) + 1;
 
         for (current_index, _) in (0..n_pages).enumerate() {
-            if current_index < n_pages {
+            if current_index == 0 {
+                let row_bytes = current_ptr[..self.row_bytes_per_sort_page()].to_vec();
+                pages.push(SortPage::create_first_page_overflow(row_bytes, 1));
+                current_ptr.advance(self.row_bytes_per_sort_page());
+            } else if current_index < n_pages {
                 let row_bytes = current_ptr[..self.row_bytes_per_sort_page()].to_vec();
                 pages.push(SortPage::create_next_page_overflow(row_bytes, 1));
                 current_ptr.advance(self.row_bytes_per_sort_page());
@@ -200,14 +252,18 @@ impl Sorter {
 
     fn sort_rows(&self, rows: &mut Vec<Row>) {
         rows.sort_by(|a, b| {
-            let value_a = a.get_column_value(&self.sort.column_name).unwrap();
-            let value_b = b.get_column_value(&self.sort.column_name).unwrap();
-
-            match self.sort.order {
-                SortOrder::Desc => value_b.cmp(&value_a),
-                SortOrder::Asc => value_a.cmp(&value_b)
-            }
+            Self::compare_row(a, b, &self.sort)
         });
+    }
+
+    fn compare_row(a: &Row, b: &Row, sort: &Sort) -> Ordering {
+        let value_a = a.get_column_value(&sort.column_name).unwrap();
+        let value_b = b.get_column_value(&sort.column_name).unwrap();
+
+        match sort.order {
+            SortOrder::Desc => value_b.cmp(&value_a),
+            SortOrder::Asc => value_a.cmp(&value_b)
+        }
     }
 
     fn calculate_n_total_passes(&self, n_pages_written_pass1: usize) -> usize {
@@ -216,6 +272,31 @@ impl Sorter {
 
     fn get_sort_files(&self) -> &mut SortFiles {
         unsafe { &mut (*self.sort_files.get()) }
+    }
+
+    fn take_min(
+        &self,
+        left_vec: &mut Vec<Row>,
+        right_vec: &mut Vec<Row>,
+    ) -> Option<Row> {
+        if left_vec.is_empty() && right_vec.is_empty() {
+            return None;
+        }
+        if left_vec.is_empty() {
+            return Some(right_vec.remove(0));
+        }
+        if right_vec.is_empty() {
+            return Some(left_vec.remove(0));
+        }
+
+        let right_value = right_vec.get(0).unwrap();
+        let left_value = left_vec.get(0).unwrap();
+
+        match Self::compare_row(left_value, right_value, &self.sort) {
+            Ordering::Less |
+            Ordering::Equal => Some(left_vec.remove(0)),
+            Ordering::Greater => Some(right_vec.remove(0))
+        }
     }
 }
 
