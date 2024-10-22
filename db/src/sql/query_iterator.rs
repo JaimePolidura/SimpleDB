@@ -1,25 +1,25 @@
-use crate::table::selection::Selection;
-use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc};
+use crate::sql::plan::plan_step::PlanStepDesc;
+use crate::table::row::RowIterator;
 use crate::table::schema::Schema;
+use crate::table::selection::Selection;
 use crate::{Column, Row};
 use shared::SimpleDbError;
-use crate::table::row::RowIterator;
 
 //This will be returned to the user of SimpleDb when it queries data
 //This is simple wrapper around a Plan
 #[derive(Clone)]
-pub struct QueryIterator {
-    source: PlanStep,
+pub struct QueryIterator<I: RowIterator> {
+    source: I,
     schema: Schema,
     selection: Selection,
 }
 
-impl QueryIterator {
+impl<I: RowIterator> QueryIterator<I> {
     pub fn create(
         selection: Selection,
-        plan: PlanStep,
+        plan: I,
         schema: Schema
-    ) -> QueryIterator {
+    ) -> QueryIterator<I> {
         QueryIterator { source: plan, schema, selection }
     }
 
@@ -68,13 +68,9 @@ impl QueryIterator {
     pub fn schema(&self) -> &Schema {
         &self.schema
     }
-
-    pub fn get_plan_desc(&self) -> PlanStepDesc {
-        self.source.desc()
-    }
 }
 
-impl RowIterator for QueryIterator {
+impl<I: RowIterator> RowIterator for QueryIterator<I> {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         self.source.next()
     }

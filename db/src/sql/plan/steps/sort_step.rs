@@ -23,7 +23,7 @@ pub struct SortStep {
     pub(crate) sorter: Sorter,
 
     //Used when state is Sorted
-    pub(crate) sorted_rows_iterator: Option<QueryIterator>,
+    // pub(crate) sorted_rows_iterator: Option<QueryIterator>,
 }
 
 impl SortStep {
@@ -36,7 +36,7 @@ impl SortStep {
         Ok(SortStep {
             sorter: Sorter::create(options, table.clone(), source.clone(), sort.clone())?,
             state: SortStepState::PendingSort,
-            sorted_rows_iterator: None,
+            // sorted_rows_iterator: None,
             sort: sort.clone(),
             source,
             table,
@@ -49,16 +49,18 @@ impl PlanStepTrait for SortStep {
         match self.state {
             SortStepState::PendingSort => {
                 let mut sorted_rows_iterator = self.sorter.sort()?;
-                let sorted_row = sorted_rows_iterator.next();
-                self.state = SortStepState::Sorted;
-                self.sorted_rows_iterator = Some(sorted_rows_iterator);
-                sorted_row
+                // let sorted_row = sorted_rows_iterator.next();
+                // self.state = SortStepState::Sorted;
+                // self.sorted_rows_iterator = Some(sorted_rows_iterator);
+                // sorted_row
+                todo!()
             }
             SortStepState::Sorted => {
-                self.sorted_rows_iterator
-                    .as_mut()
-                    .unwrap()
-                    .next()
+                // self.sorted_rows_iterator
+                //     .as_mut()
+                //     .unwrap()
+                //     .next()
+                todo!()
             }
         }
     }

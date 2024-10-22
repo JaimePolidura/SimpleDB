@@ -233,7 +233,7 @@ impl Server {
                 ));
                 Ok(StatementResponse::Ok(0))
             },
-            StatementResult::Data(mut query_iterator) => {
+            StatementResult::Data(plan_desc, mut query_iterator) => {
                 if !is_explained {
                     let rows = query_iterator.all()?;
                     logger().debug(SimpleDbLayer::Server, &format!(
@@ -249,7 +249,7 @@ impl Server {
                         "Executed query explain request request Connection ID: {} Statement: {}",
                         connection_id, statement
                     ));
-                    Ok(StatementResponse::Explain(query_iterator.get_plan_desc(), query_iterator.schema().clone()))
+                    Ok(StatementResponse::Explain(plan_desc, query_iterator.schema().clone()))
                 }
             }
         }

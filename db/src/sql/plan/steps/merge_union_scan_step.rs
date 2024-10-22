@@ -3,6 +3,7 @@ use bytes::Bytes;
 use shared::SimpleDbError;
 use crate::{Row, Schema};
 use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc, PlanStepTrait};
+use crate::table::row::RowIterator;
 
 //Given two plan steps this step performs the set "union" operation by the primary key.
 //Produces sorted rows if the source plans produce rows sorted by the same key.

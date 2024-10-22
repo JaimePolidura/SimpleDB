@@ -15,6 +15,7 @@ use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
 use crate::sql::execution::expression_evaluator::{evaluate_constant_expressions, evaluate_expression};
 use crate::sql::optimizer::PlanOptimizer;
+use crate::table::row::RowIterator;
 use crate::table::schema::Column;
 
 pub struct StatementExecutor {
@@ -73,7 +74,7 @@ impl StatementExecutor {
         let select_plan = self.planner.plan_select(&table, select_statement, transaction)?;
         let select_plan = self.optimizer.optimize(select_plan, &table)?;
 
-        Ok(StatementResult::Data(QueryIterator::create(
+        Ok(StatementResult::Data(select_plan.desc(), QueryIterator::create(
             selection,
             select_plan,
             table.get_schema().clone()

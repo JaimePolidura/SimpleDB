@@ -14,6 +14,7 @@ use crate::{Limit, Row, Schema, Sort};
 use bytes::Bytes;
 use shared::{SimpleDbError, Value};
 use crate::sql::plan::steps::sort_step::SortStep;
+use crate::table::row::RowIterator;
 
 pub(crate) trait PlanStepTrait {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError>;
@@ -54,8 +55,8 @@ pub enum PlanStepDesc {
     SecondaryExactExactScan(String, Bytes),
 }
 
-impl PlanStep {
-    pub fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
+impl RowIterator for PlanStep {
+    fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         match self {
             PlanStep::Limit(step) => step.next(),
             PlanStep::Filter(step) => step.next(),
@@ -71,7 +72,9 @@ impl PlanStep {
             PlanStep::Mock(step) => step.next(),
         }
     }
+}
 
+impl PlanStep {
     pub fn get_column_sorted_by_plans(
         schema: &Schema,
         left: &PlanStep,

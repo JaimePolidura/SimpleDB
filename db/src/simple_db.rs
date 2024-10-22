@@ -6,6 +6,8 @@ use crate::sql::parser::statement::Statement;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::PlanStepDesc;
+use crate::sql::plan::plan_step::PlanStep;
 use crate::sql::StatementExecutor;
 use crate::table::schema::Column;
 
@@ -17,7 +19,7 @@ pub struct SimpleDb {
 
 pub enum StatementResult {
     TransactionStarted(Transaction),
-    Data(QueryIterator),
+    Data(PlanStepDesc, QueryIterator<PlanStep>),
     Ok(usize), //usize number of rows affected
     Databases(Vec<String>),
     Tables(Vec<String>),
@@ -125,9 +127,9 @@ impl StatementResult {
         }
     }
 
-    pub fn data(self) -> QueryIterator {
+    pub fn data(self) -> QueryIterator<PlanStep> {
         match self {
-            StatementResult::Data(data) => data,
+            StatementResult::Data(_, data) => data,
             _ => panic!("")
         }
     }

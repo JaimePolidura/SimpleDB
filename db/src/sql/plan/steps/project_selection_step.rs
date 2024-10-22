@@ -2,6 +2,7 @@ use shared::SimpleDbError;
 use crate::{PlanStepDesc, Row};
 use crate::table::selection::Selection;
 use crate::sql::plan::plan_step::{PlanStep, PlanStepTrait};
+use crate::table::row::RowIterator;
 
 #[derive(Clone)]
 pub struct ProjectSelectionStep {

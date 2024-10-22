@@ -3,6 +3,7 @@ use crate::sql::plan::plan_step::{PlanStep, PlanStepDesc, PlanStepTrait};
 use crate::Row;
 use shared::SimpleDbError;
 use crate::sql::execution::expression_evaluator::evaluate_where_expression;
+use crate::table::row::RowIterator;
 
 #[derive(Clone)]
 pub struct FilterStep {

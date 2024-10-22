@@ -49,7 +49,7 @@ impl Sorter {
 
     pub fn sort(
         &mut self,
-    ) -> Result<QueryIterator, SimpleDbError> {
+    ) -> Result<(), SimpleDbError> {
         let n_pages_written_pass1 = self.pass_0()?;
 
         for n_pass in 1..self.calculate_n_total_passes(n_pages_written_pass1) {
@@ -60,7 +60,7 @@ impl Sorter {
             }
         }
 
-        todo!()
+        Ok(())
     }
 
     fn pass_n (

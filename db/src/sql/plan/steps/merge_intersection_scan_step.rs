@@ -3,6 +3,7 @@ use crate::{Row, Schema};
 use bytes::Bytes;
 use shared::{SimpleDbError, Value};
 use std::collections::HashMap;
+use crate::table::row::RowIterator;
 
 //Given two plan steps this step performs the set "intersection" operation by the primary key.
 //Produces sorted rows if both source plans, produced rows sorted by the same key
