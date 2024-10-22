@@ -68,9 +68,9 @@ impl Sorter {
         n_pass: usize
     ) -> Result<(), SimpleDbError> {
         let mut input_iterator = self.get_sort_files().input_iterator(n_pass)?;
+        let mut output_buffer: Vec<Row> = Vec::new();
         let mut buffer_right: Vec<Row> = Vec::new();
         let mut buffer_left: Vec<Row> = Vec::new();
-        let mut output_buffer = Vec::new();
         let mut current_size_bytes_output_buffer = 0;
 
         while input_iterator.has_next() {
@@ -86,15 +86,19 @@ impl Sorter {
                     let min_row_size_bytes = min_row.serialized_size();
 
                     if min_row_size_bytes > self.row_bytes_per_sort_page() {
-                        //Write output buffer, Clear it
-                        //Write min row to overflow pages
-                    }
-                    if current_size_bytes_output_buffer + min_row_size_bytes > self.row_bytes_per_sort_page() {
-                        //Write output buffer, Clear it
-                        //Write min row to new output buffer
-                    }
-                    if current_size_bytes_output_buffer + min_row_size_bytes <= self.row_bytes_per_sort_page() {
-                        //Write it to output buffer
+                        //This function will clear the output buffer
+                        self.write_normal_row_pages(&mut output_buffer, WRITE_TO_OUTPUT);
+                        self.write_overflow_row_pages(min_row, WRITE_TO_OUTPUT);
+                        current_size_bytes_output_buffer = 0;
+
+                    } else if current_size_bytes_output_buffer + min_row_size_bytes > self.row_bytes_per_sort_page() {
+                        self.write_normal_row_pages(&mut output_buffer, WRITE_TO_OUTPUT);
+                        current_size_bytes_output_buffer = min_row_size_bytes;
+                        output_buffer.push(min_row);
+
+                    } else if current_size_bytes_output_buffer + min_row_size_bytes <= self.row_bytes_per_sort_page() {
+                        output_buffer.push(min_row);
+                        current_size_bytes_output_buffer += min_row_size_bytes;
                     }
                 },
                 None => {}
@@ -122,7 +126,7 @@ impl Sorter {
                 RowBlock::Overflow(overflow_row) => self.write_overflow_row_pages(overflow_row, WRITE_TO_INPUT)?,
                 RowBlock::Rows(mut rows) => {
                     self.sort_rows(&mut rows);
-                    self.write_normal_row_pages(rows, WRITE_TO_INPUT)?
+                    self.write_normal_row_pages(&mut rows, WRITE_TO_INPUT)?
                 }
             };
         }
@@ -166,7 +170,7 @@ impl Sorter {
             while let block_of_rows = rows_iterator.next_block()? {
                 match block_of_rows {
                     RowBlock::Overflow(overflow_row) => self.write_overflow_row_pages(overflow_row, WRITE_TO_OUTPUT)?,
-                    RowBlock::Rows(rows) => self.write_normal_row_pages(rows, WRITE_TO_OUTPUT)?,
+                    RowBlock::Rows(mut rows) => self.write_normal_row_pages(&mut rows, WRITE_TO_OUTPUT)?,
                 }
             }
         }
@@ -217,7 +221,7 @@ impl Sorter {
 
     fn write_normal_row_pages(
         &self,
-        mut rows: Vec<Row>,
+        rows: &mut Vec<Row>,
         write_to_input_file: bool
     ) -> Result<(), SimpleDbError> {
         if rows.len() > 0 {
@@ -237,12 +241,13 @@ impl Sorter {
         Ok(())
     }
 
-    fn serialize_rows(rows: Vec<Row>) -> Vec<u8> {
+    fn serialize_rows(rows: &mut Vec<Row>) -> Vec<u8> {
         let mut serialized: Vec<u8> = Vec::new();
         serialized.put_u32(rows.len() as u32);
-        for row in rows {
-            serialized.extend(row.serialize());
+        while !rows.is_empty() {
+            serialized.extend(rows.remove(0).serialize());
         }
+
         serialized
     }
 
