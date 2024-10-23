@@ -4,6 +4,7 @@ use shared::SimpleDbError::{CannotReadSortFile, CannotWriteSortFile};
 use shared::{SimpleDbError, SimpleDbFile, SimpleDbOptions};
 use std::sync::Arc;
 use storage::TemporarySpace;
+use crate::sql::execution::sort::sort_file::SortFile;
 use crate::sql::execution::sort::sort_files::SortFilePageIteratorState::LeftAndRightAvailable;
 
 #[derive(Clone)]
@@ -13,8 +14,8 @@ pub struct SortFiles {
     table_schema: Schema,
     initialized: bool,
 
-    output: Option<SimpleDbFile>,
-    input: Option<SimpleDbFile>,
+    output: Option<SortFile>,
+    input: Option<SortFile>,
 }
 
 //This iterator will maintain two pointers on the file (left and right) that will be separated by k
@@ -27,7 +28,7 @@ pub struct SortFilePageIterator<'a> {
     table_schema: Schema,
 
     sort_page_size_bytes: usize,
-    file: &'a SimpleDbFile,
+    file: &'a SortFile,
     k: usize,
 
     state: SortFilePageIteratorState,
@@ -66,6 +67,10 @@ impl SortFiles {
         )
     }
 
+    pub fn take_output_file(&mut self) -> SortFile {
+        self.output.take().unwrap()
+    }
+
     pub fn swap_input_output_files(&mut self) {
         let output = self.output.take().unwrap();
         let input = self.input.take().unwrap();
@@ -79,9 +84,7 @@ impl SortFiles {
         self.output
             .as_mut()
             .unwrap()
-            .write(&page.serialize(self.options.sort_page_size_bytes))
-            .map_err(|e| CannotWriteSortFile(e))?;
-        Ok(())
+            .write(page)
     }
 
     pub fn write_sort_page_to_input(&mut self, page: SortPage) -> Result<(), SimpleDbError> {
@@ -90,15 +93,13 @@ impl SortFiles {
         self.input
             .as_mut()
             .unwrap()
-            .write(&page.serialize(self.options.sort_page_size_bytes))
-                .map_err(|e| CannotWriteSortFile(e))?;
-        Ok(())
+            .write(page)
     }
 
     fn maybe_initialize(&mut self) -> Result<(), SimpleDbError> {
         if !self.initialized {
-            self.output = Some(self.temporary_space.create_file("output")?);
-            self.input = Some(self.temporary_space.create_file("input")?);
+            self.output = Some(SortFile::create(self.temporary_space.create_file("output")?, self.options.sort_page_size_bytes));
+            self.input = Some(SortFile::create(self.temporary_space.create_file("input")?, self.options.sort_page_size_bytes));
             self.initialized = false;
         }
 
@@ -108,7 +109,7 @@ impl SortFiles {
 
 impl<'a> SortFilePageIterator<'a> {
     pub fn create(
-        file: &'a SimpleDbFile,
+        file: &'a SortFile,
         sort_page_size_bytes: usize,
         schema: &Schema,
         k: usize,
@@ -171,7 +172,7 @@ impl<'a> SortFilePageIterator<'a> {
             self.n_pages_returned_right = 0;
             self.current_offset_left = self.current_offset_right;
 
-            match self.make_offset_point_to_page(
+            match self.file.get_next_page_offset(
                 self.current_offset_right + (self.sort_page_size_bytes * self.k)
             )? {
                 Some(new_right_offset) => {
@@ -194,41 +195,13 @@ impl<'a> SortFilePageIterator<'a> {
             return Ok(None);
         }
 
-        let first_page = self.read_page(offset)?;
-
-        if first_page.is_normal_page() {
-            let rows = first_page.deserialize_rows(&self.table_schema);
-            return Ok(Some((rows, offset + self.sort_page_size_bytes)));
-        } else {
-            let (overflow_row, new_offset) = self.read_overflow_page(first_page, offset)?;
-            Ok(Some((vec![overflow_row], new_offset)))
-        }
-    }
-
-    fn read_overflow_page(
-        &self,
-        first_page: SortPage,
-        first_page_offset: usize
-    ) -> Result<(Row, usize), SimpleDbError> {
-        let mut current_offset = first_page_offset + self.sort_page_size_bytes;
-        let mut row_bytes = first_page.row_bytes();
-
-        loop {
-            let current_page = self.read_page(current_offset)?;
-
-            current_offset += self.sort_page_size_bytes;
-            row_bytes.extend(current_page.row_bytes());
-
-            if current_page.is_last_overflow_page() {
-                row_bytes.extend(current_page.row_bytes());
-                let row = Row::deserialize(&mut row_bytes.as_slice(), &self.table_schema);
-                return Ok((row, current_offset))
-            }
-        }
+        let (row_bytes, n_rows, next_offset) = self.file.read_row_bytes(offset)?.unwrap();
+        let rows = Row::deserialize_rows(&row_bytes, n_rows, &self.table_schema);
+        return Ok(Some((rows, next_offset)));
     }
 
     fn initialize(&mut self) -> Result<(), SimpleDbError> {
-        match self.make_offset_point_to_page(self.current_offset_left * self.k)? {
+        match self.file.get_next_page_offset(self.current_offset_left * self.k)? {
             Some(right_offset) => {
                 self.state = SortFilePageIteratorState::LeftAndRightAvailable;
                 self.current_offset_right = right_offset;
@@ -239,35 +212,5 @@ impl<'a> SortFilePageIterator<'a> {
         }
 
         Ok(())
-    }
-
-    //Given an offset into a sort page file, this function will return the next offset on the file which points
-    //at the beginning of a page. If the initial_offset points at the beginning of a page, that offset will be returned.
-    //This function will return None, if the offset is out of bounds of the file
-    fn make_offset_point_to_page(&mut self, initial_offset: usize) -> Result<Option<usize>, SimpleDbError> {
-        if initial_offset >= self.file.size() {
-            return Ok(None);
-        }
-        if !self.read_page(initial_offset)?.is_overflow_page() {
-            return Ok(Some(initial_offset))
-        }
-
-        let mut current_offset = initial_offset;
-
-        //Read pages until we find a non overflow page
-        loop {
-            current_offset = current_offset + self.sort_page_size_bytes;
-            let mut current_page = self.read_page(current_offset)?;
-
-            if !current_page.is_overflow_page() {
-                return Ok(Some(current_offset));
-            }
-        }
-    }
-
-    fn read_page(&self, offset: usize) -> Result<SortPage, SimpleDbError> {
-        let mut left_sort_page_bytes = self.file.read(offset, self.sort_page_size_bytes)
-            .map_err(|e| CannotReadSortFile(e))?;
-        Ok(SortPage::deserialize(&mut left_sort_page_bytes.as_slice(), self.sort_page_size_bytes))
     }
 }

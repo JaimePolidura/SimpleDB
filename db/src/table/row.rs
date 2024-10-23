@@ -84,6 +84,22 @@ impl Row {
     pub fn serialized_size(&self) -> usize {
         self.storage_engine_record.serialize_size() + 4
     }
+
+    pub fn deserialize_rows(
+        row_bytes: &Vec<u8>,
+        n_rows: usize,
+        schema: &Schema
+    ) -> Vec<Row> {
+        let mut rows = Vec::new();
+        let current_ptr = &mut row_bytes.as_slice();
+
+        for _ in 0..n_rows {
+            let row = Row::deserialize(current_ptr, schema);
+            rows.push(row);
+        }
+
+        rows
+    }
 }
 
 impl fmt::Display for Row {

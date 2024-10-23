@@ -28,18 +28,6 @@ impl SortPage {
         SortPage { flags: SORT_PAGE_OVERFLOW_PAGE as Flag, row_bytes, n_rows, }
     }
 
-    pub fn deserialize_rows(&self, schema: &Schema) -> Vec<Row> {
-        let mut rows = Vec::new();
-        let current_ptr = &mut self.row_bytes.as_slice();
-
-        for _ in 0..self.n_rows {
-            let row = Row::deserialize(current_ptr, schema);
-            rows.push(row);
-        }
-
-        rows
-    }
-
     pub fn create_first_page_overflow(
         row_bytes: Vec<u8>,
         n_rows: usize
@@ -52,6 +40,10 @@ impl SortPage {
         n_rows: usize
     ) -> SortPage {
         SortPage { flags: SORT_PAGE_LAST_PAGE_OVERFLOW as Flag, row_bytes, n_rows, }
+    }
+
+    pub fn get_nrows(&self) -> usize {
+        self.n_rows
     }
 
     pub fn deserialize(bytes: &mut &[u8], page_size: usize) -> SortPage {

@@ -9,6 +9,7 @@ use crate::{QueryIterator, Row, Sort, SortOrder};
 use bytes::{Buf, BufMut};
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
+use crate::sql::execution::sort::sorted_result_iterator::SortedResultIterator;
 use crate::table::block_row_iterator::{RowBlockIterator, RowBlock};
 use crate::table::row::MockRowIterator;
 
@@ -22,6 +23,7 @@ pub struct Sorter {
     sort_files: UnsafeCell<SortFiles>,
 
     options: Arc<SimpleDbOptions>,
+    selection: Selection,
     table: Arc<Table>,
     source: PlanStep,
     sort: Sort,
@@ -30,6 +32,7 @@ pub struct Sorter {
 impl Sorter {
     pub fn create(
         options: Arc<SimpleDbOptions>,
+        selection: Selection,
         table: Arc<Table>,
         source: PlanStep,
         sort: Sort,
@@ -40,6 +43,7 @@ impl Sorter {
                 options.clone(),
                 table.get_schema().clone()
             )?),
+            selection,
             options,
             source,
             table,
@@ -49,7 +53,7 @@ impl Sorter {
 
     pub fn sort(
         &mut self,
-    ) -> Result<(), SimpleDbError> {
+    ) -> Result<QueryIterator<SortedResultIterator>, SimpleDbError> {
         let n_pages_written_pass1 = self.pass_0()?;
 
         for n_pass in 1..self.calculate_n_total_passes(n_pages_written_pass1) {
@@ -60,7 +64,11 @@ impl Sorter {
             }
         }
 
-        Ok(())
+        Ok(QueryIterator::create(
+            self.selection.clone(),
+            SortedResultIterator::create(self.get_sort_files().take_output_file(), self.table.clone()),
+            self.table.get_schema().clone()
+        ))
     }
 
     fn pass_n (
@@ -309,6 +317,7 @@ impl Clone for Sorter {
     fn clone(&self) -> Self {
         Sorter {
             sort_files: UnsafeCell::new(unsafe { (*self.sort_files.get()).clone() }),
+            selection: self.selection.clone(),
             options: self.options.clone(),
             table: self.table.clone(),
             source: self.source.clone(),
