@@ -18,7 +18,7 @@ impl TemporarySpace {
     pub fn create_file(&self, file_name: &str) -> Result<SimpleDbFile, SimpleDbError> {
         let mut file_path = self.base_path.clone();
         file_path.push(file_name);
-        SimpleDbFile::create(self.base_path.as_path(), &vec![], SimpleDbFileMode::RandomWrites)
+        SimpleDbFile::create(file_path.as_path(), &vec![], SimpleDbFileMode::RandomWrites)
             .map_err(|e| CannotCreateTemporaryFile(e))
     }
 }

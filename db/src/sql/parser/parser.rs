@@ -68,7 +68,7 @@ impl Parser {
         if self.maybe_expect_token(Token::Where)? {
             expression = Some(self.expression(0)?);
         }
-        if self.maybe_expect_token(Token::Sort)? {
+        if self.maybe_expect_token(Token::Order)? {
             sort = Some(self.sort()?);
         }
 
@@ -504,7 +504,6 @@ mod test {
     use shared::{Type, Value};
     use crate::table::selection::Selection;
     use crate::{Sort, SortOrder};
-    use crate::sort::sort::{Sort, SortOrder};
     use crate::sql::parser::expression::{BinaryOperator, Expression};
     use crate::sql::parser::parser::Parser;
     use crate::sql::parser::statement::{Limit, Statement};
@@ -571,7 +570,7 @@ mod test {
 
     #[test]
     fn select_with_expression_with_limit_and_sort() {
-        let mut parser = Parser::create(String::from("SELECT dinero FROM personas WHERE dinero > 10 SORT BY fecha LIMIT 10;"));
+        let mut parser = Parser::create(String::from("SELECT dinero FROM personas WHERE dinero > 10 ORDER BY fecha LIMIT 10;"));
         let statement = parser.next_statement().unwrap().unwrap();
         assert!(matches!(statement, Statement::Select(_)));
 
@@ -632,7 +631,7 @@ mod test {
     #[test]
     fn select_with_sort() {
         let mut parser = Parser::create(String::from(
-            "SELECT * FROM personas SORT BY dinero DESC;"
+            "SELECT * FROM personas ORDER BY dinero DESC;"
         ));
         let statement = parser.next_statement().unwrap().unwrap();
         assert!(matches!(statement, Statement::Select(_)));

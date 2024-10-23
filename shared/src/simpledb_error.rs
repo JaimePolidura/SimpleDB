@@ -205,7 +205,7 @@ impl Debug for SimpleDbError {
                 write!(f, "Keyspace with ID {} not found", keyspace_id)
             },
             SimpleDbError::Internal => {
-                panic!("This error shoudnt be returned to the final user!! Invalid code path");
+                panic!("This error shouldn't be returned to the final user!! Invalid code path");
             }
             SimpleDbError::CannotReadKeyspacesDirectories(io_error) => {
                 write!(f, "Cannot list keyspaces directories in base path. IO Error: {}", io_error)

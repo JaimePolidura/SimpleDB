@@ -74,7 +74,7 @@ impl StatementValidator {
         let database = self.databases.get_database_or_err(database_name)?;
         let table = database.get_table_or_err(&statement.table_name)?;
         self.validate_where_expression(&statement.where_expr, &table)?;
-        self.validate_sort(&table, &statement.sort);
+        self.validate_sort(&table, &statement.sort)?;
         table.validate_selection(&statement.selection)?;
         Ok(())
     }

@@ -76,13 +76,11 @@ impl SimpleDbFile {
             mode: SimpleDbFileMode::RandomWrites,
             size_bytes: 0,
             file: Some(OpenOptions::new()
-                .create(true)
-                .write(true)
                 .create(true) //Create file if it doest exist
+                .write(true)
                 .read(true)
                 .open(original_file_path)?),
         };
-
         let backup_path = Self::create_file_backup_path(original_file_path);
         let backup_path = backup_path.as_path();
 

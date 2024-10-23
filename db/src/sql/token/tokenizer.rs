@@ -110,7 +110,9 @@ impl Tokenizer {
             'P' => self.match_string_or_other_identifier("RIMARY", Token::Primary, 1),
             'E' => self.match_string_or_other_identifier("XPLAIN", Token::Explain, 1),
             'O' => {
-                if self.advance_if_next_string_eq("R") {
+                if self.advance_if_next_string_eq("RDER") {
+                    Ok(Token::Order)
+                } else if self.advance_if_next_string_eq("R") {
                     Ok(Token::Or)
                 } else if self.advance_if_next_string_eq("N") {
                     Ok(Token::On)
@@ -131,8 +133,6 @@ impl Tokenizer {
             'S' => {
                 if self.advance_if_next_string_eq("ELECT") {
                     Ok(Token::Select)
-                } else if self.advance_if_next_string_eq("ORT") {
-                    Ok(Token::Sort)
                 } else if self.advance_if_next_string_eq("HOW") {
                     Ok(Token::Show)
                 } else if self.advance_if_next_string_eq("TART_TRANSACTION") {
