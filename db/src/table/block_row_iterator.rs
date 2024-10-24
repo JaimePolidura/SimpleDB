@@ -37,7 +37,7 @@ impl<I: RowIterator> RowBlockIterator<I> {
         }
     }
 
-    pub fn next_block(&mut self) -> Result<RowBlock, SimpleDbError> {
+    pub fn next_block(&mut self) -> Result<Option<RowBlock>, SimpleDbError> {
         let mut row_size_bytes_to_return = 0;
         let mut rows_to_return = Vec::new();
 
@@ -45,22 +45,26 @@ impl<I: RowIterator> RowBlockIterator<I> {
             let current_row_size_bytes = current_row.serialized_size();
 
             if current_row_size_bytes > self.block_size_bytes && rows_to_return.is_empty() {
-                return Ok(RowBlock::Overflow(current_row));
+                return Ok(Some(RowBlock::Overflow(current_row)));
             }
             if current_row_size_bytes > self.block_size_bytes && !rows_to_return.is_empty() {
                 self.last_row_overflows_prev_block = Some(current_row);
-                return Ok(RowBlock::Rows(rows_to_return));
+                return Ok(Some(RowBlock::Rows(rows_to_return)));
             }
             if current_row_size_bytes < self.block_size_bytes && (row_size_bytes_to_return + current_row_size_bytes > self.block_size_bytes) {
                 self.last_row_overflows_prev_block = Some(current_row);
-                return Ok(RowBlock::Rows(rows_to_return));
+                return Ok(Some(RowBlock::Rows(rows_to_return)));
             }
 
             row_size_bytes_to_return += current_row_size_bytes;
             rows_to_return.push(current_row);
         }
 
-        Ok(RowBlock::Rows(rows_to_return))
+        if !rows_to_return.is_empty() {
+            Ok(Some(RowBlock::Rows(rows_to_return)))
+        } else {
+            Ok(None)
+        }
     }
 
     fn next_row(&mut self) -> Result<Option<Row>, SimpleDbError> {

@@ -93,6 +93,6 @@ impl SortFile {
     fn read_single_page(&self, offset: usize) -> Result<SortPage, SimpleDbError> {
         let mut left_sort_page_bytes = self.file.read(offset, self.sort_page_size_bytes)
             .map_err(|e| CannotReadSortFile(e))?;
-        Ok(SortPage::deserialize(&mut left_sort_page_bytes.as_slice(), self.sort_page_size_bytes))
+        Ok(SortPage::deserialize(&mut left_sort_page_bytes.as_slice()))
     }
 }

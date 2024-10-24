@@ -76,7 +76,6 @@ impl Row {
 
     pub fn serialize(self) -> Vec<u8> {
         let mut serialized: Vec<u8> = Vec::new();
-        serialized.put_u32_le(self.storage_engine_record.get_n_columns() as u32);
         serialized.extend(self.storage_engine_record.serialize());
         serialized
     }

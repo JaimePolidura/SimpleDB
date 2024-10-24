@@ -55,13 +55,20 @@ impl Sorter {
         &mut self,
     ) -> Result<QueryIterator<SortedResultIterator>, SimpleDbError> {
         let n_pages_written_pass1 = self.pass_0()?;
+        let n_total_passess = self.calculate_n_total_passes(n_pages_written_pass1);
 
-        for n_pass in 1..self.calculate_n_total_passes(n_pages_written_pass1) {
+        for n_pass in 1..n_total_passess {
             if n_pass == 1 {
                 self.pass_1()?;
             } else {
                 self.pass_n(n_pass)?;
             }
+
+            self.get_sort_files().swap_input_output_files();
+        }
+
+        if n_total_passess == 0 {
+            self.get_sort_files().swap_input_output_files();
         }
 
         Ok(QueryIterator::create(
@@ -113,8 +120,6 @@ impl Sorter {
             }
         }
 
-        self.get_sort_files().swap_input_output_files();
-
         Ok(())
     }
 
@@ -128,7 +133,7 @@ impl Sorter {
         ));
         let mut n_pages_written = 0;
 
-        while let block_of_rows = query_iterator.next_block()? {
+        while let Some(block_of_rows) = query_iterator.next_block()? {
             n_pages_written += 1;
             match block_of_rows {
                 RowBlock::Overflow(overflow_row) => self.write_overflow_row_pages(overflow_row, WRITE_TO_INPUT)?,
@@ -175,16 +180,13 @@ impl Sorter {
             let mut rows_iterator = RowBlockIterator::<MockRowIterator>::create_from_vec(
                 self.row_bytes_per_sort_page(), sorted_rows
             );
-            while let block_of_rows = rows_iterator.next_block()? {
+            while let Some(block_of_rows) = rows_iterator.next_block()? {
                 match block_of_rows {
                     RowBlock::Overflow(overflow_row) => self.write_overflow_row_pages(overflow_row, WRITE_TO_OUTPUT)?,
                     RowBlock::Rows(mut rows) => self.write_normal_row_pages(&mut rows, WRITE_TO_OUTPUT)?,
                 }
             }
         }
-
-        //Swap files
-        self.get_sort_files().swap_input_output_files();
 
         Ok(())
     }
@@ -251,7 +253,6 @@ impl Sorter {
 
     fn serialize_rows(rows: &mut Vec<Row>) -> Vec<u8> {
         let mut serialized: Vec<u8> = Vec::new();
-        serialized.put_u32(rows.len() as u32);
         while !rows.is_empty() {
             serialized.extend(rows.remove(0).serialize());
         }

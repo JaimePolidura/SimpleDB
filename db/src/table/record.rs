@@ -99,6 +99,7 @@ impl Record {
 
     pub fn serialize(&self) -> Vec<u8> {
         let mut result = Vec::new();
+        result.put_u32_le(self.data_records.len() as u32);
         for (column_id, column_value) in &self.data_records {
             result.put_u16_le(*column_id);
             result.put_u32_le(column_value.len() as u32);
@@ -108,10 +109,13 @@ impl Record {
         result
     }
 
-    pub fn deserialize(current_ptr: &mut &[u8]) -> Record {
+    pub fn deserialize(
+        current_ptr: &mut &[u8]
+    ) -> Record {
         let mut data_records: Vec<(ColumnId, Bytes)> = Vec::new();
+        let mut n_columns = current_ptr.get_u32_le();
 
-        while current_ptr.has_remaining() {
+        for _ in 0..n_columns {
             let column_id = current_ptr.get_u16_le() as ColumnId;
             let column_value_length = current_ptr.get_u32_le();
             let column_value_bytes = &current_ptr[..column_value_length as usize];

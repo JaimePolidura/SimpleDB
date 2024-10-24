@@ -1,6 +1,5 @@
 use bytes::{Buf, BufMut};
 use shared::{utils, Flag, FlagMethods};
-use crate::{Row, Schema};
 
 pub const SORT_PAGE_FIRST_PAGE_OVERFLOW: Flag = 1 << 3;
 pub const SORT_PAGE_OVERFLOW_PAGE: Flag = 1 << 2;
@@ -46,12 +45,26 @@ impl SortPage {
         self.n_rows
     }
 
-    pub fn deserialize(bytes: &mut &[u8], page_size: usize) -> SortPage {
+    pub fn deserialize(bytes: &mut &[u8]) -> SortPage {
         let n_rows = bytes.get_u32_le() as usize;
         let flags = bytes.get_u64_le() as Flag;
-        let row_bytes = bytes[..page_size].to_vec();
+        let row_bytes = bytes.to_vec();
 
         SortPage { row_bytes, n_rows, flags, }
+    }
+
+    pub fn serialize(&self, page_size: usize) -> Vec<u8> {
+        let mut serialized: Vec<u8> = Vec::new();
+
+        serialized.put_u32_le(self.n_rows as u32);
+        serialized.put_u64_le(self.flags);
+        serialized.extend(&self.row_bytes);
+
+        //Fill remaining bytes to 0
+        let remaining_bytes_to_fill = page_size - serialized.len();
+        utils::fill_vec(&mut serialized, remaining_bytes_to_fill, 0);
+
+        serialized
     }
 
     pub fn is_last_overflow_page(&self) -> bool {
@@ -72,20 +85,6 @@ impl SortPage {
 
     pub fn is_overflow_page(&self) -> bool {
         self.flags.has(SORT_PAGE_OVERFLOW_PAGE)
-    }
-
-    pub fn serialize(&self, page_size: usize) -> Vec<u8> {
-        let mut serialized: Vec<u8> = Vec::new();
-
-        serialized.put_u32_le(self.n_rows as u32);
-        serialized.put_u64_le(self.flags);
-        serialized.extend(&self.row_bytes);
-
-        //Fill remaining bytes to 0
-        let remaining_bytes_to_fill = page_size - serialized.len();
-        utils::fill_vec(&mut serialized, remaining_bytes_to_fill, 0);
-
-        serialized
     }
 
     pub fn header_size_bytes() -> usize {
