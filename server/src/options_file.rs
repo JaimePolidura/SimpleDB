@@ -42,11 +42,11 @@ fn populate_options_file_with_default_data(base_path: &Path) {
 fn load_options_from_existing_file(base_path: &Path) -> Result<SimpleDbOptions, ()> {
     let config_file_path = config_file_path(base_path);
     let config_file_path = config_file_path.as_path();
-
     let file = SimpleDbFile::create(config_file_path, &Vec::new(), SimpleDbFileMode::RandomWrites)
         .expect("Cannot create options file");
     let bytes = file.read_all()
         .expect("Cannot read file bytes");
+
     let options: SimpleDbOptions = from_slice(&bytes)
         .map_err(|_| ())?;
     Ok(options)

@@ -1,7 +1,7 @@
 use crate::sql::execution::sort::sort_page::SortPage;
 use crate::{Row, Schema};
 use shared::SimpleDbError::{CannotReadSortFile, CannotWriteSortFile};
-use shared::{SimpleDbError, SimpleDbFile, SimpleDbOptions};
+use shared::{SimpleDbError, SimpleDbFile, SimpleDbFileMode, SimpleDbOptions};
 use std::sync::Arc;
 use storage::TemporarySpace;
 use crate::sql::execution::sort::sort_file::SortFile;
@@ -98,8 +98,14 @@ impl SortFiles {
 
     fn maybe_initialize(&mut self) -> Result<(), SimpleDbError> {
         if !self.initialized {
-            self.output = Some(SortFile::create(self.temporary_space.create_file("output")?, self.options.sort_page_size_bytes));
-            self.input = Some(SortFile::create(self.temporary_space.create_file("input")?, self.options.sort_page_size_bytes));
+            self.output = Some(SortFile::create(
+                self.temporary_space.create_file("output", SimpleDbFileMode::AppendOnly)?,
+                self.options.sort_page_size_bytes)
+            );
+            self.input = Some(SortFile::create(
+                self.temporary_space.create_file("input", SimpleDbFileMode::AppendOnly)?,
+                self.options.sort_page_size_bytes)
+            );
             self.initialized = false;
         }
 
@@ -145,6 +151,7 @@ impl<'a> SortFilePageIterator<'a> {
     //Expect call next_right() after next_left()
     pub fn next_right(&mut self) -> Result<Option<Vec<Row>>, SimpleDbError> {
         self.maybe_move_left_and_right_offsets()?;
+        self.maybe_initialize_right_offset()?;
 
         match self.state {
             SortFilePageIteratorState::LeftAndRightAvailable => {
@@ -212,5 +219,32 @@ impl<'a> SortFilePageIterator<'a> {
         }
 
         Ok(())
+    }
+
+    fn maybe_initialize_right_offset(&mut self) -> Result<(), SimpleDbError> {
+        //Already initialized
+        if self.current_offset_right != 0 {
+            return Ok(());
+        }
+        //File too small
+        if self.k * self.sort_page_size_bytes >= self.file.size() {
+            self.state = SortFilePageIteratorState::OnlyLeftAvailable;
+            return Ok(());
+        }
+
+        //Right offset always point to the beggining of a page
+        let start_right_offset = self.k * self.sort_page_size_bytes;
+
+        match self.file.get_next_page_offset(start_right_offset)? {
+            Some(new_offset) => {
+                self.state = SortFilePageIteratorState::LeftAndRightAvailable;
+                self.current_offset_right = new_offset;
+                Ok(())
+            },
+            None => {
+                self.state = SortFilePageIteratorState::OnlyLeftAvailable;
+                Ok(())
+            }
+        }
     }
 }

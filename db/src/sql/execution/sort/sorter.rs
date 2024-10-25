@@ -1,17 +1,17 @@
-use std::cell::UnsafeCell;
-use std::cmp::Ordering;
-use crate::table::selection::Selection;
 use crate::sql::execution::sort::sort_files::SortFiles;
 use crate::sql::execution::sort::sort_page::SortPage;
+use crate::sql::execution::sort::sorted_result_iterator::SortedResultIterator;
 use crate::sql::plan::plan_step::PlanStep;
+use crate::table::block_row_iterator::{RowBlock, RowBlockIterator};
+use crate::table::row::MockRowIterator;
+use crate::table::selection::Selection;
 use crate::table::table::Table;
 use crate::{QueryIterator, Row, Sort, SortOrder};
-use bytes::{Buf, BufMut};
+use bytes::Buf;
 use shared::{SimpleDbError, SimpleDbOptions};
+use std::cell::UnsafeCell;
+use std::cmp::Ordering;
 use std::sync::Arc;
-use crate::sql::execution::sort::sorted_result_iterator::SortedResultIterator;
-use crate::table::block_row_iterator::{RowBlockIterator, RowBlock};
-use crate::table::row::MockRowIterator;
 
 //Used in write_normal_row_pages() and write_overflow_row_pages() methods
 const WRITE_TO_OUTPUT: bool = false;
@@ -54,6 +54,8 @@ impl Sorter {
     pub fn sort(
         &mut self,
     ) -> Result<QueryIterator<SortedResultIterator>, SimpleDbError> {
+        println!("Hola");
+
         let n_pages_written_pass1 = self.pass_0()?;
         let n_total_passess = self.calculate_n_total_passes(n_pages_written_pass1);
 
@@ -67,9 +69,7 @@ impl Sorter {
             self.get_sort_files().swap_input_output_files();
         }
 
-        if n_total_passess == 0 {
-            self.get_sort_files().swap_input_output_files();
-        }
+        self.get_sort_files().swap_input_output_files();
 
         Ok(QueryIterator::create(
             self.selection.clone(),
@@ -169,7 +169,7 @@ impl Sorter {
             }
 
             //Sort left & right buffers
-            let rows_right = buffer_left.take().unwrap_or(Vec::new());
+            let rows_right = buffer_right.take().unwrap_or(Vec::new());
             let rows_left = buffer_left.take().unwrap_or(Vec::new());
             let mut sorted_rows = Vec::new();
             sorted_rows.extend(rows_left);

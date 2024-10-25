@@ -4,7 +4,7 @@ use shared::{SimpleDbError, SimpleDbFile};
 
 #[derive(Clone)]
 pub struct SortFile {
-    file: SimpleDbFile,
+    file: SimpleDbFile, //File size expected to be multiple of sort_page_size_bytes
     sort_page_size_bytes: usize,
 }
 
@@ -27,7 +27,7 @@ impl SortFile {
         &self,
         offset: usize
     ) -> Result<Option<(Vec<u8>, usize, usize)>, SimpleDbError> {
-        if offset >= self.sort_page_size_bytes {
+        if offset >= self.file.size() {
             return Ok(None);
         }
 
