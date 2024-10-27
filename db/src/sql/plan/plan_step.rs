@@ -100,10 +100,10 @@ impl PlanStep {
     //If the plan produces a result which is not sorted, it will return None
     pub fn get_column_sorted(&self, schema: &Schema) -> Option<String> {
         match &self {
-            PlanStep::ProjectSelection(_) => self.get_column_sorted(schema),
-            PlanStep::Limit(_) => self.get_column_sorted(schema),
+            PlanStep::ProjectSelection(step) => step.source.get_column_sorted(schema),
+            PlanStep::Limit(step) => step.source.get_column_sorted(schema),
             PlanStep::Sort(step) => Some(step.sort.column_name.clone()),
-            PlanStep::Filter(_) => self.get_column_sorted(schema),
+            PlanStep::Filter(step) => step.source.get_column_sorted(schema),
             PlanStep::MergeIntersection(_) |
             PlanStep::MergeUnion(_) => {
                 let left = self.get_merge_left();
