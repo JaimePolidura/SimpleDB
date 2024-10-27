@@ -60,8 +60,10 @@ impl Sorter {
 
         let n_pages_written_pass1 = self.pass_0(&mut output)?; //Writes to input
         let n_total_passess = self.calculate_n_total_passes(n_pages_written_pass1);
-        
-        for n_pass in 1..n_total_passess {
+
+        let mut prev_n_pages_per_run = 1;
+
+        for n_pass in 1..(n_total_passess + 1) {
             //Every pass writes to output
             input = output;
             output = self.create_next_sort_file()?;
@@ -69,7 +71,8 @@ impl Sorter {
             if n_pass == 1 {
                 self.pass_1(&input, &mut output)?;
             } else {
-                self.pass_n(n_pass, &input, &mut output)?;
+                prev_n_pages_per_run = prev_n_pages_per_run * 2;
+                self.pass_n(prev_n_pages_per_run, &input, &mut output)?;
             }
         }
 
@@ -80,9 +83,9 @@ impl Sorter {
         ))
     }
 
-    fn pass_n(
+    fn pass_n (
         &mut self,
-        n_pass: usize,
+        n_pages_per_run: usize,
         input: &SortFile,
         output: &mut SortFile,
     ) -> Result<(), SimpleDbError> {
@@ -94,7 +97,7 @@ impl Sorter {
             input.clone(),
             self.options.sort_page_size_bytes,
             self.table.get_schema(),
-            n_pass
+            n_pages_per_run
         )?;
 
         while input_iterator.has_next() || !buffer_left.is_empty() || !buffer_right.is_empty() {
@@ -103,6 +106,9 @@ impl Sorter {
             }
             if buffer_right.is_empty() {
                 buffer_right = input_iterator.next_right()?.unwrap_or(Vec::new());
+            }
+            if buffer_right.is_empty() && buffer_left.is_empty() {
+                break;
             }
 
             match self.take_min(&mut buffer_left, &mut buffer_right) {
