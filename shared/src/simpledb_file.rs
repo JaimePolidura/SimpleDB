@@ -113,7 +113,15 @@ impl SimpleDbFile {
 
     pub fn clear(&mut self) -> Result<(), std::io::Error> {
         self.size_bytes = 0;
-        self.file.as_mut().unwrap().set_len(0)?;
+
+        match &self.mode {
+            SimpleDbFileMode::Mock => {},
+            _ => {
+                let file = self.file.as_mut().unwrap();
+                file.set_len(0)?;
+            }
+        };
+
         Ok(())
     }
 

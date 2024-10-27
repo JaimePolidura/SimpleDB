@@ -1,5 +1,5 @@
 use crate::sql::execution::sort::sort_file::SortFile;
-use crate::sql::execution::sort::sort_files::SortFilePageIteratorState::LeftAndRightAvailable;
+use crate::sql::execution::sort::sort_page_run_iterator::SortFilePageIteratorState::LeftAndRightAvailable;
 use crate::{Row, Schema};
 use shared::SimpleDbError;
 
@@ -34,7 +34,7 @@ impl SortPageRunIterator {
         file: SortFile,
         sort_page_size_bytes: usize,
         schema: &Schema,
-        k: usize,
+        pages_per_run: usize,
     ) -> Result<SortPageRunIterator, SimpleDbError> {
         let mut iterator = SortPageRunIterator {
             state: LeftAndRightAvailable,
@@ -44,7 +44,7 @@ impl SortPageRunIterator {
             current_offset_right: 0, //Will get init when calling next_right()
             current_offset_left: 0,
             sort_page_size_bytes,
-            n_pages_to_return_per_run: k,
+            n_pages_to_return_per_run: pages_per_run,
             n_current_run: 0,
             file,
         };

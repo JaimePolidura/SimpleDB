@@ -65,6 +65,11 @@ impl SortFile {
         }
     }
 
+    pub fn clear(&mut self) -> Result<(), SimpleDbError> {
+        self.file.clear()
+            .map_err(|e| CannotWriteSortFile(e))
+    }
+
     pub fn size(&self) -> usize {
         self.file.size()
     }
