@@ -13,7 +13,8 @@ use crate::sql::plan::steps::secondary_range_scan_step::SecondaryRangeScanStep;
 use crate::{Limit, Row, Schema, Sort};
 use bytes::Bytes;
 use shared::{SimpleDbError, Value};
-use crate::sql::plan::steps::sort_step::SortStep;
+use crate::sql::plan::steps::full_sort_step::FullSortStep;
+use crate::sql::plan::steps::top_n_sort::TopNSortStep;
 use crate::table::row::RowIterator;
 
 pub(crate) trait PlanStepTrait {
@@ -25,7 +26,8 @@ pub(crate) trait PlanStepTrait {
 pub enum PlanStep {
     ProjectSelection(Box<ProjectSelectionStep>),
     Limit(Box<LimitStep>),
-    Sort(Box<SortStep>),
+    TopNSort(Box<TopNSortStep>),
+    FullSort(Box<FullSortStep>),
     Filter(Box<FilterStep>),
 
     MergeIntersection(MergeIntersectionStep),
@@ -47,7 +49,8 @@ pub enum PlanStepDesc {
     Filter(Box<PlanStepDesc>),
     MergeIntersection(Box<PlanStepDesc>, Box<PlanStepDesc>),
     MergeUnion(Box<PlanStepDesc>, Box<PlanStepDesc>),
-    Sort(Sort, Box<PlanStepDesc>),
+    FullSort(Sort, Box<PlanStepDesc>),
+    TopNSort(Sort, usize, Box<PlanStepDesc>),
 
     FullScan,
     RangeScan(RangeScan),
@@ -68,8 +71,9 @@ impl RowIterator for PlanStep {
             PlanStep::SecondaryExactExactScan(step) => step.next(),
             PlanStep::SecondaryRangeScan(step) => step.next(),
             PlanStep::ProjectSelection(step) => step.next(),
-            PlanStep::Sort(step) => step.next(),
+            PlanStep::FullSort(step) => step.next(),
             PlanStep::Mock(step) => step.next(),
+            PlanStep::TopNSort(step) => step.next(),
         }
     }
 }
@@ -102,7 +106,8 @@ impl PlanStep {
         match &self {
             PlanStep::ProjectSelection(step) => step.source.get_column_sorted(schema),
             PlanStep::Limit(step) => step.source.get_column_sorted(schema),
-            PlanStep::Sort(step) => Some(step.sort.column_name.clone()),
+            PlanStep::FullSort(step) => Some(step.sort.column_name.clone()),
+            PlanStep::TopNSort(step) => Some(step.sort.column_name.clone()),
             PlanStep::Filter(step) => step.source.get_column_sorted(schema),
             PlanStep::MergeIntersection(_) |
             PlanStep::MergeUnion(_) => {
@@ -140,7 +145,7 @@ impl PlanStep {
         match self {
             PlanStep::Limit(step) => step.desc(),
             PlanStep::Filter(step) => step.desc(),
-            PlanStep::Sort(step) => step.desc(),
+            PlanStep::FullSort(step) => step.desc(),
             PlanStep::MergeIntersection(step) => step.desc(),
             PlanStep::MergeUnion(step) => step.desc(),
             PlanStep::FullScan(step) => step.desc(),
@@ -150,6 +155,7 @@ impl PlanStep {
             PlanStep::SecondaryRangeScan(step) => step.desc(),
             PlanStep::ProjectSelection(step) => step.desc(),
             PlanStep::Mock(step) => step.desc(),
+            PlanStep::TopNSort(step) => step.desc()
         }
     }
 

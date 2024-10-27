@@ -211,9 +211,13 @@ impl StatementResponse {
                     pending.push((depth, source.clone()));
                     strings.push(Self::limit_plan_desc_to_string(depth, limit));
                 },
-                PlanStepDesc::Sort(sort, source) => {
+                PlanStepDesc::FullSort(sort, source) => {
                     pending.push((depth, source.clone()));
-                    strings.push(Self::sort_plan_desc_to_string(depth, sort));
+                    strings.push(Self::full_sort_plan_desc_to_string(depth, sort));
+                }
+                PlanStepDesc::TopNSort(sort, n, source) => {
+                    pending.push((depth, source.clone()));
+                    strings.push(Self::top_n_sort_plan_desc_to_string(depth, sort, *n));
                 }
                 PlanStepDesc::Filter(source) => {
                     pending.push((depth, source.clone()));
@@ -276,10 +280,25 @@ impl StatementResponse {
         string
     }
 
-
-    fn sort_plan_desc_to_string(depth: usize, sort: &Sort) -> String {
+    fn top_n_sort_plan_desc_to_string(depth: usize, sort: &Sort, n: usize) -> String {
         let mut string = Self::explain_plan_new_line(depth);
-        string.push_str("Sort (");
+        string.push_str("Top N Sort (");
+        string.push_str(&sort.column_name);
+        string.push_str(" ");
+        match sort.order {
+            SortOrder::Asc => string.push_str("ASC"),
+            SortOrder::Desc => string.push_str("DESC"),
+        }
+        string.push_str(" LIMIT ");
+        string.push_str(n.to_string().as_str());
+        string.push_str(")");
+
+        string
+    }
+
+    fn full_sort_plan_desc_to_string(depth: usize, sort: &Sort) -> String {
+        let mut string = Self::explain_plan_new_line(depth);
+        string.push_str("Full Sort (");
         string.push_str(&sort.column_name);
         string.push_str(" ");
         match sort.order {

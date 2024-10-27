@@ -1,5 +1,6 @@
+use std::cmp::Ordering;
 use shared::{Type, Value};
-use crate::Schema;
+use crate::{Row, Schema};
 use crate::table::selection::Selection;
 use crate::sql::parser::expression::Expression;
 
@@ -80,6 +81,16 @@ impl Sort {
     pub fn is_indexed(&self, schema: Schema) -> bool {
         let column = schema.get_column(&self.column_name).unwrap();
         column.is_secondary_indexed() || column.is_primary
+    }
+
+    pub fn compare(&self, a: &Row, b: &Row) -> Ordering {
+        let value_a = a.get_column_value(&self.column_name).unwrap();
+        let value_b = b.get_column_value(&self.column_name).unwrap();
+
+        match self.order {
+            SortOrder::Desc => value_b.cmp(&value_a),
+            SortOrder::Asc => value_a.cmp(&value_b)
+        }
     }
 }
 
@@ -245,6 +256,34 @@ impl Statement {
                 transaction_req: Requirement::Optional,
                 database_req: Requirement::ObligatoryToHave
             }
+        }
+    }
+}
+
+impl SelectStatement {
+    pub fn take_where_expression(&mut self) -> Expression {
+        self.where_expr.take().unwrap()
+    }
+
+    pub fn has_where_expression(&self) -> bool {
+        self.where_expr.is_some()
+    }
+
+    pub fn is_sorted(&self) -> bool {
+        self.sort.is_some()
+    }
+
+    pub fn is_limit(&self) -> bool {
+        match self.limit {
+            Limit::Some(_) => true,
+            Limit::None => false,
+        }
+    }
+
+    pub fn get_limit(&self) -> usize {
+        match self.limit {
+            Limit::Some(n) => n,
+            Limit::None => panic!("Illegal code path"),
         }
     }
 }

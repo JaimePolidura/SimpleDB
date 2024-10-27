@@ -8,14 +8,14 @@ use crate::sql::execution::sort::sorted_result_iterator::SortedResultIterator;
 use crate::table::row::RowIterator;
 
 #[derive(Clone)]
-enum SortStepState {
+enum FullSortStepState {
     PendingSort,
     Sorted
 }
 
 #[derive(Clone)]
-pub struct SortStep {
-    pub(crate) state: SortStepState,
+pub struct FullSortStep {
+    pub(crate) state: FullSortStepState,
     pub(crate) sort: Sort,
     pub(crate) source: PlanStep,
     pub(crate) table: Arc<Table>,
@@ -27,17 +27,17 @@ pub struct SortStep {
     pub(crate) sorted_rows_iterator: Option<QueryIterator<SortedResultIterator>>,
 }
 
-impl SortStep {
+impl FullSortStep {
     pub fn create(
         options: Arc<SimpleDbOptions>,
         selection: Selection,
         table: Arc<Table>,
         source: PlanStep,
         sort: Sort,
-    ) -> Result<SortStep, SimpleDbError> {
-        Ok(SortStep {
+    ) -> Result<FullSortStep, SimpleDbError> {
+        Ok(FullSortStep {
             sorter: Sorter::create(options, selection, table.clone(), source.clone(), sort.clone())?,
-            state: SortStepState::PendingSort,
+            state: FullSortStepState::PendingSort,
             sorted_rows_iterator: None,
             sort: sort.clone(),
             source,
@@ -46,17 +46,17 @@ impl SortStep {
     }
 }
 
-impl PlanStepTrait for SortStep {
+impl PlanStepTrait for FullSortStep {
     fn next(&mut self) -> Result<Option<Row>, SimpleDbError> {
         match self.state {
-            SortStepState::PendingSort => {
+            FullSortStepState::PendingSort => {
                 let mut sorted_rows_iterator = self.sorter.sort()?;
                 let sorted_row = sorted_rows_iterator.next();
-                self.state = SortStepState::Sorted;
+                self.state = FullSortStepState::Sorted;
                 self.sorted_rows_iterator = Some(sorted_rows_iterator);
                 sorted_row
             }
-            SortStepState::Sorted => {
+            FullSortStepState::Sorted => {
                 self.sorted_rows_iterator
                     .as_mut()
                     .unwrap()
@@ -66,6 +66,6 @@ impl PlanStepTrait for SortStep {
     }
 
     fn desc(&self) -> PlanStepDesc {
-        PlanStepDesc::Sort(self.sort.clone(), Box::new(self.source.desc()))
+        PlanStepDesc::FullSort(self.sort.clone(), Box::new(self.source.desc()))
     }
 }

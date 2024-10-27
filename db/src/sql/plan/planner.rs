@@ -19,7 +19,8 @@ use crate::table::table::Table;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use crate::sql::plan::steps::sort_step::SortStep;
+use crate::sql::plan::steps::full_sort_step::FullSortStep;
+use crate::sql::plan::steps::top_n_sort::TopNSortStep;
 
 pub struct Planner {
     options: Arc<SimpleDbOptions>
@@ -35,10 +36,10 @@ impl Planner {
     pub fn plan_select(
         &self,
         table: &Arc<Table>,
-        select_statement: SelectStatement,
+        mut select_statement: SelectStatement,
         transaction: &Transaction
     ) -> Result<PlanStep, SimpleDbError> {
-        let query_selection = &select_statement.selection;
+        let query_selection = select_statement.selection.clone();
         let (needs_projection_of_selection, storage_engine_selection) = Self::get_selection_select(&select_statement);
 
         let scan_type = self.get_scan_type(
@@ -47,20 +48,31 @@ impl Planner {
         )?;
         let mut last_step = self.build_scan_step(scan_type, transaction, storage_engine_selection.clone(), table)?;
 
-        if let Some(where_expr) = select_statement.where_expr {
-            last_step = PlanStep::Filter(Box::new(FilterStep::create(where_expr, last_step)));
+        //Where expression
+        if select_statement.has_where_expression() {
+            let where_expr = select_statement.take_where_expression();
+            last_step = PlanStep::Filter(Box::new(FilterStep::create(where_expr.clone(), last_step)));
         }
-        if let Some(sort) = select_statement.sort {
+        //Only sorted, not with limit
+        if select_statement.is_sorted() && !select_statement.is_limit() {
+            let sort = select_statement.sort.take().unwrap();
             let produced_rows_sorted_by = last_step.get_column_sorted(table.get_schema());
             if produced_rows_sorted_by.is_none() || !produced_rows_sorted_by.as_ref().unwrap().eq(&sort.column_name) {
-                last_step = PlanStep::Sort(Box::new(SortStep::create(self.options.clone(), query_selection.clone(), table.clone(), last_step, sort)?))
+                last_step = PlanStep::FullSort(Box::new(FullSortStep::create(self.options.clone(), query_selection.clone(), table.clone(), last_step, sort)?))
             }
         }
-        if !matches!(select_statement.limit, Limit::None) {
-            last_step = PlanStep::Limit(Box::new(LimitStep::create(select_statement.limit, last_step)));
+        //Only Limit
+        if !select_statement.is_sorted() && select_statement.is_limit() {
+            last_step = PlanStep::Limit(Box::new(LimitStep::create(select_statement.limit.clone(), last_step)));
         }
+        //Sorted with limit
+        if select_statement.is_sorted() && select_statement.is_limit() {
+            let sort = select_statement.sort.take().unwrap();
+            last_step = PlanStep::TopNSort(Box::new(TopNSortStep::create(last_step, select_statement.get_limit(), sort)));
+        }
+
         if needs_projection_of_selection {
-            last_step = PlanStep::ProjectSelection(Box::new(ProjectSelectionStep::create(query_selection.clone(), last_step)))
+            last_step = PlanStep::ProjectSelection(Box::new(ProjectSelectionStep::create(query_selection, last_step)))
         }
 
         Ok(last_step)

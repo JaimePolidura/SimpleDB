@@ -55,8 +55,9 @@ impl PlanOptimizer {
             PlanStep::SecondaryRangeScan(_) => Ok(parent_plan),
             PlanStep::PrimaryExactScan(_) => Ok(parent_plan),
             PlanStep::SecondaryExactExactScan(_) => Ok(parent_plan),
-            PlanStep::Sort(_) => Ok(parent_plan),
+            PlanStep::FullSort(_) => Ok(parent_plan),
             PlanStep::Mock(_) => panic!(""),
+            PlanStep::TopNSort(_) => Ok(parent_plan),
         }
     }
 

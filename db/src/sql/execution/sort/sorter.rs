@@ -1,15 +1,15 @@
 use crate::sql::execution::sort::sort_file::SortFile;
-use crate::sql::execution::sort::sort_page_run_iterator::SortPageRunIterator;
 use crate::sql::execution::sort::sort_page::SortPage;
+use crate::sql::execution::sort::sort_page_run_iterator::SortPageRunIterator;
 use crate::sql::execution::sort::sorted_result_iterator::SortedResultIterator;
 use crate::sql::plan::plan_step::PlanStep;
 use crate::table::block_row_iterator::{RowBlock, RowBlockIterator};
-use crate::table::row::{MockRowIterator, RowIterator};
+use crate::table::row::MockRowIterator;
 use crate::table::selection::Selection;
 use crate::table::table::Table;
-use crate::{QueryIterator, Row, Sort, SortOrder};
+use crate::{QueryIterator, Row, Sort};
 use bytes::Buf;
-use shared::{start_simpledb_options_builder, SimpleDbError, SimpleDbFileMode, SimpleDbOptions};
+use shared::{SimpleDbError, SimpleDbFileMode, SimpleDbOptions};
 use std::cmp::Ordering;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
@@ -60,8 +60,8 @@ impl Sorter {
 
         let n_pages_written_pass1 = self.pass_0(&mut output)?; //Writes to input
         let n_total_passess = self.calculate_n_total_passes(n_pages_written_pass1);
-
-        for n_pass in 1..(n_total_passess) {
+        
+        for n_pass in 1..n_total_passess {
             //Every pass writes to output
             input = output;
             output = self.create_next_sort_file()?;
@@ -272,18 +272,8 @@ impl Sorter {
 
     fn sort_rows(&self, rows: &mut Vec<Row>) {
         rows.sort_by(|a, b| {
-            Self::compare_row(a, b, &self.sort)
+            self.sort.compare(a, b)
         });
-    }
-
-    fn compare_row(a: &Row, b: &Row, sort: &Sort) -> Ordering {
-        let value_a = a.get_column_value(&sort.column_name).unwrap();
-        let value_b = b.get_column_value(&sort.column_name).unwrap();
-
-        match sort.order {
-            SortOrder::Desc => value_b.cmp(&value_a),
-            SortOrder::Asc => value_a.cmp(&value_b)
-        }
     }
 
     fn calculate_n_total_passes(&self, n_pages_written_pass1: usize) -> usize {
@@ -308,7 +298,7 @@ impl Sorter {
         let right_value = right_vec.get(0).unwrap();
         let left_value = left_vec.get(0).unwrap();
 
-        match Self::compare_row(left_value, right_value, &self.sort) {
+        match self.sort.compare(left_value, right_value) {
             Ordering::Less |
             Ordering::Equal => Some(left_vec.remove(0)),
             Ordering::Greater => Some(right_vec.remove(0))

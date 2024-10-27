@@ -8,4 +8,5 @@ pub mod merge_union_scan_step;
 pub mod merge_intersection_scan_step;
 pub mod secondary_range_scan_step;
 pub mod project_selection_step;
-pub mod sort_step;
+pub mod full_sort_step;
+pub mod top_n_sort;
