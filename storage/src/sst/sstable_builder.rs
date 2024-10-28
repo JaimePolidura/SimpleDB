@@ -74,7 +74,9 @@ impl SSTableBuilder {
         self.key_hashes.push(shared::hash(key.as_bytes()));
 
         match self.current_block_builder.add_entry(key, value) {
-            Err(_) => self.build_current_block(),
+            Err(_) => {
+                self.build_current_block()
+            },
             Ok(_) => {}
         };
     }
@@ -103,7 +105,7 @@ impl SSTableBuilder {
 
         //Blocks metadata
         let meta_offset = encoded.len();
-        let meta_encoded = BlockMetadata::encode_all(&self.built_block_metadata);
+        let meta_encoded = BlockMetadata::serialize_all(&self.built_block_metadata);
         encoded.extend(meta_encoded);
 
         //Bloom
@@ -135,18 +137,19 @@ impl SSTableBuilder {
             return
         }
 
-        let encoded_block: Vec<u8> = self.current_block_builder.build()
-            .serialize(&self.options);
-        self.current_block_builder = BlockBuilder::create(self.options.clone(), self.keyspace_desc);
+        for block_built in self.current_block_builder.build() {
+            let serialized_block = block_built.serialize(&self.options);
 
-        self.built_block_metadata.push(BlockMetadata {
-            first_key: self.first_key_current_block.take().unwrap(),
-            last_key: self.last_key_current_block.take().unwrap(),
-            offset: self.built_encoded_blocks.len(),
-        });
+            self.built_block_metadata.push(BlockMetadata {
+                first_key: self.first_key_current_block.take().unwrap(),
+                last_key: self.last_key_current_block.take().unwrap(),
+                offset: self.built_encoded_blocks.len(),
+            });
+            let crc = crc32fast::hash(&serialized_block);
+            self.built_encoded_blocks.extend(serialized_block);
+            self.built_encoded_blocks.put_u32_le(crc);
 
-        let crc = crc32fast::hash(&encoded_block);
-        self.built_encoded_blocks.extend(encoded_block);
-        self.built_encoded_blocks.put_u32_le(crc);
+            self.current_block_builder = BlockBuilder::create(self.options.clone(), self.keyspace_desc);
+        }
     }
 }

@@ -111,9 +111,9 @@ mod test {
 
     #[test]
     fn put_get() {
-        let block1 = Arc::new(BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::I64)).build());
-        let block2 = Arc::new(BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::I64)).build());
-        let block3 = Arc::new(BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::I64)).build());
+        let block1 = Arc::new(BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::I64)).build().remove(0));
+        let block2 = Arc::new(BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::I64)).build().remove(0));
+        let block3 = Arc::new(BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::I64)).build().remove(0));
         let mut cache = BlockCache::create(Arc::new(shared::SimpleDbOptions::default()));
 
         cache.put(1, block1);

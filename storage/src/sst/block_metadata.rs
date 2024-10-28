@@ -11,25 +11,25 @@ pub struct BlockMetadata {
 }
 
 impl BlockMetadata {
-    pub fn decode_all(
-        bytes: &Vec<u8>,
+    pub fn deserialize_all(
+        serialized: &Vec<u8>,
         start_index: usize,
         key_type: Type
     ) -> Result<Vec<BlockMetadata>, shared::DecodeErrorType> {
-        let expected_crc = shared::u8_vec_to_u32_le(bytes, start_index);
-        let n_blocks_metadata = shared::u8_vec_to_u32_le(bytes, start_index + 4);
+        let expected_crc = shared::u8_vec_to_u32_le(serialized, start_index);
+        let n_blocks_metadata = shared::u8_vec_to_u32_le(serialized, start_index + 4);
 
         let mut last_index: usize = start_index + 8;
         let start_content_index = last_index;
         let mut blocks_metadata_decoded: Vec<BlockMetadata> = Vec::with_capacity(n_blocks_metadata as usize);
         for _ in 0..n_blocks_metadata {
-            let (new_last_index, block_metadata_decoded) = Self::decode(&bytes, last_index, key_type)?;
+            let (new_last_index, block_metadata_decoded) = Self::deserialize(&serialized, last_index, key_type)?;
 
             last_index = new_last_index;
             blocks_metadata_decoded.push(block_metadata_decoded);
         }
 
-        let actual_crc = crc32fast::hash(&bytes[start_content_index..last_index]);
+        let actual_crc = crc32fast::hash(&serialized[start_content_index..last_index]);
         if actual_crc != expected_crc {
             return Err(shared::DecodeErrorType::CorruptedCrc(expected_crc, actual_crc));
         }
@@ -37,12 +37,12 @@ impl BlockMetadata {
         Ok(blocks_metadata_decoded)
     }
 
-    pub fn encode_all(blocks_metadata: &Vec<BlockMetadata>) -> Vec<u8> {
+    pub fn serialize_all(blocks_metadata: &Vec<BlockMetadata>) -> Vec<u8> {
         let mut encoded: Vec<u8> = Vec::new();
 
         let mut metadata_encoded: Vec<u8> = Vec::new();
         for block_metadata in blocks_metadata {
-            metadata_encoded.extend(block_metadata.encode());
+            metadata_encoded.extend(block_metadata.serialize());
         }
 
         encoded.put_u32_le(crc32fast::hash(&metadata_encoded));
@@ -51,7 +51,7 @@ impl BlockMetadata {
         encoded
     }
 
-    pub fn decode(
+    pub fn deserialize(
         bytes: &Vec<u8>,
         start_index: usize,
         key_type: Type
@@ -83,7 +83,7 @@ impl BlockMetadata {
         }))
     }
 
-    pub fn encode(&self) -> Vec<u8> {
+    pub fn serialize(&self) -> Vec<u8> {
         let mut metadata_encoded: Vec<u8> = Vec::new();
         //First key
         metadata_encoded.put_u32_le(self.first_key.len() as u32);
@@ -128,8 +128,8 @@ mod test {
             BlockMetadata{offset: 2, first_key: Key::create_from_str("c", 1), last_key: Key::create_from_str("d", 1)},
             BlockMetadata{offset: 3, first_key: Key::create_from_str("d", 1), last_key: Key::create_from_str("z", 1)},
         ];
-        let encoded = BlockMetadata::encode_all(&metadata);
-        let decoded = BlockMetadata::decode_all(&encoded, 0, Type::String);
+        let encoded = BlockMetadata::serialize_all(&metadata);
+        let decoded = BlockMetadata::deserialize_all(&encoded, 0, Type::String);
 
         assert!(decoded.is_ok());
         let decoded = decoded.unwrap();

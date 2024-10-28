@@ -1,6 +1,5 @@
 use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
-use crate::sst::block::block::Block;
-use crate::sst::block_cache::BlockCache;
+use crate::sst::block::blocks::Blocks;
 use crate::sst::block_metadata::BlockMetadata;
 use crate::transactions::transaction::Transaction;
 use crate::utils::bloom_filter::BloomFilter;
@@ -12,7 +11,7 @@ use std::cell::UnsafeCell;
 use std::path::Path;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering::Release;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub const SSTABLE_DELETED: u8 = 2;
 pub const SSTABLE_ACTIVE: u8 = 1;
@@ -21,9 +20,7 @@ pub struct SSTable {
     pub(crate) sstable_id: shared::SSTableId,
     pub(crate) bloom_filter: BloomFilter,
     pub(crate) file: SimpleDbFileWrapper,
-    pub(crate) block_cache: Mutex<BlockCache>,
-    pub(crate) block_metadata: Vec<BlockMetadata>,
-    pub(crate) options: Arc<shared::SimpleDbOptions>,
+    pub(crate) blocks: Blocks,
     pub(crate) level: u32,
     pub(crate) state: AtomicU8,
     pub(crate) first_key: Key,
@@ -46,17 +43,19 @@ impl SSTable {
         keyspace_desc: KeyspaceDescriptor
     ) -> SSTable {
         SSTable {
-            block_cache: Mutex::new(BlockCache::create(options.clone())),
-            state: AtomicU8::new(state),
+            blocks: Blocks::create(
+                keyspace_desc, block_metadata, options.clone(),
+                SimpleDbFileWrapper {file: UnsafeCell::new(file.clone())},
+                sstable_id
+            ),
             file: SimpleDbFileWrapper {file: UnsafeCell::new(file)},
-            block_metadata,
+            state: AtomicU8::new(state),
+            keyspace_desc,
             bloom_filter,
-            options,
+            sstable_id,
             first_key,
             last_key,
             level,
-            keyspace_desc,
-            sstable_id,
         }
     }
 
@@ -86,7 +85,7 @@ impl SSTable {
         let level = shared::u8_vec_to_u32_le(bytes, bytes.len() - 12);
         let state = bytes[bytes.len() - 13];
 
-        let block_metadata = BlockMetadata::decode_all(bytes, meta_offset as usize, keyspace_desc.key_type)
+        let block_metadata = BlockMetadata::deserialize_all(bytes, meta_offset as usize, keyspace_desc.key_type)
             .map_err(|error_type| shared::SimpleDbError::CannotDecodeSSTable(
                 keyspace_desc.keyspace_id,
                 sstable_id,
@@ -162,48 +161,6 @@ impl SSTable {
         let file: &mut SimpleDbFile = unsafe { &mut *self.file.file.get() };
         file.size()
     }
-
-    pub fn load_block(&self, block_id: shared::SSTableId) -> Result<Arc<Block>, shared::SimpleDbError> {
-        {
-            //Try read from cache
-            let mut block_cache = self.block_cache.lock()
-                .unwrap();
-            let block_entry_from_cache = block_cache.get(block_id);
-
-            if block_entry_from_cache.is_some() {
-                return Ok::<Arc<Block>, shared::SimpleDbError>(block_entry_from_cache.unwrap());
-            }
-        }
-
-        //Read from disk
-        let metadata: &BlockMetadata = &self.block_metadata[block_id];
-        let file: &mut SimpleDbFile = unsafe { &mut *self.file.file.get() };
-        let encoded_block = file.read(metadata.offset, self.options.block_size_bytes)
-            .map_err(|e| shared::SimpleDbError::CannotReadSSTableFile(self.keyspace_desc.keyspace_id, self.sstable_id, e))?;
-
-        let block = Block::deserialize(&encoded_block, &self.options, self.keyspace_desc)
-            .map_err(|error_type| shared::SimpleDbError::CannotDecodeSSTable(
-                self.keyspace_desc.keyspace_id,
-                self.sstable_id,
-                shared::SSTableCorruptedPart::Block(block_id),
-                shared::DecodeError {
-                    offset: metadata.offset,
-                    error_type,
-                    index: 0,
-                }
-            ))?;
-
-        let block = Arc::new(block);
-
-        {
-            //Write to cache
-            let mut block_cache = self.block_cache.lock()
-                .unwrap();
-            block_cache.put(block_id, block.clone());
-        }
-
-        Ok(block)
-    }
     
     pub fn get(&self, key: &Bytes, transaction: &Transaction) -> Result<Option<bytes::Bytes>, shared::SimpleDbError> {
         if self.first_key.bytes_gt_bytes(key) || self.last_key.bytes_lt_bytes(key) {
@@ -213,36 +170,6 @@ impl SSTable {
             return Ok(None);
         }
 
-        match self.get_blocks_metadata(key, transaction) {
-            Some(block_metadata_index) => {
-                let block = self.load_block(block_metadata_index)?;
-                Ok(block.get_value(key, transaction))
-            },
-            None => Ok(None)
-        }
-    }
-
-    fn get_blocks_metadata(&self, key: &Bytes, transaction: &Transaction) -> Option<usize> {
-        let lookup_key = Key::create(key.clone(), self.keyspace_desc.key_type, transaction.txn_id);
-        let mut right = self.block_metadata.len() - 1;
-        let mut left = 0;
-
-        loop {
-            let current_index = (left + right) / 2;
-            let current_block_metadata = &self.block_metadata[current_index];
-
-            if left == right {
-                return None;
-            }
-            if current_block_metadata.contains(key, &transaction) {
-                return Some(current_index);
-            }
-            if current_block_metadata.first_key.gt(&lookup_key) {
-                right = current_index;
-            }
-            if current_block_metadata.last_key.lt(&lookup_key) {
-                left = current_index;
-            }
-        }
+        self.blocks.get(key, transaction)
     }
 }

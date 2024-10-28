@@ -12,6 +12,7 @@ pub struct BlockIterator {
     keyspace_desc: KeyspaceDescriptor,
 
     current_value: Option<Bytes>,
+    is_current_value_overflow: bool,
     current_key: Option<Key>,
     current_index: usize,
     current_items_iterated: usize,
@@ -23,10 +24,15 @@ impl BlockIterator {
             keyspace_desc,
             block,
             current_value: None,
+            is_current_value_overflow: false,
             current_key: None,
             current_index: 0,
             current_items_iterated: 0,
         }
+    }
+
+    pub fn is_current_value_overflow(&self) -> bool {
+        self.is_current_value_overflow
     }
 
     fn finish_iterator(&mut self) {
@@ -42,7 +48,9 @@ impl StorageIterator for BlockIterator {
         let has_next = self.has_next();
 
         if has_next {
-            self.current_value = Some(self.block.get_value_by_index(self.current_index));
+            let (value, is_overflow) = self.block.get_value_by_index(self.current_index);
+            self.is_current_value_overflow = is_overflow;
+            self.current_value = Some(value);
             self.current_key = Some(self.block.get_key_by_index(self.current_index));
             self.current_items_iterated = self.current_items_iterated + 1;
             self.current_index = self.current_index + 1;
@@ -62,9 +70,7 @@ impl StorageIterator for BlockIterator {
     }
 
     fn value(&self) -> &[u8] {
-        self.current_value
-            .as_ref()
-            .expect("Illegal iterator state")
+        self.current_value.as_ref().expect("Illegal iterator state")
     }
 
     //Expect call before seek(), to make sure that the key is included in the block
@@ -85,6 +91,7 @@ impl StorageIterator for BlockIterator {
             self.current_index = index;
         }
     }
+
 }
 
 #[cfg(test)]
@@ -104,7 +111,7 @@ mod test {
         block_builder.add_entry(Key::create_from_str("B", 1), Bytes::from(vec![1, 2, 3]));
         block_builder.add_entry(Key::create_from_str("D", 1), Bytes::from(vec![4, 5, 6]));
         block_builder.add_entry(Key::create_from_str("E", 1), Bytes::from(vec![4, 5, 6]));
-        let block = Arc::new(block_builder.build());
+        let block = Arc::new(block_builder.build().remove(0));
 
         //[B, D, E] Seek: A, Inclusive
         let mut iterator = BlockIterator::create(block.clone(), KeyspaceDescriptor::create_mock(Type::String));
@@ -152,7 +159,7 @@ mod test {
         block_builder.add_entry(Key::create_from_str("E", 0), Bytes::from(vec![1]));
 
         assertions::assert_iterator_str_seq(
-            BlockIterator::create(Arc::new(block_builder.build()), KeyspaceDescriptor::create_mock(Type::String)),
+            BlockIterator::create(Arc::new(block_builder.build().remove(0)), KeyspaceDescriptor::create_mock(Type::String)),
             vec!["A", "B", "C", "D", "E"]
         );
     }

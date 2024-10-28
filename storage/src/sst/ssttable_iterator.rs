@@ -24,7 +24,10 @@ pub struct SSTableIterator {
     pending_blocks: Vec<BlockMetadata>,
     current_block_metadata: Option<BlockMetadata>,
     current_block_iterator: Option<BlockIterator>,
-    current_block_id: i32 //Index to SSTable block_metadata
+    current_block_id: i32, //Index to SSTable block_metadata
+
+    current_value: Option<Bytes>,
+    current_key: Option<Key>,
 }
 
 impl SSTableIterator {
@@ -34,11 +37,13 @@ impl SSTableIterator {
         key_desc: KeyspaceDescriptor
     ) -> SSTableIterator {
         SSTableIterator {
-            pending_blocks: sstable.block_metadata.clone(),
+            pending_blocks: sstable.blocks.block_metadata.clone(),
             transaction: transaction.clone(),
             current_block_iterator: None,
             current_block_metadata: None,
             current_block_id: -1,
+            current_value: None,
+            current_key: None,
             key_desc,
             sstable,
         }
@@ -88,7 +93,7 @@ impl SSTableIterator {
     }
 
     fn load_block(&mut self, block_id: usize) -> Arc<Block> {
-        self.sstable.load_block(block_id)
+        self.sstable.blocks.load_block(block_id)
             .expect("Cannot load block")
     }
 
@@ -97,13 +102,42 @@ impl SSTableIterator {
         self.current_block_metadata = None;
         self.current_block_iterator = None;
     }
+
+    fn read_current_overflow_value(&mut self, first_value: Bytes) -> Bytes {
+        let mut final_bytes = first_value.to_vec();
+
+        loop {
+            self.next_block();
+            let is_overflow = self.current_block_iterator.as_ref().unwrap().is_current_value_overflow();
+            let current_value = self.current_block_iterator.as_ref().unwrap().value();
+            final_bytes.extend(current_value);
+
+            if !is_overflow {
+                return Bytes::from(final_bytes);
+            }
+        }
+    }
 }
 
 impl StorageIterator for SSTableIterator {
     fn next(&mut self) -> bool {
         loop {
             let advanced = self.next_key_iterator();
-            if advanced && self.transaction.can_read(self.key()) {
+            let block_iterator = self.current_block_iterator.as_ref().unwrap();
+
+            if advanced && self.transaction.can_read(block_iterator.key()) {
+                //Key
+                self.current_key = Some(block_iterator.key().clone());
+                //Value
+                let current_value = block_iterator.value().clone();
+                let is_overflow = block_iterator.is_current_value_overflow();
+
+                if is_overflow {
+                    self.current_value = Some(self.read_current_overflow_value(Bytes::copy_from_slice(current_value)));
+                } else {
+                    self.current_value = Some(Bytes::copy_from_slice(current_value));
+                }
+
                 return true
             } else if !advanced {
                 return false;
@@ -118,17 +152,15 @@ impl StorageIterator for SSTableIterator {
     }
 
     fn key(&self) -> &Key {
-        self.current_block_iterator
+        self.current_key
             .as_ref()
             .expect("Illegal iterator state")
-            .key()
     }
 
     fn value(&self) -> &[u8] {
-        self.current_block_iterator
+        self.current_value
             .as_ref()
             .expect("Illegal iterator state")
-            .value()
     }
 
     fn seek(&mut self, key_bytes: &Bytes, inclusive: bool) {
@@ -186,6 +218,7 @@ mod test {
     use std::cell::UnsafeCell;
     use std::sync::atomic::AtomicU8;
     use std::sync::{Arc, Mutex};
+    use crate::sst::block::blocks::Blocks;
 
     //SSTable:
     //Block1: [Alberto, Berto]
@@ -278,18 +311,18 @@ mod test {
         let mut block1 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), keyspace_desc);
         block1.add_entry(Key::create_from_str("Alberto", 0), Bytes::from(vec![1]));
         block1.add_entry(Key::create_from_str("Berto", 0), Bytes::from(vec![1]));
-        let block1 = Arc::new(block1.build());
+        let block1 = Arc::new(block1.build().remove(0));
 
         let mut block2 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), keyspace_desc);
         block2.add_entry(Key::create_from_str("Cigu", 0), Bytes::from(vec![1]));
         block2.add_entry(Key::create_from_str("De", 0), Bytes::from(vec![1]));
-        let block2 = Arc::new(block2.build());
+        let block2 = Arc::new(block2.build().remove(0));
 
         let mut block3 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), keyspace_desc);
         block3.add_entry(Key::create_from_str("Estonia", 0), Bytes::from(vec![1]));
         block3.add_entry(Key::create_from_str("Gibraltar", 0), Bytes::from(vec![1]));
         block3.add_entry(Key::create_from_str("Zi", 0), Bytes::from(vec![1]));
-        let block3 = Arc::new(block3.build());
+        let block3 = Arc::new(block3.build().remove(0));
 
         let mut block_cache = BlockCache::create(Arc::new(shared::SimpleDbOptions::default()));
         block_cache.put(0, block1);
@@ -300,13 +333,18 @@ mod test {
             sstable_id: 1,
             bloom_filter: BloomFilter::create(&Vec::new(), 8),
             file: SimpleDbFileWrapper{ file: UnsafeCell::new(shared::SimpleDbFile::create_mock()) },
-            block_cache: Mutex::new(block_cache),
-            block_metadata: vec![
-                BlockMetadata{offset: 0, first_key: Key::create_from_str("Alberto", 0), last_key: Key::create_from_str("Berto", 0)},
-                BlockMetadata{offset: 8, first_key: Key::create_from_str("Cigu", 0), last_key: Key::create_from_str("De", 0)},
-                BlockMetadata{offset: 16, first_key: Key::create_from_str("Estonia", 0), last_key: Key::create_from_str("Zi", 0)},
-            ],
-            options: Arc::new(shared::SimpleDbOptions::default()),
+            blocks: Blocks {
+                block_metadata: vec![
+                    BlockMetadata{offset: 0, first_key: Key::create_from_str("Alberto", 0), last_key: Key::create_from_str("Berto", 0)},
+                    BlockMetadata{offset: 8, first_key: Key::create_from_str("Cigu", 0), last_key: Key::create_from_str("De", 0)},
+                    BlockMetadata{offset: 16, first_key: Key::create_from_str("Estonia", 0), last_key: Key::create_from_str("Zi", 0)},
+                ],
+                keyspace_desc: keyspace_desc.clone(),
+                block_cache: Mutex::new(block_cache),
+                options: Arc::new(shared::SimpleDbOptions::default()),
+                file: SimpleDbFileWrapper{ file: UnsafeCell::new(shared::SimpleDbFile::create_mock()) },
+                sstable_id
+            },
             level: 0,
             state: AtomicU8::new(SSTABLE_ACTIVE),
             first_key: Key::create_from_str("Alberto", 1),
