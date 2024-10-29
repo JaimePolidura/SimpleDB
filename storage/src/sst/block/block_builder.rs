@@ -27,7 +27,7 @@ impl BlockBuilder {
     }
 
     //Returns err if the block cannot contain more values. This occurs when the max block size have been exceeded
-    pub fn add_entry(&mut self, key: Key, value: Bytes) -> Result<(), ()> {
+    pub fn add_entry(&mut self, key: &Key, value: &Bytes) -> Result<(), ()> {
         let new_size = self.current_size_bytes + self.calculate_entry_size(&key, &value);
 
         //The block is full, there is no room for a new key
@@ -36,7 +36,7 @@ impl BlockBuilder {
         }
         //This entry overflows a block size
         if self.does_entry_overflows_block(&key, &value) {
-            self.entries.push(Entry { key, value });
+            self.entries.push(Entry { key: key.clone(), value: value.clone() });
             return Err(());
         }
         //The entry doesn't overflow the block, but its size + current size of the block exceeds the max block size
@@ -45,7 +45,7 @@ impl BlockBuilder {
             return Err(());
         }
 
-        self.entries.push(Entry { key, value });
+        self.entries.push(Entry { key: key.clone(), value: value.clone() });
         self.current_size_bytes = new_size;
 
         Ok(())
@@ -177,8 +177,8 @@ mod test {
     #[test]
     fn build() {
         let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::String));
-        block_builder.add_entry(Key::create_from_str("Jaime", 1), Bytes::from(vec![1, 2, 3]));
-        block_builder.add_entry(Key::create_from_str("Pedro", 1), Bytes::from(vec![4, 5, 6]));
+        block_builder.add_entry(&Key::create_from_str("Jaime", 1), &Bytes::from(vec![1, 2, 3]));
+        block_builder.add_entry(&Key::create_from_str("Pedro", 1), &Bytes::from(vec![4, 5, 6]));
         let mut block = block_builder.build();
         let block = block[0].clone(); //Get the first block, ex
 

@@ -73,9 +73,10 @@ impl SSTableBuilder {
 
         self.key_hashes.push(shared::hash(key.as_bytes()));
 
-        match self.current_block_builder.add_entry(key, value) {
+        match self.current_block_builder.add_entry(&key, &value) {
             Err(_) => {
-                self.build_current_block()
+                self.build_current_block();
+                self.current_block_builder.add_entry(&key, &value);
             },
             Ok(_) => {}
         };
