@@ -309,19 +309,19 @@ mod test {
         let keyspace_desc = KeyspaceDescriptor::create_mock(Type::String);
 
         let mut block1 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), keyspace_desc);
-        block1.add_entry(Key::create_from_str("Alberto", 0), Bytes::from(vec![1]));
-        block1.add_entry(Key::create_from_str("Berto", 0), Bytes::from(vec![1]));
+        block1.add_entry(&Key::create_from_str("Alberto", 0), &Bytes::from(vec![1]));
+        block1.add_entry(&Key::create_from_str("Berto", 0), &Bytes::from(vec![1]));
         let block1 = Arc::new(block1.build().remove(0));
 
         let mut block2 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), keyspace_desc);
-        block2.add_entry(Key::create_from_str("Cigu", 0), Bytes::from(vec![1]));
-        block2.add_entry(Key::create_from_str("De", 0), Bytes::from(vec![1]));
+        block2.add_entry(&Key::create_from_str("Cigu", 0), &Bytes::from(vec![1]));
+        block2.add_entry(&Key::create_from_str("De", 0), &Bytes::from(vec![1]));
         let block2 = Arc::new(block2.build().remove(0));
 
         let mut block3 = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), keyspace_desc);
-        block3.add_entry(Key::create_from_str("Estonia", 0), Bytes::from(vec![1]));
-        block3.add_entry(Key::create_from_str("Gibraltar", 0), Bytes::from(vec![1]));
-        block3.add_entry(Key::create_from_str("Zi", 0), Bytes::from(vec![1]));
+        block3.add_entry(&Key::create_from_str("Estonia", 0), &Bytes::from(vec![1]));
+        block3.add_entry(&Key::create_from_str("Gibraltar", 0), &Bytes::from(vec![1]));
+        block3.add_entry(&Key::create_from_str("Zi", 0), &Bytes::from(vec![1]));
         let block3 = Arc::new(block3.build().remove(0));
 
         let mut block_cache = BlockCache::create(Arc::new(shared::SimpleDbOptions::default()));
@@ -343,7 +343,7 @@ mod test {
                 block_cache: Mutex::new(block_cache),
                 options: Arc::new(shared::SimpleDbOptions::default()),
                 file: SimpleDbFileWrapper{ file: UnsafeCell::new(shared::SimpleDbFile::create_mock()) },
-                sstable_id
+                sstable_id: 1
             },
             level: 0,
             state: AtomicU8::new(SSTABLE_ACTIVE),

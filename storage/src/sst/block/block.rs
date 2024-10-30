@@ -153,13 +153,13 @@ impl Block {
     //Returns value bytes & if it is overflow value
     //If it is the last overflow block of a value, it will return false
     pub fn get_value_by_index(&self, n_entry_index: usize) -> (Bytes, bool) {
-        let entry_index = self.offsets[n_entry_index];
-        let key_ptr = &mut &self.entries[entry_index as usize..];
-        let key_serialized_size = Key::serialized_key_size(key_ptr);
-        let value_index = (entry_index as usize) + key_serialized_size;
-        let value_length = shared::u8_vec_to_u16_le(&self.entries, value_index) as usize;
-        let value_bytes = Bytes::copy_from_slice(&self.entries[(value_index + 2)..((value_index + 2) + value_length)]);
-        let is_overflow = self.flag.has(OVERFLOW_BLOCK) && value_index + 1 == self.offsets.len();
+        let entry_offset = self.offsets[n_entry_index];
+        let key_offset = &mut &self.entries[entry_offset as usize..];
+        let key_serialized_size = Key::serialized_key_size(key_offset);
+        let value_bytes_offset = (entry_offset as usize) + key_serialized_size;
+        let value_length = shared::u8_vec_to_u16_le(&self.entries, value_bytes_offset) as usize;
+        let value_bytes = Bytes::copy_from_slice(&self.entries[(value_bytes_offset + 2)..((value_bytes_offset + 2) + value_length)]);
+        let is_overflow = self.flag.has(OVERFLOW_BLOCK) && n_entry_index + 1 == self.offsets.len();
 
         (value_bytes, is_overflow)
     }
@@ -178,13 +178,13 @@ mod test {
     #[test]
     fn serialize_deserialize() {
         let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::String));
-        block_builder.add_entry(Key::create_from_str("Jaime", 1), Bytes::from(vec![1]));
-        block_builder.add_entry(Key::create_from_str("Javier", 1), Bytes::from(vec![2]));
-        block_builder.add_entry(Key::create_from_str("Jose", 1), Bytes::from(vec![3]));
-        block_builder.add_entry(Key::create_from_str("Juan", 1), Bytes::from(vec![4]));
-        block_builder.add_entry(Key::create_from_str("Justo", 1), Bytes::from(vec![5]));
-        block_builder.add_entry(Key::create_from_str("Justoo", 1), Bytes::from(vec![6]));
-        block_builder.add_entry(Key::create_from_str("Kia", 1), Bytes::from(vec![7]));
+        block_builder.add_entry(&Key::create_from_str("Jaime", 1), &Bytes::from(vec![1]));
+        block_builder.add_entry(&Key::create_from_str("Javier", 1), &Bytes::from(vec![2]));
+        block_builder.add_entry(&Key::create_from_str("Jose", 1), &Bytes::from(vec![3]));
+        block_builder.add_entry(&Key::create_from_str("Juan", 1), &Bytes::from(vec![4]));
+        block_builder.add_entry(&Key::create_from_str("Justo", 1), &Bytes::from(vec![5]));
+        block_builder.add_entry(&Key::create_from_str("Justoo", 1), &Bytes::from(vec![6]));
+        block_builder.add_entry(&Key::create_from_str("Kia", 1), &Bytes::from(vec![7]));
         let mut block = block_builder.build();
         let block = block.remove(0);
 

@@ -1,3 +1,4 @@
+use std::cmp::{max, min};
 use crate::keyspace::keyspace_descriptor::KeyspaceDescriptor;
 use crate::sst::block::block::{Block, BLOCK_FOOTER_LENGTH, LAST_OVERFLOW_BLOCK, NORMAL_BLOCK, OVERFLOW_BLOCK};
 use bytes::{BufMut, Bytes};
@@ -28,8 +29,6 @@ impl BlockBuilder {
 
     //Returns err if the block cannot contain more values. This occurs when the max block size have been exceeded
     pub fn add_entry(&mut self, key: &Key, value: &Bytes) -> Result<(), ()> {
-        let new_size = self.current_size_bytes + self.calculate_entry_size(&key, &value);
-
         //The block is full, there is no room for a new key
         if self.current_size_bytes + self.calculate_key_size(&key) >= self.options.block_size_bytes {
             return Err(());
@@ -39,6 +38,9 @@ impl BlockBuilder {
             self.entries.push(Entry { key: key.clone(), value: value.clone() });
             return Err(());
         }
+
+        let new_size = self.current_size_bytes + self.calculate_entry_size(&key, &value);
+
         //The entry doesn't overflow the block, but its size + current size of the block exceeds the max block size
         //the new entry should be added in the next block
         if new_size > self.options.block_size_bytes {
@@ -91,18 +93,18 @@ impl BlockBuilder {
     ) -> Vec<Block> {
         let mut blocks_built = Vec::new();
 
-        let current_overflow_value_bytes_to_write = overflow_entry.value.len();
+        let total_overflow_value_bytes_to_write = overflow_entry.value.len();
         let mut current_overflow_value_bytes_written = 0;
 
-        while current_overflow_value_bytes_written < current_overflow_value_bytes_to_write {
+        while current_overflow_value_bytes_written < total_overflow_value_bytes_to_write {
             //Can add part of the overflow bytes in the current block?
             if current_block_size + self.calculate_key_size(&overflow_entry.key) < self.options.block_size_bytes {
                 let value_size_bytes_available_to_write = self.options.block_size_bytes - current_block_size - self.calculate_key_size(&overflow_entry.key);
-                current_overflow_value_bytes_written += value_size_bytes_available_to_write;
                 let bytes_to_write = overflow_entry.value.slice(
                     current_overflow_value_bytes_written..
-                     (current_overflow_value_bytes_written + value_size_bytes_available_to_write)
+                     min(current_overflow_value_bytes_written + value_size_bytes_available_to_write, total_overflow_value_bytes_to_write)
                 );
+                current_overflow_value_bytes_written += value_size_bytes_available_to_write;
 
                 //Write to block
                 let offset = current_block_entries.len();
@@ -111,12 +113,12 @@ impl BlockBuilder {
                 current_block_entries.extend(bytes_to_write);
                 current_block_offsets.push(offset as u16);
 
-                let is_last_block = current_overflow_value_bytes_written == current_overflow_value_bytes_to_write;
+                let is_last_block = current_overflow_value_bytes_written >= total_overflow_value_bytes_to_write;
                 blocks_built.push(Block {
                     keyspace_desc: self.keyspace_desc,
                     entries: current_block_entries.clone(),
                     offsets: current_block_offsets.clone(),
-                    flag: if is_last_block { OVERFLOW_BLOCK } else { LAST_OVERFLOW_BLOCK } ,
+                    flag: if !is_last_block { OVERFLOW_BLOCK } else { LAST_OVERFLOW_BLOCK } ,
                 });
 
                 current_block_size = BLOCK_FOOTER_LENGTH;
@@ -171,8 +173,40 @@ mod test {
     use crate::sst::block::block_builder::BlockBuilder;
     use bytes::Bytes;
     use shared::key::Key;
-    use shared::Type;
+    use shared::{start_simpledb_options_builder_from, SimpleDbOptions, Type};
     use std::sync::Arc;
+    use crate::transactions::transaction::Transaction;
+
+    #[test]
+    fn build_overflow() {
+        let options = start_simpledb_options_builder_from(&SimpleDbOptions::default())
+            .block_size_bytes(64)
+            .build_arc();
+
+        let mut block_builder = BlockBuilder::create(options, KeyspaceDescriptor::create_mock(Type::String));
+        block_builder.add_entry(&Key::create_from_str("a", 1), &Bytes::from(vec![1, 2])); //Doest not overflow
+        block_builder.add_entry(&Key::create_from_str("b", 1), &Bytes::from(vec![4])); //Doest not overflows
+        block_builder.add_entry(&Key::create_from_str("c", 1), &Bytes::from("a".repeat(64))); //Overflows
+
+        let blocks = block_builder.build();
+        assert_eq!(blocks.len(), 3);
+
+        let (a_value, a_value_is_overflow) = blocks[0].get_value(&Bytes::from("a"), &Transaction::create(1)).unwrap();
+        assert_eq!(a_value, &Bytes::from(vec![1, 2]));
+        assert!(!a_value_is_overflow);
+
+        let (b_value, b_value_is_overflow) = blocks[0].get_value(&Bytes::from("b"), &Transaction::create(1)).unwrap();
+        assert_eq!(b_value, &Bytes::from(vec![4]));
+        assert!(!b_value_is_overflow);
+
+        let (c_value_1, c_value_is_overflow_1) = blocks[0].get_value(&Bytes::from("c"), &Transaction::create(1)).unwrap();
+        assert!(c_value_is_overflow_1);
+        let (c_value_2, c_value_is_overflow_2) = blocks[1].get_value(&Bytes::from("c"), &Transaction::create(1)).unwrap();
+        assert!(c_value_is_overflow_2);
+        let (c_value_3, c_value_is_overflow_3) = blocks[2].get_value(&Bytes::from("c"), &Transaction::create(1)).unwrap();
+        assert!(!c_value_is_overflow_3);
+        assert_eq!(c_value_1.len() + c_value_2.len() + c_value_3.len(), 64);
+    }
 
     #[test]
     fn build() {

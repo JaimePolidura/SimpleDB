@@ -108,9 +108,9 @@ mod test {
     #[test]
     fn seek_key() {
         let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::String));
-        block_builder.add_entry(Key::create_from_str("B", 1), Bytes::from(vec![1, 2, 3]));
-        block_builder.add_entry(Key::create_from_str("D", 1), Bytes::from(vec![4, 5, 6]));
-        block_builder.add_entry(Key::create_from_str("E", 1), Bytes::from(vec![4, 5, 6]));
+        block_builder.add_entry(&Key::create_from_str("B", 1), &Bytes::from(vec![1, 2, 3]));
+        block_builder.add_entry(&Key::create_from_str("D", 1), &Bytes::from(vec![4, 5, 6]));
+        block_builder.add_entry(&Key::create_from_str("E", 1), &Bytes::from(vec![4, 5, 6]));
         let block = Arc::new(block_builder.build().remove(0));
 
         //[B, D, E] Seek: A, Inclusive
@@ -152,11 +152,11 @@ mod test {
     #[test]
     fn next_has_next() {
         let mut block_builder = BlockBuilder::create(Arc::new(shared::SimpleDbOptions::default()), KeyspaceDescriptor::create_mock(Type::String));
-        block_builder.add_entry(Key::create_from_str("A", 0), Bytes::from(vec![1]));
-        block_builder.add_entry(Key::create_from_str("B", 0), Bytes::from(vec![1]));
-        block_builder.add_entry(Key::create_from_str("C", 0), Bytes::from(vec![1]));
-        block_builder.add_entry(Key::create_from_str("D", 0), Bytes::from(vec![1]));
-        block_builder.add_entry(Key::create_from_str("E", 0), Bytes::from(vec![1]));
+        block_builder.add_entry(&Key::create_from_str("A", 0), &Bytes::from(vec![1]));
+        block_builder.add_entry(&Key::create_from_str("B", 0), &Bytes::from(vec![1]));
+        block_builder.add_entry(&Key::create_from_str("C", 0), &Bytes::from(vec![1]));
+        block_builder.add_entry(&Key::create_from_str("D", 0), &Bytes::from(vec![1]));
+        block_builder.add_entry(&Key::create_from_str("E", 0), &Bytes::from(vec![1]));
 
         assertions::assert_iterator_str_seq(
             BlockIterator::create(Arc::new(block_builder.build().remove(0)), KeyspaceDescriptor::create_mock(Type::String)),
