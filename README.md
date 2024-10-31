@@ -6,16 +6,23 @@ SQL database built over a LSM storage engine. This project consist of three laye
 
 ## Features
 - Tables
-- SQL-Like queries
+- CRUD SQL-Like queries
 - MVCC Transactions
 - Secondary indexes
+- Queries features implemented:
+  - LIMIT
+  - ORDER BY
 
 ## Missing features
 - SSL/TLS encryption is not supported.
 - Triggers.
 - Multiple index types.
 - Serializable transaction support.
-- Joins and inner queries.
+- Query features not implemented:
+  - Joins and inner queries.
+  - Functions (COUNT(), NOW())
+  - HAVING
+  - GROUP BY
 
 ## Storage engine (/storage)
 The storage engine exposes an API which is used by the upper layer (DB).
