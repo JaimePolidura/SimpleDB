@@ -58,6 +58,7 @@ impl PlanOptimizer {
             PlanStep::FullSort(_) => Ok(parent_plan),
             PlanStep::Mock(_) => panic!(""),
             PlanStep::TopNSort(_) => Ok(parent_plan),
+            PlanStep::Reverse(_) => Ok(parent_plan),
         }
     }
 

@@ -1,4 +1,4 @@
-use shared::SimpleDbError::CannotCreateTemporaryFile;
+use shared::SimpleDbError::{CannotCreateTemporaryFile, CannotGetTemporaryFile};
 use shared::{SimpleDbError, SimpleDbFile, SimpleDbFileMode};
 use std::fs;
 use std::path::PathBuf;
@@ -24,6 +24,17 @@ impl TemporarySpace {
         file_path.push(file_name);
         SimpleDbFile::create(file_path.as_path(), &vec![], mode)
             .map_err(|e| CannotCreateTemporaryFile(e))
+    }
+
+    pub fn get_file(
+        &self,
+        file_name: &str,
+        mode: SimpleDbFileMode
+    ) -> Result<SimpleDbFile, SimpleDbError> {
+        let mut file_path = self.base_path.clone();
+        file_path.push(file_name);
+        SimpleDbFile::open(file_path.as_path(), mode)
+            .map_err(|e| CannotGetTemporaryFile(e))
     }
 }
 

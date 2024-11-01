@@ -19,7 +19,9 @@ use crate::table::table::Table;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
+use crate::SortOrder;
 use crate::sql::plan::steps::full_sort_step::FullSortStep;
+use crate::sql::plan::steps::reverse_step::ReverseStep;
 use crate::sql::plan::steps::top_n_sort::TopNSortStep;
 
 pub struct Planner {
@@ -56,10 +58,19 @@ impl Planner {
         //Only sorted, not with limit
         if select_statement.is_sorted() && !select_statement.is_limit() {
             let sort = select_statement.sort.take().unwrap();
-            let produced_rows_sorted_by = last_step.get_column_sorted(table.get_schema());
-            if produced_rows_sorted_by.is_none() || !produced_rows_sorted_by.as_ref().unwrap().eq(&sort.column_name) {
-                last_step = PlanStep::FullSort(Box::new(FullSortStep::create(self.options.clone(), query_selection.clone(), table.clone(), last_step, sort)?))
-            }
+
+            match last_step.get_column_sorted(table.get_schema()) {
+                Some(source_produced_sorted_column) => {
+                    if sort.column_name.eq(&source_produced_sorted_column) && sort.order == SortOrder::Desc {
+                        last_step = PlanStep::Reverse(Box::new(ReverseStep::create(last_step, table.clone())?))
+                    } else if !sort.column_name.eq(&source_produced_sorted_column) {
+                        last_step = PlanStep::FullSort(Box::new(FullSortStep::create(self.options.clone(), query_selection.clone(), table.clone(), last_step, sort)?))
+                    }
+                }
+                None => {
+                    last_step = PlanStep::FullSort(Box::new(FullSortStep::create(self.options.clone(), query_selection.clone(), table.clone(), last_step, sort)?))
+                }
+            };
         }
         //Only Limit
         if !select_statement.is_sorted() && select_statement.is_limit() {

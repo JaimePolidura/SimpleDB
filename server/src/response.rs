@@ -258,6 +258,12 @@ impl StatementResponse {
                         .unwrap();
                     strings.push(Self::exact_secondary_scan_plan_desc_to_string(depth, secondary_column_name, secondary_column_value));
                 }
+                PlanStepDesc::Revserse(source) => {
+                    pending.push((depth, source));
+                    let mut string = Self::explain_plan_new_line(depth);
+                    string.push_str("Reverse");
+                    strings.push(string);
+                }
             };
         }
 

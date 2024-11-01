@@ -14,6 +14,7 @@ use crate::{Limit, Row, Schema, Sort};
 use bytes::Bytes;
 use shared::{SimpleDbError, Value};
 use crate::sql::plan::steps::full_sort_step::FullSortStep;
+use crate::sql::plan::steps::reverse_step::ReverseStep;
 use crate::sql::plan::steps::top_n_sort::TopNSortStep;
 use crate::table::row::RowIterator;
 
@@ -29,6 +30,7 @@ pub enum PlanStep {
     TopNSort(Box<TopNSortStep>),
     FullSort(Box<FullSortStep>),
     Filter(Box<FilterStep>),
+    Reverse(Box<ReverseStep>),
 
     MergeIntersection(MergeIntersectionStep),
     MergeUnion(MergeUnionStep),
@@ -51,6 +53,7 @@ pub enum PlanStepDesc {
     MergeUnion(Box<PlanStepDesc>, Box<PlanStepDesc>),
     FullSort(Sort, Box<PlanStepDesc>),
     TopNSort(Sort, usize, Box<PlanStepDesc>),
+    Revserse(Box<PlanStepDesc>),
 
     FullScan,
     RangeScan(RangeScan),
@@ -74,6 +77,7 @@ impl RowIterator for PlanStep {
             PlanStep::FullSort(step) => step.next(),
             PlanStep::Mock(step) => step.next(),
             PlanStep::TopNSort(step) => step.next(),
+            PlanStep::Reverse(step) => step.next(),
         }
     }
 }
@@ -109,6 +113,7 @@ impl PlanStep {
             PlanStep::FullSort(step) => Some(step.sort.column_name.clone()),
             PlanStep::TopNSort(step) => Some(step.sort.column_name.clone()),
             PlanStep::Filter(step) => step.source.get_column_sorted(schema),
+            PlanStep::Reverse(step) => step.source.get_column_sorted(schema),
             PlanStep::MergeIntersection(_) |
             PlanStep::MergeUnion(_) => {
                 let left = self.get_merge_left();
@@ -155,7 +160,8 @@ impl PlanStep {
             PlanStep::SecondaryRangeScan(step) => step.desc(),
             PlanStep::ProjectSelection(step) => step.desc(),
             PlanStep::Mock(step) => step.desc(),
-            PlanStep::TopNSort(step) => step.desc()
+            PlanStep::TopNSort(step) => step.desc(),
+            PlanStep::Reverse(step) => step.desc()
         }
     }
 

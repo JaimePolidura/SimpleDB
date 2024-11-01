@@ -74,6 +74,8 @@ pub enum SimpleDbError {
     CannotCreateDatabaseFolder(String, std::io::Error),
     CannotWriteSortFile(std::io::Error),
     CannotReadSortFile(std::io::Error),
+    CannotWriteReverseFile(std::io::Error),
+    CannotReadReverseFile(std::io::Error),
 
     //Storage layer errors
     CannotCreateKeyspaceDescriptorFile(types::KeyspaceId, std::io::Error),
@@ -108,6 +110,7 @@ pub enum SimpleDbError {
     CannotInitTemporarySpaces(std::io::Error),
     CannotCreateTemporarySpace(std::io::Error),
     CannotCreateTemporaryFile(std::io::Error),
+    CannotGetTemporaryFile(std::io::Error),
 
     //This error cannot be returned to the final user,
     //It will only be used internally in the storage engine code
@@ -327,6 +330,15 @@ impl Debug for SimpleDbError {
             SimpleDbError::CannotReadSortFile(io_error) => {
                 write!(f, "Cannot read sort file: {}", io_error)
             }
+            SimpleDbError::CannotGetTemporaryFile(io_error) => {
+                write!(f, "Cannot get temporary file: {}", io_error)
+            }
+            SimpleDbError::CannotWriteReverseFile(io_error) => {
+                write!(f, "Cannot write temporary file: {}", io_error)
+            }
+            SimpleDbError::CannotReadReverseFile(io_error) => {
+                write!(f, "Cannot read temporary file: {}", io_error)
+            }
         }
     }
 }
@@ -404,6 +416,9 @@ impl SimpleDbError {
             SimpleDbError::CannotCreateTemporaryFile(_) => 69,
             SimpleDbError::CannotWriteSortFile(_) => 70,
             SimpleDbError::CannotReadSortFile(_) => 71,
+            SimpleDbError::CannotGetTemporaryFile(_) => 72,
+            SimpleDbError::CannotWriteReverseFile(_) => 73,
+            SimpleDbError::CannotReadReverseFile(_) => 74,
         }
     }
 }
