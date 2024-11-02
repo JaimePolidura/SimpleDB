@@ -78,7 +78,7 @@ pub enum SortOrder {
 }
 
 impl Sort {
-    pub fn is_indexed(&self, schema: Schema) -> bool {
+    pub fn is_indexed(&self, schema: &Schema) -> bool {
         let column = schema.get_column(&self.column_name).unwrap();
         column.is_secondary_indexed() || column.is_primary
     }

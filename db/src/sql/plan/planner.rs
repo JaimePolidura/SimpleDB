@@ -19,7 +19,7 @@ use crate::table::table::Table;
 use shared::{SimpleDbError, SimpleDbOptions};
 use std::sync::Arc;
 use storage::transactions::transaction::Transaction;
-use crate::SortOrder;
+use crate::{Sort, SortOrder};
 use crate::sql::plan::steps::full_sort_step::FullSortStep;
 use crate::sql::plan::steps::reverse_step::ReverseStep;
 use crate::sql::plan::steps::top_n_sort::TopNSortStep;
@@ -96,7 +96,7 @@ impl Planner {
         transaction: &Transaction,
     ) -> Result<PlanStep, SimpleDbError> {
         let scan_type = self.get_scan_type(
-            &update_statement.where_expr,
+            &update_statement.where_expr, //No sort
             table
         )?;
         let updated_values = update_statement.get_updated_values();
@@ -173,7 +173,7 @@ impl Planner {
             }
         }
     }
-
+    
     fn get_scan_type(
         &self,
         expression: &Option<Expression>,
