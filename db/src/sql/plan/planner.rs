@@ -173,7 +173,7 @@ impl Planner {
             }
         }
     }
-    
+
     fn get_scan_type(
         &self,
         expression: &Option<Expression>,
